@@ -1,0 +1,47 @@
+name: Deploy web to GitHub Pages
+
+# ต้องผ่าน CI ก่อน และตั้ง Environment "github-pages" ให้มี Required reviewers เพื่อเป็น approval gate
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint && npm run typecheck && npm run build:gas && npm test
+      - run: npm run build:web
+      - name: Write runtime config (URL ของ Apps Script จาก Repository variable KPP_API_URL)
+        env:
+          KPP_API_URL: ${{ vars.KPP_API_URL }}
+        run: |
+          node -e "const u=process.env.KPP_API_URL||''; if(u && !/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(u)) { console.error('KPP_API_URL ไม่ถูกต้อง'); process.exit(1) } require('fs').writeFileSync('apps/web/dist/config.js', 'window.KPP_CONFIG = ' + JSON.stringify({ API_URL: u }) + ';\n')"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,254 @@
+/** Entity และค่าคงที่ของโดเมน — แหล่งเดียวของ schema ทั้ง frontend และ Apps Script */
+import type { Satang } from './money';
+
+export type Role = 'admin' | 'minisuper' | 'superadmin';
+export type UserStatus = 'active' | 'suspended';
+export type RequestStatus = 'pending' | 'approved' | 'rejected';
+
+export const PROJECT_STATUSES = ['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'] as const;
+export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
+export const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
+  PLANNED: 'ยังไม่เริ่ม',
+  IN_PROGRESS: 'กำลังดำเนินการ',
+  COMPLETED: 'เสร็จสิ้น',
+  CANCELLED: 'ยกเลิก',
+};
+
+export const ALLOCATION_TYPES = ['ORIGINAL', 'TRANSFER_IN', 'TRANSFER_OUT'] as const;
+export type AllocationType = (typeof ALLOCATION_TYPES)[number];
+export const ALLOCATION_TYPE_LABEL: Record<AllocationType, string> = {
+  ORIGINAL: 'งบที่ได้รับจัดสรร',
+  TRANSFER_IN: 'โอนเพิ่ม/ปรับเพิ่ม',
+  TRANSFER_OUT: 'โอนออก/ปรับลด',
+};
+
+export const DISBURSEMENT_STATUSES = ['COMMITTED', 'APPROVED', 'PAID', 'VOID'] as const;
+export type DisbursementStatus = (typeof DISBURSEMENT_STATUSES)[number];
+export const DISBURSEMENT_STATUS_LABEL: Record<DisbursementStatus, string> = {
+  COMMITTED: 'ผูกพัน/กันเงิน',
+  APPROVED: 'อนุมัติเบิก',
+  PAID: 'จ่ายแล้ว',
+  VOID: 'ยกเลิก',
+};
+
+/** ฟิลด์ที่ทุก mutable entity ต้องมี */
+export interface Meta {
+  id: string;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  version: number;
+  isDeleted: boolean;
+}
+
+export interface Organization extends Meta { code: string; name: string }
+export interface Workgroup extends Meta { orgId: string; code: string; name: string }
+export interface FundingSource extends Meta { code: string; name: string; shortName: string }
+
+export interface Project extends Meta {
+  fiscalYear: number;
+  fundingSourceId: string;
+  projectCode: string;
+  name: string;
+  workgroupId: string;
+  /** ชื่อผู้รับผิดชอบ — ภายในเท่านั้น ไม่ส่งให้ public */
+  ownerName: string;
+  startDate: string;
+  endDate: string;
+  status: ProjectStatus;
+  /** ร้อยละผลการดำเนินงาน (physical) 0–100 */
+  physicalProgress: number;
+  /** เป้าหมายร้อยละการเบิกจ่ายตามแผน ณ สิ้นแต่ละไตรมาส เช่น "30,55,80,100" */
+  quarterTargets: string;
+  description: string;
+  published: boolean;
+  lastProgressAt: string;
+  idempotencyKey: string;
+}
+
+export interface Activity extends Meta {
+  projectId: string;
+  activityCode: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: ProjectStatus;
+  progressPct: number;
+  idempotencyKey: string;
+}
+
+export interface Allocation extends Meta {
+  projectId: string;
+  activityId: string;
+  type: AllocationType;
+  amountSatang: Satang;
+  date: string;
+  docNo: string;
+  note: string;
+  source: string;
+  idempotencyKey: string;
+}
+
+export interface Disbursement extends Meta {
+  projectId: string;
+  activityId: string;
+  status: DisbursementStatus;
+  amountSatang: Satang;
+  date: string;
+  docNo: string;
+  description: string;
+  /** แหล่งที่มา: MANUAL | IMPORT:{jobId} | ADJUST:{jobId} */
+  source: string;
+  idempotencyKey: string;
+  voidReason: string;
+  replacesId: string;
+  attachmentId: string;
+}
+
+export interface ProgressReport extends Meta {
+  projectId: string;
+  activityId: string;
+  reportDate: string;
+  progressPct: number;
+  detail: string;
+  issues: string;
+  idempotencyKey: string;
+}
+
+export interface Attachment extends Meta {
+  entityType: 'project' | 'disbursement' | 'progress' | 'import';
+  entityId: string;
+  projectId: string;
+  kind: 'COVER_LETTER' | 'EVIDENCE' | 'IMPORT_ORIGINAL';
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+  driveFileId: string;
+  ocrStatus: '' | 'DONE' | 'FAILED';
+  ocrText: string;
+}
+
+export interface User extends Meta {
+  phone: string;
+  phoneHash: string;
+  fullName: string;
+  position: string;
+  workgroupId: string;
+  affiliation: string;
+  role: Exclude<Role, 'superadmin'>;
+  status: UserStatus;
+  /** JSON array ของ workgroupId ที่ทำรายการได้; ว่าง = workgroupId ของตน */
+  scopeWorkgroups: string;
+  tokenVersion: number;
+  approvedAt: string;
+  approvedBy: string;
+  lastLoginAt: string;
+  knownDevices: string;
+}
+
+export interface AccessRequest extends Meta {
+  phone: string;
+  fullName: string;
+  position: string;
+  workgroupId: string;
+  affiliation: string;
+  note: string;
+  status: RequestStatus;
+  decidedAt: string;
+  decidedBy: string;
+  reason: string;
+}
+
+export interface LoginAttempt {
+  id: string;
+  at: string;
+  role: string;
+  identifierMasked: string;
+  result: 'success' | 'not_found_or_pending' | 'suspended' | 'invalid' | 'wrong_credentials' | 'throttled';
+  userId: string;
+  device: string;
+  newDevice: boolean;
+}
+
+export interface AuditLog {
+  id: string;
+  at: string;
+  requestId: string;
+  actorId: string;
+  actorName: string;
+  actorRole: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  projectId: string;
+  before: string;
+  after: string;
+  reason: string;
+}
+
+export type ImportKind = 'BUDGET_SUMMARY' | 'DISBURSEMENT_LIST';
+export type ImportJobStatus = 'STAGED' | 'COMMITTING' | 'COMMITTED' | 'PARTIAL' | 'CANCELLED' | 'FAILED';
+
+export interface ImportJob extends Meta {
+  fileName: string;
+  sha256: string;
+  driveFileId: string;
+  channel: 'UPLOAD' | 'INBOX';
+  kind: ImportKind;
+  fiscalYear: number;
+  fundingSourceId: string;
+  headerRow: number;
+  mapping: string;
+  status: ImportJobStatus;
+  totalRows: number;
+  validRows: number;
+  warningRows: number;
+  errorRows: number;
+  committedRows: number;
+  committedAt: string;
+  committedBy: string;
+  message: string;
+}
+
+export type RowStatus = 'VALID' | 'WARNING' | 'ERROR';
+
+export interface ImportRow {
+  id: string;
+  jobId: string;
+  rowNo: number;
+  rowKey: string;
+  status: RowStatus;
+  messages: string;
+  raw: string;
+  normalized: string;
+  committed: boolean;
+}
+
+/** รหัส error ที่คงที่ — frontend ใช้ตัดสินพฤติกรรม */
+export const ERROR_CODES = [
+  'AUTH_REQUIRED', 'TOKEN_EXPIRED', 'TOKEN_REVOKED', 'ACCOUNT_PENDING', 'ACCOUNT_SUSPENDED',
+  'LOGIN_THROTTLED', 'REAUTH_REQUIRED', 'FORBIDDEN_SCOPE', 'NOT_FOUND', 'VERSION_CONFLICT',
+  'VALIDATION_FAILED', 'DUPLICATE_IMPORT', 'IMPORT_REVIEW_REQUIRED', 'BUDGET_EXCEEDED',
+  'BUSY_RETRY', 'QUOTA_RETRY', 'UNKNOWN_ACTION', 'INTERNAL_ERROR',
+] as const;
+export type ErrorCode = (typeof ERROR_CODES)[number];
+
+export class AppError extends Error {
+  constructor(
+    public readonly code: ErrorCode,
+    message: string,
+    public readonly details?: unknown,
+  ) {
+    super(message);
+    this.name = 'AppError';
+  }
+}
+
+export interface ApiEnvelope<T> {
+  ok: boolean;
+  data: T | null;
+  meta: { requestId: string; version: string; serverTime: string };
+  error: { code: ErrorCode; message: string; details?: unknown } | null;
+}

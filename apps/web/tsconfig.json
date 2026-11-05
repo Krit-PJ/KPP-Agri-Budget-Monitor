@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": "../..",
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "paths": {
+      "@kpp/domain": ["packages/domain/src/index.ts"],
+      "@kpp/gas/*": ["apps/gas/src/*"]
+    }
+  },
+  "include": ["src"]
+}

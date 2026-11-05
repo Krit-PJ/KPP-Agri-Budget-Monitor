@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": "../..",
+    "types": [
+      "google-apps-script",
+      "node"
+    ]
+  },
+  "include": [
+    "src",
+    "test"
+  ]
+}

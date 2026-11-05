@@ -1,0 +1,43 @@
+{
+  "name": "kpp-agri-budget-monitor",
+  "private": true,
+  "version": "0.1.0",
+  "description": "\u0e23\u0e30\u0e1a\u0e1a\u0e15\u0e34\u0e14\u0e15\u0e32\u0e21\u0e42\u0e04\u0e23\u0e07\u0e01\u0e32\u0e23\u0e41\u0e25\u0e30\u0e01\u0e32\u0e23\u0e40\u0e1a\u0e34\u0e01\u0e08\u0e48\u0e32\u0e22\u0e07\u0e1a\u0e1b\u0e23\u0e30\u0e21\u0e32\u0e13 \u0e2a\u0e33\u0e19\u0e31\u0e01\u0e07\u0e32\u0e19\u0e40\u0e01\u0e29\u0e15\u0e23\u0e08\u0e31\u0e07\u0e2b\u0e27\u0e31\u0e14\u0e01\u0e33\u0e41\u0e1e\u0e07\u0e40\u0e1e\u0e0a\u0e23 (KPP-ABM)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p packages/domain && tsc -p apps/gas && tsc -p apps/web",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "build:gas": "npm run build -w apps/gas",
+    "build:web": "npm run build -w apps/web",
+    "build": "npm run build:gas && npm run build:web",
+    "dev": "npm run dev -w apps/web",
+    "verify": "npm run lint && npm run typecheck && npm run build:gas && npm test && npm run build:web && node scripts/check-secrets.mjs",
+    "docs": "node scripts/gen-docs.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@noble/hashes": "^1.8.0",
+    "@types/google-apps-script": "^2.0.15",
+    "@types/node": "^22.20.5",
+    "esbuild": "^0.28.2",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.1.0"
+  },
+  "overrides": {
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "^11.0.1"
+    }
+  }
+}
