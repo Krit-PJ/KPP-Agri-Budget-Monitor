@@ -27,4 +27,7 @@ await build({
 writeFileSync(here('./dist/Code.gs'), readFileSync(here('./dist/Code.js'), 'utf8'));
 copyFileSync(here('./static/appsscript.json'), here('./dist/appsscript.json'));
 copyFileSync(here('./static/Secrets.example.gs'), here('./dist/Secrets.example.gs'));
-console.log('built apps/gas/dist/Code.gs');
+// สำเนาที่ commit ไว้สำหรับติดตั้ง (CI ตรวจว่าตรงกับ source เสมอ)
+mkdirSync(here('../../deploy/apps-script'), { recursive: true });
+for (const f of ['Code.gs', 'appsscript.json', 'Secrets.example.gs']) copyFileSync(here(`./dist/${f}`), here(`../../deploy/apps-script/${f}`));
+console.log('built apps/gas/dist/Code.gs (+ deploy/apps-script)');

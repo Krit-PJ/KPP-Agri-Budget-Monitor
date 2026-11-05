@@ -25,6 +25,8 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run build:gas
+      - name: deploy/apps-script ต้องตรงกับ source (รัน npm run build:gas แล้ว commit)
+        run: git diff --exit-code -- deploy/apps-script
       - run: npm test
       - run: npm run build:web
       - name: Upload Apps Script bundle
