@@ -19,7 +19,10 @@ let env: MemoryEnv | null = null;
 function boot(): MemoryEnv {
   const e = createMemoryEnv(new Date());
   const ctx: Ctx = { env: e, requestId: 'demo', user: SYSTEM_USER, device: 'demo' };
-  const saved = sessionStorage.getItem(KEY);
+  let saved: string | null = null;
+  try {
+    saved = sessionStorage.getItem(KEY);
+  } catch { /* storage ไม่พร้อม — เริ่มใหม่ทุกครั้ง */ }
   if (saved) {
     const s = JSON.parse(saved) as { db: string; props: Array<[string, string]> };
     e.db.load(s.db);
@@ -53,6 +56,8 @@ export function demoCall(payload: Record<string, unknown>): unknown {
 }
 
 export function resetDemo(): void {
-  sessionStorage.removeItem(KEY);
+  try {
+    sessionStorage.removeItem(KEY);
+  } catch { /* ignore */ }
   env = null;
 }

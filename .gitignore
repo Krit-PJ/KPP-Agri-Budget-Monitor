@@ -10,3 +10,4 @@ apps/gas/src/Secrets.gs
 !.env.example
 coverage/
 *.tsbuildinfo
+dist-artifact/

@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
-import { HashRouter, Link, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { HashRouter, Link, MemoryRouter, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+
+// build แบบฝังในหน้าอื่น (VITE_ROUTER=memory) ใช้ MemoryRouter เพราะเจ้าของหน้าไม่อนุญาต #/path
+const Router = import.meta.env.VITE_ROUTER === 'memory' ? MemoryRouter : HashRouter;
 import type { SessionUser } from '@kpp/domain';
 import { DEMO, getSession } from './api/client';
 import { Async, LookupProvider, ToastProvider, useApi } from './components/ui';
@@ -90,11 +93,11 @@ function Shell() {
 
 export default function App() {
   return (
-    <HashRouter>
+    <Router>
       <ScrollTop />
       <ToastProvider>
         <Shell />
       </ToastProvider>
-    </HashRouter>
+    </Router>
   );
 }
