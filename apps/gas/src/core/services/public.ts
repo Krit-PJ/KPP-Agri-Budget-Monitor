@@ -5,7 +5,7 @@
 import {
   AppError, addSummaries, computeBudget, currentFiscalYear, monthlyCumulative, monthlyTargetPct, pct, riskFlags,
   type Activity, type BudgetSummary, type FundingSource, type GroupTotal, type ImportJob, type Lookups, type Organization,
-  type Project, type PublicProject, type PublicSummary, type Workgroup, DEFAULT_QUARTER_TARGETS,
+  type PlanItem, type Project, type PublicProject, type PublicSummary, type Workgroup, DEFAULT_QUARTER_TARGETS,
 } from '@kpp/domain';
 import { dataVersion, getSettings, live, nowIso, type Ctx } from '../context';
 import { budgetsByProject, loadDataset, today } from './projects';
@@ -108,6 +108,24 @@ export function buildSummary(ctx: Ctx, fy: number, onlyPublished: boolean): Publ
   }
   const settings = getSettings(ctx);
   const inScopeDisb = ds.disbursements.filter((d) => ids.has(d.projectId));
+  // แผนงาน: ชื่อจากแผนงบประมาณที่นำเข้า
+  const planItems = projects.some((p) => p.planDocId) ? live(ctx.env.db.list<PlanItem>('PlanItems')) : [];
+  const planKey = (p: Project): string => {
+    if (!p.planDocId) return 'นอกแผน';
+    const node = planItems.find((i) => i.planDocId === p.planDocId && Number(i.seq) === Number(p.planNodeSeq));
+    const plan = node && planItems.find((i) => i.planDocId === p.planDocId && i.kind === 'PLAN' && Number(i.planIndex) === Number(node.planIndex));
+    return plan?.name ?? 'นอกแผน';
+  };
+  // อบรม/ประชุม/สัมมนา: ต้องดำเนินการให้เสร็จภายในไตรมาส 3 (มาตรการเร่งรัดฯ)
+  const MEETING = /อบรม|ประชุม|สัมมนา|ถ่ายทอดความรู้|เวที|ศึกษาดูงาน|Field Day|Workshop/i;
+  const meetingActs = ds.activities.filter((a) => ids.has(a.projectId) && MEETING.test(a.name));
+  let mBudget = 0;
+  let mRemaining = 0;
+  for (const a of meetingActs) {
+    const b = computeBudget(ds.allocations.filter((x) => x.activityId === a.id), ds.disbursements.filter((x) => x.activityId === a.id));
+    mBudget += b.currentBudget;
+    mRemaining += Math.max(0, b.currentBudget - b.disbursed);
+  }
   const delayed = risks.filter((r) => r.flags.includes('OVERDUE') || r.flags.includes('BEHIND_SPENDING')).length;
   return {
     fiscalYear: fy,
@@ -126,6 +144,12 @@ export function buildSummary(ctx: Ctx, fy: number, onlyPublished: boolean): Publ
       ? Math.round((projects.reduce((s, p) => s + (Number(p.physicalProgress) || 0), 0) / projects.length) * 100) / 100 : 0,
     byFundingSource: group((p) => p.fundingSourceId, (k) => sources.find((s) => s.id === k)?.name ?? 'ไม่ระบุ'),
     byWorkgroup: group((p) => p.workgroupId, (k) => groups.find((g) => g.id === k)?.name ?? 'ไม่ระบุ'),
+    byPlan: group(planKey, (k) => k),
+    targets: {
+      annualPct: Math.min(100, Math.max(0, Number(settings.annualTargetPct) || 98)),
+      meetingDeadline: `${fy - 543}-06-30`,
+    },
+    meetings: { activities: meetingActs.filter((a) => a.status !== 'CANCELLED').length, remaining: mRemaining, budget: mBudget },
     monthly: {
       disbursedCumulative: monthlyCumulative(inScopeDisb, fy),
       targetPct: targetSatang.map((v) => pct(v, totals.currentBudget)),

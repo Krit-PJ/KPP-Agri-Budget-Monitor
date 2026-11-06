@@ -91,6 +91,8 @@ export function bumpDataVersion(ctx: Ctx): void {
 export const DEFAULT_SETTINGS: Record<string, string> = {
   autoCommitClean: 'false',
   defaultQuarterTargets: '30,55,80,100',
+  /** เป้าเบิกจ่ายทั้งปี (%) — มาตรการเร่งรัดฯ ปี 2570: รายจ่ายประจำไม่น้อยกว่า 98% */
+  annualTargetPct: '98',
   maxUploadMB: '15',
   backupRetentionDays: '30',
   publicNotice: 'ข้อมูลในระบบนี้ใช้เพื่อการติดตามและบริหารภายใน มิใช่ยอดทางบัญชีทางการ (ยอดทางการอ้างอิงระบบ New GFMIS Thai)',

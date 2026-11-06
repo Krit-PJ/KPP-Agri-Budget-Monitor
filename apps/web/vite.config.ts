@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 // GitHub Pages project site: https://<user>.github.io/KPP-Agri-Budget-Monitor/
@@ -12,6 +13,15 @@ export default defineConfig({
   base: process.env.BASE_PATH ?? './',
   plugins: [
     react(),
+    {
+      // import x from 'file.xlsx?base64' → สตริง base64 (ใช้กับไฟล์แผนตัวอย่าง: โหลดเมื่อต้องใช้เท่านั้น)
+      name: 'kpp-base64',
+      enforce: 'pre',
+      load(id) {
+        if (!id.endsWith('?base64')) return null;
+        return `export default ${JSON.stringify(readFileSync(id.slice(0, -'?base64'.length)).toString('base64'))};`;
+      },
+    },
     {
       name: 'kpp-csp',
       apply: 'build',

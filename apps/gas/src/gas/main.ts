@@ -42,7 +42,10 @@ export function doPost(e: GoogleAppsScript.Events.DoPost): GoogleAppsScript.Cont
   } catch {
     return json({ ok: false, data: null, meta: null, error: { code: 'VALIDATION_FAILED', message: 'รูปแบบคำขอไม่ถูกต้อง' } });
   }
-  return json(handle(createGasEnv(), body));
+  const env = createGasEnv();
+  const out = handle(env, body);
+  env.db.flush?.(); // กันพลาด: ถ้ามีการเขียนนอก write route ให้ commit และล้าง cache ของตารางนั้น
+  return json(out);
 }
 
 /** ติดตั้ง/อัปเกรดระบบ (รันจาก editor) — idempotent */

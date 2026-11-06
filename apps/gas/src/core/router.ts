@@ -2,7 +2,7 @@
  * Router: authenticate → authorize (ใน service) → scope (ใน service) → execute
  * ทุก action ที่เขียนข้อมูลรันใน script lock และ flush ก่อนปล่อย lock
  */
-import { API_VERSION, AppError, PUBLIC_ACTIONS, type ActionName, type ApiEnvelope, type SessionUser } from '@kpp/domain';
+import { API_VERSION, AppError, BATCH_MAX, PUBLIC_ACTIONS, READ_ACTIONS, type ActionName, type ApiEnvelope, type SessionUser } from '@kpp/domain';
 import type { Env } from './env';
 import { loginAdmin, loginSuper, logoutAll, requestAccess, verifyToken } from './auth';
 import type { Ctx } from './context';
@@ -20,7 +20,7 @@ interface Route { fn: Handler; write: boolean; limit: 'public' | 'auth' | 'admin
 const r = (fn: (ctx: Ctx, b: any) => unknown, write: boolean, limit: Route['limit']): Route => ({ fn, write, limit });
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
-export const ROUTES: Record<ActionName, Route> = {
+export const ROUTES: Record<Exclude<ActionName, 'batch'>, Route> = {
   'public.lookups': r((c) => publicSvc.lookups(c), false, 'public'),
   'public.summary': r(publicSvc.publicSummary, false, 'public'),
   'public.projects': r(publicSvc.publicProjects, false, 'public'),
@@ -54,6 +54,7 @@ export const ROUTES: Record<ActionName, Route> = {
   'imports.cancel': r(importsSvc.cancelImport, true, 'admin'),
   'imports.errorsCsv': r(importsSvc.errorsCsv, false, 'admin'),
   'plans.preview': r(plansSvc.previewPlan, true, 'import'),
+  'plans.check': r(plansSvc.checkPlan, false, 'import'),
   'plans.commit': r(plansSvc.commitPlan, true, 'import'),
   'plans.list': r(plansSvc.listPlans, false, 'admin'),
   'plans.get': r(plansSvc.getPlan, false, 'admin'),
@@ -69,7 +70,7 @@ export const ROUTES: Record<ActionName, Route> = {
   'admin.health': r((c) => adminSvc.health(c, c.env.props.get('TRIGGERS')?.split(',') ?? []), false, 'admin'),
   'admin.saveSettings': r(adminSvc.saveSettings, true, 'admin'),
   'admin.saveMaster': r(adminSvc.saveMaster, true, 'admin'),
-  'admin.rebuildSnapshot': r((c) => { if (c.user?.role !== 'superadmin') throw new AppError('FORBIDDEN_SCOPE', 'เฉพาะ Super Admin'); return publicSvc.writeSnapshot(c); }, true, 'admin'),
+  'admin.rebuildSnapshot': r((c) => { if (c.user?.role !== 'superadmin') throw new AppError('FORBIDDEN_SCOPE', 'เฉพาะ Super Admin'); c.env.db.invalidate?.(); return publicSvc.writeSnapshot(c); }, true, 'admin'),
 };
 
 const LIMITS: Record<Route['limit'], number> = { public: 1200, auth: 60, admin: 180, import: 30 };
@@ -89,9 +90,10 @@ export interface RpcRequest {
 }
 
 export function handle(env: Env, req: RpcRequest): ApiEnvelope<unknown> {
+  if (req.action === 'batch') return handleBatch(env, req);
   const requestId = env.uuid();
   const meta = () => ({ requestId, version: API_VERSION, serverTime: env.now().toISOString() });
-  const action = String(req.action ?? '') as ActionName;
+  const action = String(req.action ?? '') as Exclude<ActionName, 'batch'>;
   try {
     const route = ROUTES[action];
     if (!route) throw new AppError('UNKNOWN_ACTION', 'ไม่รู้จักคำสั่งนี้');
@@ -111,4 +113,22 @@ export function handle(env: Env, req: RpcRequest): ApiEnvelope<unknown> {
     env.log('error', 'unhandled', { requestId, action, message: String((e as Error)?.message ?? e).slice(0, 500) });
     return { ok: false, data: null, meta: meta(), error: { code: 'INTERNAL_ERROR', message: `เกิดข้อผิดพลาดภายในระบบ (รหัสอ้างอิง ${requestId.slice(0, 8)})` } };
   }
+}
+
+/**
+ * batch: รันคำขออ่านหลายรายการใน execution เดียว (Apps Script มีเวลาเริ่มต้นราว 1–1.5 วินาทีต่อคำขอ)
+ * แต่ละรายการตรวจสิทธิ์และจำกัดอัตราแยกกัน ผลเป็น envelope ต่อรายการ; action ที่เขียนข้อมูลใช้ใน batch ไม่ได้
+ */
+function handleBatch(env: Env, req: RpcRequest): ApiEnvelope<unknown> {
+  const calls = Array.isArray(req.calls) ? (req.calls as RpcRequest[]) : [];
+  const meta = { requestId: env.uuid(), version: API_VERSION, serverTime: env.now().toISOString() };
+  if (!calls.length || calls.length > BATCH_MAX) {
+    return { ok: false, data: null, meta, error: { code: 'VALIDATION_FAILED', message: `batch ต้องมี 1–${BATCH_MAX} รายการ` } };
+  }
+  const data = calls.map((c) => {
+    const a = String(c?.action ?? '') as ActionName;
+    if (!READ_ACTIONS.has(a)) return { ok: false, data: null, meta, error: { code: 'VALIDATION_FAILED' as const, message: 'ใช้ batch ได้เฉพาะคำขออ่านข้อมูล' } };
+    return handle(env, { ...c, action: a, token: req.token, device: req.device });
+  });
+  return { ok: true, data, meta, error: null };
 }

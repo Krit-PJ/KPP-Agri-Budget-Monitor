@@ -2,7 +2,7 @@
 import {
   AppError, cleanText, currentFiscalYear, isValidPhone, maskPhone, normalizePhone,
   type AccessRequest, type AuditLog, type HealthData, type ImportJob, type LoginAttempt, type OverviewData, type User, type Workgroup,
-  type FundingSource, type Organization,
+  type FundingSource, type Organization, type PlanDoc, type PlanItem,
 } from '@kpp/domain';
 import { canAccessWorkgroup, phoneHash, requireRole } from '../auth';
 import { audit, bumpDataVersion, findById, getSettings, live, newMeta, nowIso, setSetting, type Ctx } from '../context';
@@ -37,6 +37,12 @@ export function overview(ctx: Ctx, b: { fiscalYear?: number }): OverviewData {
       .filter((l) => u.workgroupIds === null || l.actorId === u.sub)
       .sort((a, b2) => b2.at.localeCompare(a.at)).slice(0, 10),
     totals,
+    unassignedPlan: (() => {
+      const docs = live(ctx.env.db.list<PlanDoc>('PlanDocs')).filter((d) => d.status === 'ACTIVE' && Number(d.fiscalYear) === fy);
+      const ids = new Set(docs.map((d) => d.id));
+      const open = live(ctx.env.db.list<PlanItem>('PlanItems')).filter((i) => ids.has(i.planDocId) && i.isLeaf && !i.workgroupId);
+      return { items: open.length, satang: open.reduce((a, i) => a + Number(i.amountSatang), 0), planDocId: docs[0]?.id ?? '' };
+    })(),
   };
 }
 
@@ -159,11 +165,11 @@ export function health(ctx: Ctx, triggers: string[] = []): HealthData {
     lastBackupAt: s.lastBackupAt,
     lockTimeouts24h: Number(ctx.env.cache.get('metric:lockTimeout') || '0'),
     errors24h: Number(ctx.env.cache.get('metric:errors') || '0'),
-    settings: { autoCommitClean: s.autoCommitClean, defaultQuarterTargets: s.defaultQuarterTargets, maxUploadMB: s.maxUploadMB, backupRetentionDays: s.backupRetentionDays, publicNotice: s.publicNotice },
+    settings: { autoCommitClean: s.autoCommitClean, defaultQuarterTargets: s.defaultQuarterTargets, annualTargetPct: s.annualTargetPct, maxUploadMB: s.maxUploadMB, backupRetentionDays: s.backupRetentionDays, publicNotice: s.publicNotice },
   };
 }
 
-const EDITABLE_SETTINGS = new Set(['autoCommitClean', 'defaultQuarterTargets', 'maxUploadMB', 'backupRetentionDays', 'publicNotice']);
+const EDITABLE_SETTINGS = new Set(['autoCommitClean', 'defaultQuarterTargets', 'annualTargetPct', 'maxUploadMB', 'backupRetentionDays', 'publicNotice']);
 
 export function saveSettings(ctx: Ctx, b: { settings: Record<string, string> }): { ok: true } {
   requireRole(ctx, 'superadmin');
@@ -172,6 +178,7 @@ export function saveSettings(ctx: Ctx, b: { settings: Record<string, string> }):
     const val = cleanText(v, 500);
     if (k === 'autoCommitClean' && !['true', 'false'].includes(val)) throw new AppError('VALIDATION_FAILED', 'autoCommitClean ต้องเป็น true/false');
     if ((k === 'maxUploadMB' || k === 'backupRetentionDays') && !(Number(val) > 0 && Number(val) <= 365)) throw new AppError('VALIDATION_FAILED', `${k} ไม่ถูกต้อง`);
+    if (k === 'annualTargetPct' && !(Number(val) > 0 && Number(val) <= 100)) throw new AppError('VALIDATION_FAILED', 'เป้าเบิกจ่ายทั้งปีต้องอยู่ระหว่าง 1–100');
     setSetting(ctx, k, val);
   }
   audit(ctx, 'settings.update', 'Settings', 'settings', { after: b.settings });

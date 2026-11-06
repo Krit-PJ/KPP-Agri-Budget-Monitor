@@ -40,7 +40,20 @@ export interface PlanNode {
 }
 
 export type PlanIssueLevel = 'ERROR' | 'WARNING' | 'INFO';
-export interface PlanIssue { rowNo: number; level: PlanIssueLevel; message: string }
+/** คอลัมน์ในตารางมาตรฐาน: 0 รายการ, 1 หน่วยนับ, 2 ปริมาณงาน, 3 งบประมาณ */
+export type PlanField = 'name' | 'unit' | 'qty' | 'amount';
+export const PLAN_FIELD_COL: Record<PlanField, number> = { name: 0, unit: 1, qty: 2, amount: 3 };
+export interface PlanIssue {
+  rowNo: number;
+  level: PlanIssueLevel;
+  message: string;
+  /** ช่องที่ควรตรวจ/แก้ */
+  field?: PlanField;
+  /** ค่าที่ระบบแนะนำสำหรับช่องนั้น (ผู้ใช้เลือกใช้หรือไม่ก็ได้) */
+  suggest?: string;
+  /** ข้อความบนปุ่มใช้ค่าที่แนะนำ */
+  fix?: string;
+}
 
 export interface ParsedPlan {
   nodes: PlanNode[];
@@ -101,6 +114,7 @@ export function buildPlan(rows: ReadonlyArray<RawRow>): ParsedPlan {
   const nodes: PlanNode[] = [];
   const stack: Array<{ node: PlanNode; rank: number }> = [];
   let declaredTotal: Satang | null = null;
+  let totalRowNo = 0;
   let planIndex = 0;
   let prevRank = 10;
 
@@ -113,6 +127,7 @@ export function buildPlan(rows: ReadonlyArray<RawRow>): ParsedPlan {
     const amount = money.ok && !money.empty ? money.satang : null;
     if (c.kind === 'TOTAL') {
       declaredTotal = amount;
+      totalRowNo = r.rowNo;
       continue;
     }
     let rank = c.rank;
@@ -129,7 +144,10 @@ export function buildPlan(rows: ReadonlyArray<RawRow>): ParsedPlan {
     }
     const parent = stack.at(-1)?.node;
     const qty = parseQty(r.qty);
-    if (r.qty && qty === null) issues.push({ rowNo: r.rowNo, level: 'WARNING', message: `ปริมาณงานไม่ใช่ตัวเลข: "${r.qty}"` });
+    if (r.qty && qty === null) {
+      const digits = thaiDigitsToArabic(r.qty).replace(/[^\d.]/g, '');
+      issues.push({ rowNo: r.rowNo, level: 'WARNING', message: `ปริมาณงานไม่ใช่ตัวเลข: "${r.qty}"`, field: 'qty', ...(digits ? { suggest: digits, fix: `ใช้ ${digits}` } : {}) });
+    }
     const node: PlanNode = {
       seq: nodes.length + 1, rowNo: r.rowNo, parentSeq: parent?.seq ?? 0, depth: stack.length, kind: c.kind as PlanKind,
       number: c.number, name: c.name, unit: cleanText(r.unit, 40), quantity: qty, amountSatang: amount, isLeaf: true,
@@ -161,7 +179,10 @@ export function buildPlan(rows: ReadonlyArray<RawRow>): ParsedPlan {
     else {
       const s = kids.reduce((acc, k) => acc + sumOf(k), 0);
       if (n.amountSatang !== null && n.amountSatang !== s) {
-        issues.push({ rowNo: n.rowNo, level: 'ERROR', message: `งบประมาณ ${(n.amountSatang / 100).toLocaleString('th-TH')} บาท ไม่เท่ากับผลรวมรายการย่อย ${(s / 100).toLocaleString('th-TH')} บาท` });
+        issues.push({
+          rowNo: n.rowNo, level: 'ERROR', field: 'amount', suggest: satangPlain(s), fix: `ใช้ผลรวม ${bahtText(s)} บาท`,
+          message: `งบประมาณ ${bahtText(n.amountSatang)} บาท ไม่เท่ากับผลรวมรายการย่อย ${bahtText(s)} บาท (ถ้ายอดนี้ถูก ให้แก้รายการย่อยแทน)`,
+        });
       }
       v = n.amountSatang ?? s;
     }
@@ -172,14 +193,20 @@ export function buildPlan(rows: ReadonlyArray<RawRow>): ParsedPlan {
   const computedTotal = roots.reduce((a, n) => a + sumOf(n), 0);
   nodes.forEach(sumOf);
   if (declaredTotal !== null && declaredTotal !== computedTotal) {
-    issues.push({ rowNo: 0, level: 'ERROR', message: `ยอดรวมทั้งสิ้น ${(declaredTotal / 100).toLocaleString('th-TH')} บาท ไม่เท่ากับผลรวมแผนงาน ${(computedTotal / 100).toLocaleString('th-TH')} บาท` });
+    issues.push({
+      rowNo: totalRowNo, level: 'ERROR', field: 'amount', suggest: satangPlain(computedTotal), fix: `ใช้ผลรวม ${bahtText(computedTotal)} บาท`,
+      message: `ยอดรวมทั้งสิ้น ${bahtText(declaredTotal)} บาท ไม่เท่ากับผลรวมแผนงาน ${bahtText(computedTotal)} บาท`,
+    });
   }
 
   // รายการย่อยสุดท้าย
   const leaves = nodes.filter((n) => n.isLeaf);
   for (const l of leaves) {
-    if (l.amountSatang === null) issues.push({ rowNo: l.rowNo, level: 'WARNING', message: 'รายการย่อยสุดท้ายไม่มีงบประมาณ' });
-    else if (l.amountSatang < 0) issues.push({ rowNo: l.rowNo, level: 'ERROR', message: 'งบประมาณติดลบ' });
+    if (l.amountSatang === null) issues.push({ rowNo: l.rowNo, level: 'WARNING', field: 'amount', message: 'กิจกรรมย่อยสุดท้ายไม่มีงบประมาณ — ใส่งบ หรือถ้าเป็นหัวข้อ ให้ตรวจว่ารายการย่อยตกหล่นหรือไม่' });
+    else if (l.amountSatang < 0) issues.push({ rowNo: l.rowNo, level: 'ERROR', field: 'amount', message: 'งบประมาณติดลบ' });
+    else if (!l.unit || l.quantity === null) {
+      issues.push({ rowNo: l.rowNo, level: 'INFO', field: l.unit ? 'qty' : 'unit', message: `กิจกรรมย่อยไม่มี${!l.unit && l.quantity === null ? 'หน่วยนับและปริมาณงาน' : !l.unit ? 'หน่วยนับ' : 'ปริมาณงาน'} — เพิ่มได้ถ้าทราบ (ไม่บังคับ)` });
+    }
   }
   // เลขลำดับย่อยต้องขึ้นต้นด้วยเลขของรายการแม่ เช่น 2.1) อยู่ใต้ 2) และ (2.1) อยู่ใต้ (2)
   const bySeq = new Map(nodes.map((n) => [n.seq, n]));
@@ -190,7 +217,11 @@ export function buildPlan(rows: ReadonlyArray<RawRow>): ParsedPlan {
     const sameStyle = n.number.startsWith('(') === parent.number.startsWith('(') && /\)$/.test(n.number) === /\)$/.test(parent.number);
     const parentCore = parent.number.match(/^\(?(\d+(?:\.\d+)*)\)?$/)?.[1];
     if (sameStyle && parentCore && core.split('.').slice(0, -1).join('.') !== parentCore) {
-      issues.push({ rowNo: n.rowNo, level: 'INFO', message: `เลขลำดับ ${n.number} ไม่สอดคล้องกับรายการแม่ ${parent.number} (ระบบยึดตามตำแหน่งในเอกสาร)` });
+      const fixed = n.number.replace(core, `${parentCore}.${core.split('.').at(-1)}`);
+      issues.push({
+        rowNo: n.rowNo, level: 'INFO', field: 'name', suggest: `${fixed} ${n.name}`, fix: `เปลี่ยนเป็น ${fixed}`,
+        message: `เลขลำดับ ${n.number} ไม่สอดคล้องกับรายการแม่ ${parent.number} (ระบบจัดระดับตามตำแหน่งในเอกสารอยู่แล้ว แก้หรือไม่ก็ได้)`,
+      });
     }
   }
   // เลขลำดับข้าม / ซ้ำ ในพี่น้องรูปแบบเดียวกัน
@@ -205,14 +236,14 @@ export function buildPlan(rows: ReadonlyArray<RawRow>): ParsedPlan {
       const lastNums = list.map((k) => Number(k.number.match(/(\d+)\D*$/)?.[1] ?? 0));
       for (let i = 1; i < lastNums.length; i++) {
         if (lastNums[i] === lastNums[i - 1]) issues.push({ rowNo: list[i].rowNo, level: 'WARNING', message: `เลขลำดับ ${list[i].number} ซ้ำกับรายการก่อนหน้า` });
-        else if (lastNums[i] !== lastNums[i - 1] + 1) issues.push({ rowNo: list[i].rowNo, level: 'INFO', message: `เลขลำดับข้ามจาก ${list[i - 1].number} ไป ${list[i].number} (ตรวจว่าตกหล่นหรือไม่)` });
+        else if (lastNums[i] !== lastNums[i - 1] + 1) issues.push({ rowNo: list[i].rowNo, level: 'INFO', field: 'name', message: `เลขลำดับข้ามจาก ${list[i - 1].number} ไป ${list[i].number} — ตรวจกับต้นฉบับว่ามีรายการตกหล่นหรือไม่` });
       }
     }
     // ชื่อซ้ำภายใต้แม่เดียวกัน
     const seen = new Map<string, PlanNode>();
     for (const k of kids) {
       const key = normalizeKey(k.name);
-      if (seen.has(key)) issues.push({ rowNo: k.rowNo, level: 'WARNING', message: `ชื่อรายการซ้ำกับแถว ${seen.get(key)!.rowNo}` });
+      if (seen.has(key)) issues.push({ rowNo: k.rowNo, level: 'WARNING', field: 'name', message: `ชื่อซ้ำกับ "${seen.get(key)!.number} ${seen.get(key)!.name}" ภายใต้หัวข้อเดียวกัน — ตรวจว่าบันทึกซ้ำหรือไม่` });
       else seen.set(key, k);
     }
   }
@@ -237,36 +268,132 @@ const NAME_HDR = /แผนงาน|รายการ|โครงการ.*�
 const UNIT_HDR = /หน่วย/;
 const QTY_HDR = /ปริมาณ|เป้าหมาย|จำนวน(?!เงิน)/;
 const AMOUNT_HDR = /งบประมาณ|จำนวนเงิน|วงเงิน|บาท/;
+const SUBHEADER = /ปริมาณ|งบประมาณ|ครั้งที่|งวดที่|บาท|จำนวน|หน่วย/;
 
-/** รับตารางจาก CSV/XLSX/Google Sheets — หาแถวหัวตารางเอง; ถ้าไม่พบใช้ลำดับคอลัมน์ รายการ|หน่วย|ปริมาณ|งบ */
-export function parsePlanTable(table: ReadonlyArray<ReadonlyArray<unknown>>): ParsedPlan & { headerRow: number } {
-  let headerRow = -1;
-  let cols = { name: 0, unit: 1, qty: 2, amount: 3 };
-  for (let r = 0; r < Math.min(table.length, 20); r++) {
-    const cells = table[r].map((c) => cleanText(c, 200));
+export const PLAN_TABLE_HEADER = ['แผนงาน - โครงการ - กิจกรรม - วิธีการดำเนินงาน', 'หน่วยนับ', 'ปริมาณงาน', 'งบประมาณ (บาท)'];
+
+interface Located { headerRow: number; cols: { name: number; unit: number; qty: number; amount: number } }
+
+/**
+ * หาแถวหัวตารางและคอลัมน์ — รองรับหัวตารางหลายชั้นที่ผสานเซลล์ (เช่น แบบ คง.2:
+ * "รายละเอียดงบประมาณ" ครอบ "ปริมาณงาน | งบประมาณ (บาท)" ในแถวถัดไป)
+ */
+function locate(table: ReadonlyArray<ReadonlyArray<unknown>>): Located {
+  for (let r = 0; r < Math.min(table.length, 25); r++) {
+    const cells = (table[r] ?? []).map((c) => cleanText(c, 200));
     const name = cells.findIndex((c) => NAME_HDR.test(c));
     const unit = cells.findIndex((c) => UNIT_HDR.test(c));
-    // งบประมาณ: เลือกคอลัมน์ขวาสุดที่ตรง (หัวตารางสองชั้นมักมี "รายละเอียดงบประมาณ" อยู่เหนือ)
     const amountIdx = cells.map((c, i) => (AMOUNT_HDR.test(c) && i !== name ? i : -1)).filter((i) => i >= 0).pop() ?? -1;
-    if (name >= 0 && (unit >= 0 || amountIdx >= 0)) {
-      headerRow = r;
-      const qty = cells.findIndex((c, i) => QTY_HDR.test(c) && i !== name && i !== amountIdx);
-      cols = { name, unit: unit >= 0 ? unit : name + 1, qty: qty >= 0 ? qty : (unit >= 0 ? unit + 1 : name + 2), amount: amountIdx >= 0 ? amountIdx : name + 3 };
-      // หัวตารางหลายชั้น: ข้ามแถวที่ตามมาซึ่งเป็นหัวตารางย่อย (ไม่มีชื่อรายการ)
-      while (headerRow + 1 < table.length && !cleanText(table[headerRow + 1][cols.name]) &&
-        table[headerRow + 1].some((c) => /ปริมาณ|งบประมาณ|ครั้งที่/.test(cleanText(c)))) headerRow++;
-      break;
+    if (name < 0 || (unit < 0 && amountIdx < 0)) continue;
+    const qty = cells.findIndex((c, i) => QTY_HDR.test(c) && i !== name && i !== amountIdx);
+    const cols = { name, unit: unit >= 0 ? unit : name + 1, qty: qty >= 0 ? qty : (unit >= 0 ? unit + 1 : name + 2), amount: amountIdx >= 0 ? amountIdx : name + 3 };
+    let headerRow = r;
+    // หัวตารางย่อย (ไม่มีชื่อรายการ) — ใช้ระบุคอลัมน์ปริมาณ/งบให้แม่นขึ้น แล้วข้ามไป
+    for (let k = 1; k <= 3 && r + k < table.length; k++) {
+      const sub = (table[r + k] ?? []).map((c) => cleanText(c, 200));
+      if (sub[cols.name] || !sub.some((c) => SUBHEADER.test(c))) break;
+      const q = sub.findIndex((c, i) => i !== cols.name && QTY_HDR.test(c));
+      const a = sub.map((c, i) => (i !== cols.name && AMOUNT_HDR.test(c) && !QTY_HDR.test(c) ? i : -1)).filter((i) => i >= 0).pop() ?? -1;
+      if (q >= 0) cols.qty = q;
+      if (a >= 0) cols.amount = a;
+      headerRow = r + k;
     }
+    return { headerRow, cols };
   }
-  const rows: RawRow[] = [];
+  return { headerRow: -1, cols: { name: 0, unit: 1, qty: 2, amount: 3 } };
+}
+
+function cellText(v: unknown): string {
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : '';
+  return cleanText(v, 1000);
+}
+
+/** ข้อมูลหัวเอกสาร (ปี ครั้งที่ แหล่งงบ ประเภทงบ) ที่อ่านได้จากแถวก่อนตาราง — ใช้เติมแบบฟอร์มให้อัตโนมัติ */
+export interface PlanMeta {
+  fiscalYear?: number;
+  round?: number;
+  /** รหัสแหล่งงบ: DOAE | PROVINCE | PROVGROUP */
+  fundCode?: string;
+  budgetType?: string;
+  title?: string;
+  form?: string;
+  org?: string;
+}
+
+export function detectPlanMeta(table: ReadonlyArray<ReadonlyArray<unknown>>, headerRow = locate(table).headerRow): PlanMeta {
+  const lines = table.slice(0, Math.max(0, headerRow) + 1).map((r) => (r ?? []).map((c) => cleanText(thaiDigitsToArabic(String(c ?? '')), 300)).filter(Boolean).join(' ')).filter(Boolean);
+  const all = lines.join('\n');
+  const meta: PlanMeta = {};
+  const fy = all.match(/ปี(?:งบประมาณ)?\s*(?:พ\.\s*ศ\.)?\s*(25\d\d)/);
+  if (fy) meta.fiscalYear = Number(fy[1]);
+  const round = all.match(/(?:ครั้งที่|งวดที่)\s*(\d{1,2})/);
+  if (round) meta.round = Number(round[1]);
+  if (/กรมส่งเสริมการเกษตร/.test(all)) meta.fundCode = 'DOAE';
+  else if (/กลุ่มจังหวัด/.test(all)) meta.fundCode = 'PROVGROUP';
+  else if (/งบ(?:ประมาณ)?(?:พัฒนา)?จังหวัด|แผนพัฒนาจังหวัด/.test(all)) meta.fundCode = 'PROVINCE';
+  const bt = lines.find((l) => /^งบ(ดำเนินงาน|ลงทุน|รายจ่ายอื่น|อุดหนุน|บุคลากร)\s*$/.test(l));
+  if (bt) meta.budgetType = bt;
+  const title = lines.find((l) => /^(รายละเอียดงบประมาณ|แผนการใช้จ่าย|แผนปฏิบัติงาน)/.test(l));
+  if (title) meta.title = title;
+  const form = all.match(/แบบ\s*คง\.?\s*\d/);
+  if (form) meta.form = form[0].replace(/\s+/g, ' ');
+  const org = lines.find((l) => /^สำนักงานเกษตร/.test(l));
+  if (org) meta.org = org;
+  return meta;
+}
+
+/**
+ * แปลงตารางจากไฟล์ใดก็ได้เป็น "ตารางมาตรฐาน" 4 คอลัมน์ (หัวตาราง + แถวข้อมูล) สำหรับตรวจ/แก้ไขในหน้าเว็บ
+ * แถวหลัง "หมายเหตุ" ไม่นำมาใช้
+ */
+export function normalizePlanTable(table: ReadonlyArray<ReadonlyArray<unknown>>): { table: string[][]; meta: PlanMeta; headerRow: number } {
+  const { headerRow, cols } = locate(table);
+  const out: string[][] = [[...PLAN_TABLE_HEADER]];
   for (let r = headerRow + 1; r < table.length; r++) {
-    const line = table[r];
+    const line = table[r] ?? [];
     const text = cleanText(line[cols.name], 1000);
     if (!text) continue;
     if (/^(หมายเหตุ|ที่มา)/.test(text)) break;
-    rows.push({ rowNo: r + 1, text, unit: cleanText(line[cols.unit]), qty: cleanText(line[cols.qty]), amount: line[cols.amount] ?? '' });
+    out.push([text, cellText(line[cols.unit]), cellText(line[cols.qty]), cellText(line[cols.amount])]);
+  }
+  return { table: out, meta: detectPlanMeta(table, headerRow), headerRow };
+}
+
+/** รับตารางจาก CSV/XLSX/Google Sheets — หาแถวหัวตารางเอง; ถ้าไม่พบใช้ลำดับคอลัมน์ รายการ|หน่วย|ปริมาณ|งบ */
+export function parsePlanTable(table: ReadonlyArray<ReadonlyArray<unknown>>): ParsedPlan & { headerRow: number } {
+  const { headerRow, cols } = locate(table);
+  const rows: RawRow[] = [];
+  for (let r = headerRow + 1; r < table.length; r++) {
+    const line = table[r] ?? [];
+    const text = cleanText(line[cols.name], 1000);
+    if (!text) continue;
+    if (/^(หมายเหตุ|ที่มา)/.test(text)) break;
+    rows.push({ rowNo: r + 1, text, unit: cleanText(line[cols.unit]), qty: cellText(line[cols.qty]), amount: line[cols.amount] ?? '' });
   }
   return { ...buildPlan(rows), headerRow };
+}
+
+/** เทียบตารางมาตรฐานก่อน/หลังแก้ — ใช้บันทึกประวัติการแก้จากต้นฉบับ */
+export interface PlanEdit { rowNo: number; field: PlanField; before: string; after: string }
+export function diffPlanTables(before: ReadonlyArray<ReadonlyArray<string>>, after: ReadonlyArray<ReadonlyArray<string>>): PlanEdit[] {
+  const fields: PlanField[] = ['name', 'unit', 'qty', 'amount'];
+  const out: PlanEdit[] = [];
+  const n = Math.max(before.length, after.length);
+  for (let r = 1; r < n; r++) {
+    for (const f of fields) {
+      const a = cleanText(before[r]?.[PLAN_FIELD_COL[f]] ?? '', 1000);
+      const b = cleanText(after[r]?.[PLAN_FIELD_COL[f]] ?? '', 1000);
+      if (a !== b) out.push({ rowNo: r + 1, field: f, before: a, after: b });
+    }
+  }
+  return out;
+}
+
+function satangPlain(s: Satang): string {
+  return s % 100 === 0 ? String(s / 100) : (s / 100).toFixed(2);
+}
+function bahtText(s: Satang): string {
+  return (s / 100).toLocaleString('th-TH', { maximumFractionDigits: 2 });
 }
 
 /* --------------------------------- OCR text input --------------------------------- */

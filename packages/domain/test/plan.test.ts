@@ -1,8 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { classifyPlanLine, parseDelimited, parsePlanTable, parsePlanText, planToTable } from '../src/index';
+import {
+  classifyPlanLine, detectPlanMeta, diffPlanTables, normalizePlanTable, parseDelimited, parsePlanTable, parsePlanText, planToTable, readXlsx, toCsv,
+} from '../src/index';
 
-const CSV = readFileSync(new URL('../../../data/plans/2570-DOAE-r1-kamphaengphet.csv', import.meta.url), 'utf8');
+/** ไฟล์ต้นฉบับจากสำนักงาน (แบบ คง.2 หัวตาราง 3 แถวผสานเซลล์) */
+const XLSX = readXlsx(new Uint8Array(readFileSync(new URL('../../../data/plans/2570-DOAE-r1-kamphaengphet.xlsx', import.meta.url))))[0].rows;
 
 describe('classifyPlanLine', () => {
   it('reads every numbering style used in แบบ คง.2', () => {
@@ -20,7 +23,7 @@ describe('classifyPlanLine', () => {
 });
 
 describe('แบบ คง.2 ปีงบประมาณ 2570 ครั้งที่ 1 (สนง.เกษตรจังหวัดกำแพงเพชร)', () => {
-  const p = parsePlanTable(parseDelimited(CSV));
+  const p = parsePlanTable(XLSX);
 
   it('reconciles every level to the baht', () => {
     expect(p.declaredTotal).toBe(242_986_200);
@@ -63,6 +66,54 @@ describe('แบบ คง.2 ปีงบประมาณ 2570 ครั้ง
     const again = parsePlanTable(planToTable(p));
     expect(again.computedTotal).toBe(p.computedTotal);
     expect(again.leafCount).toBe(p.leafCount);
+  });
+});
+
+describe('ไฟล์ Excel ต้นฉบับ (หัวตารางหลายชั้น)', () => {
+  it('maps ปริมาณงาน and งบประมาณ from the sub-header row, not the merged parent header', () => {
+    const n = normalizePlanTable(XLSX);
+    expect(n.table[0]).toEqual(['แผนงาน - โครงการ - กิจกรรม - วิธีการดำเนินงาน', 'หน่วยนับ', 'ปริมาณงาน', 'งบประมาณ (บาท)']);
+    expect(n.table[1]).toEqual(['รวมทั้งสิ้น', 'ราย', '908', '2429862']);
+    expect(n.table.at(-1)![0]).toContain('การดำเนินงานตามมาตรการหมอกควัน'); // หยุดก่อน "หมายเหตุ"
+    const again = parsePlanTable(n.table);
+    expect(again.computedTotal).toBe(242_986_200);
+    expect(again.leafCount).toBe(87);
+  });
+
+  it('reads the document heading so the form fills itself', () => {
+    expect(detectPlanMeta(XLSX)).toMatchObject({ fiscalYear: 2570, round: 1, fundCode: 'DOAE', budgetType: 'งบดำเนินงาน', form: 'แบบ คง. 2', org: 'สำนักงานเกษตรจังหวัดกำแพงเพชร' });
+  });
+
+  it('offers optional fixes: renumber (2.1) → (1.1) and note leaves without a unit', () => {
+    const n = normalizePlanTable(XLSX).table;
+    const p = parsePlanTable(n);
+    const renum = p.issues.find((i) => i.fix === 'เปลี่ยนเป็น (1.1)')!;
+    expect(renum).toMatchObject({ level: 'INFO', field: 'name' });
+    expect(renum.suggest).toMatch(/^\(1\.1\) จัดกระบวนการเรียนรู้/);
+    expect(n[renum.rowNo - 1][0]).toMatch(/^\(2\.1\)/); // rowNo ชี้แถวในตารางมาตรฐาน
+    const noUnit = p.issues.filter((i) => i.message.startsWith('กิจกรรมย่อยไม่มีหน่วยนับ'));
+    expect(noUnit).toHaveLength(8);
+    expect(p.issues.filter((i) => i.level !== 'INFO')).toEqual([]);
+  });
+
+  it('suggests the child sum when a parent total is wrong, and records edits', () => {
+    const n = normalizePlanTable(XLSX).table.map((r) => [...r]);
+    const row = n.findIndex((r) => r[0].startsWith('1.1 พัฒนาอาสาสมัครเกษตรหมู่บ้าน'));
+    n[row][3] = '40000';
+    // แถวที่แก้ผิดได้คำแนะนำ = ผลรวมลูก; แถวแม่ด้านบนก็ถูกแจ้งด้วย (ผู้ใช้เลือกว่าจะแก้ตัวไหน)
+    const errs = parsePlanTable(n).issues.filter((i) => i.level === 'ERROR');
+    expect(errs.map((i) => i.rowNo)).toEqual([row, row + 1]);
+    const err = errs.find((i) => i.rowNo === row + 1)!;
+    expect(err).toMatchObject({ rowNo: row + 1, field: 'amount', suggest: '41000' });
+    const fixed = n.map((r) => [...r]);
+    fixed[row][3] = err.suggest!;
+    expect(parsePlanTable(fixed).issues.filter((i) => i.level === 'ERROR')).toEqual([]);
+    expect(diffPlanTables(n, fixed)).toEqual([{ rowNo: row + 1, field: 'amount', before: '40000', after: '41000' }]);
+  });
+
+  it('gives the same result from CSV export of the normalized table', () => {
+    const csv = toCsv(normalizePlanTable(XLSX).table);
+    expect(parsePlanTable(parseDelimited(csv)).computedTotal).toBe(242_986_200);
   });
 });
 

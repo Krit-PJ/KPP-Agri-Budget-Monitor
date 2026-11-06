@@ -9,3 +9,4 @@ export * from './importer';
 export * from './coverLetter';
 export * from './contracts';
 export * from './plan';
+export * from './xlsx';

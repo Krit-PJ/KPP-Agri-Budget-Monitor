@@ -11,3 +11,4 @@ apps/gas/src/Secrets.gs
 coverage/
 *.tsbuildinfo
 dist-artifact/
+.demo-dist/

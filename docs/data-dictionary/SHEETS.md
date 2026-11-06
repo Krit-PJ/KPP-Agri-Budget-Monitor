@@ -1,6 +1,6 @@
 # พจนานุกรมข้อมูล (Google Sheets)
 
-Schema version `2026.11.06-1` — สร้างอัตโนมัติจาก `apps/gas/src/core/schema.ts`
+Schema version `2026.11.07-1` — สร้างอัตโนมัติจาก `apps/gas/src/core/schema.ts`
 
 - วันที่: `YYYY-MM-DD`; timestamp: UTC ISO 8601
 - เงิน: สตางค์ (integer) ห้ามมีข้อความสกุลเงินใน cell
@@ -306,6 +306,8 @@ Schema version `2026.11.06-1` — สร้างอัตโนมัติจ�
 | `sourceFileName` | string |  |
 | `status` | string | สถานะ (ดู enum ใน packages/domain/src/types.ts) |
 | `note` | string |  |
+| `sourceSha256` | string |  |
+| `editCount` | number |  |
 
 ### แท็บ `PlanItems` (key: `id`)
 

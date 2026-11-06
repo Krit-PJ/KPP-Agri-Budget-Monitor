@@ -1,17 +1,19 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { HashRouter, Link, MemoryRouter, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 
 // build แบบฝังในหน้าอื่น (VITE_ROUTER=memory) ใช้ MemoryRouter เพราะเจ้าของหน้าไม่อนุญาต #/path
 const Router = import.meta.env.VITE_ROUTER === 'memory' ? MemoryRouter : HashRouter;
 import type { SessionUser } from '@kpp/domain';
 import { DEMO, getSession } from './api/client';
-import { Async, LookupProvider, ToastProvider, useApi } from './components/ui';
+import { Async, Loading, LookupProvider, ToastProvider, useApi } from './components/ui';
 import PublicHome from './pages/public/Home';
 import PublicProjects from './pages/public/Projects';
 import PublicProject from './pages/public/Project';
 import About from './pages/public/About';
-import Login from './pages/Login';
-import AdminLayout from './pages/admin/Layout';
+
+// ส่วนเจ้าหน้าที่แยกไฟล์: ผู้เข้าชมทั่วไปไม่ต้องดาวน์โหลดโค้ดส่วนจัดการ
+const Login = lazy(() => import('./pages/Login'));
+const AdminLayout = lazy(() => import('./pages/admin/Layout'));
 
 function useSessionUser(): SessionUser | null {
   const [u, setU] = useState(() => getSession()?.user ?? null);
@@ -70,6 +72,7 @@ function Shell() {
         <Async s={lookups} lines={6}>
           {(l) => (
             <LookupProvider value={l}>
+              <Suspense fallback={<Loading lines={6} />}>
               <Routes>
                 <Route path="/" element={<PublicHome />} />
                 <Route path="/projects" element={<PublicProjects />} />
@@ -79,6 +82,7 @@ function Shell() {
                 <Route path="/admin/*" element={user ? <AdminLayout user={user} /> : <Navigate to="/login" replace />} />
                 <Route path="*" element={<p>ไม่พบหน้าที่ต้องการ <Link to="/">กลับหน้าแรก</Link></p>} />
               </Routes>
+              </Suspense>
             </LookupProvider>
           )}
         </Async>

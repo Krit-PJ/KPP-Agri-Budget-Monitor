@@ -16,6 +16,8 @@ export interface Db {
   cellUsage(): Array<{ file: string; cells: number }>;
   /** เขียนรายการที่ buffer ไว้ลงที่เก็บจริง (Sheets adapter รวมเป็น batch) */
   flush?(): void;
+  /** ล้าง cache ข้ามคำขอของทุกตาราง (หลังแก้ชีตด้วยมือ) */
+  invalidate?(): void;
 }
 
 export interface Locker {

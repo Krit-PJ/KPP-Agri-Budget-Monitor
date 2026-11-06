@@ -6,7 +6,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { hmac } from '@noble/hashes/hmac';
 import { pbkdf2 } from '@noble/hashes/pbkdf2';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
-import { AppError, escapeCell, parseDelimited, unescapeCell } from '@kpp/domain';
+import { AppError, escapeCell, parseDelimited, readXlsx, unescapeCell } from '@kpp/domain';
 import type { Cache, Crypto, Db, Env, FileStore, Locker, Props, Row } from './core/env';
 import { primaryKeyOf, TABLES, type TableName } from './core/schema';
 
@@ -155,7 +155,14 @@ export class MemoryFiles implements FileStore {
   readTables(fileId: string, mime: string) {
     const f = this.files.get(fileId) ?? this.inbox.find((x) => x.id === fileId);
     if (!f) throw new AppError('NOT_FOUND', 'ไม่พบไฟล์');
-    if (!mime.startsWith('text/')) throw new AppError('VALIDATION_FAILED', 'โหมดสาธิตอ่านได้เฉพาะ CSV/TSV — XLSX ใช้ได้เมื่อติดตั้งบน Google Apps Script');
+    if (/spreadsheetml|ms-excel/.test(mime)) {
+      try {
+        return readXlsx(f.bytes).map((s) => ({ name: s.name, rows: s.rows as unknown[][] }));
+      } catch {
+        throw new AppError('VALIDATION_FAILED', 'อ่านไฟล์ Excel ไม่ได้ (รองรับ .xlsx)');
+      }
+    }
+    if (!mime.startsWith('text/')) throw new AppError('VALIDATION_FAILED', 'โหมดสาธิตอ่านได้เฉพาะ Excel (.xlsx) และ CSV/TSV');
     let text = new TextDecoder('utf-8').decode(f.bytes);
     if (text.includes('�')) text = new TextDecoder('windows-874').decode(f.bytes);
     return [{ name: 'name' in f ? f.name : 'file', rows: parseDelimited(text) }];

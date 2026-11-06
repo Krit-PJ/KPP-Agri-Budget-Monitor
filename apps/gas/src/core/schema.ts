@@ -2,7 +2,7 @@
  * Schema ของตารางใน Google Sheets (versioned) — header แถวที่ 1 ของแต่ละแท็บ
  * เปลี่ยน schema: เพิ่มคอลัมน์ต่อท้ายเท่านั้น แล้วเพิ่ม SCHEMA_VERSION; provisioning เติมหัวคอลัมน์ให้เอง
  */
-export const SCHEMA_VERSION = '2026.11.06-1';
+export const SCHEMA_VERSION = '2026.11.07-1';
 
 export type ColType = 'string' | 'number' | 'boolean' | 'json';
 export type FileKey = 'IDENTITY' | 'CORE' | 'STAGING' | 'REPORTING';
@@ -76,7 +76,7 @@ export const TABLES = {
   PlanDocs: t('CORE', [
     ['fiscalYear', 'number'], ['fundingSourceId', 'string'], ['round', 'number'], ['title', 'string'], ['docNo', 'string'],
     ['docDate', 'string'], ['budgetType', 'string'], ['totalSatang', 'number'], ['leafCount', 'number'], ['sourceFileId', 'string'],
-    ['sourceFileName', 'string'], ['status', 'string'], ['note', 'string'],
+    ['sourceFileName', 'string'], ['status', 'string'], ['note', 'string'], ['sourceSha256', 'string'], ['editCount', 'number'],
   ]),
   PlanItems: t('CORE', [
     ['planDocId', 'string'], ['fiscalYear', 'number'], ['seq', 'number'], ['parentSeq', 'number'], ['depth', 'number'],

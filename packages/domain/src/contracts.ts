@@ -9,10 +9,31 @@ import type {
 } from './types';
 import type { CoverLetterResult } from './coverLetter';
 import type { StagedRow } from './importer';
-import type { ParsedPlan } from './plan';
-import type { PlanDoc, PlanItem } from './types';
+import type { ParsedPlan, PlanMeta } from './plan';
+import type { ApiEnvelope, PlanDoc, PlanItem } from './types';
 
-export interface PlanPreview { table: string[][]; parsed: ParsedPlan; sourceFileId: string; sourceFileName: string; fromOcr: boolean }
+/** ผลอ่านไฟล์แผนที่ฝั่ง server (Google Sheets / PDF / รูป) — ไฟล์ Excel/CSV อ่านในเบราว์เซอร์ได้เลย */
+export interface PlanPreview { table: string[][]; meta: PlanMeta; parsed: ParsedPlan; sourceFileId: string; sourceFileName: string; sha256: string; fromOcr: boolean }
+/** ผลตรวจก่อนนำเข้า: ไฟล์เดิมเคยนำเข้าแล้วหรือไม่ / มีแผนของปี-แหล่งงบ-ครั้งที่เดียวกันแล้วหรือไม่ */
+export interface PlanCheck {
+  duplicateOf: { id: string; title: string; createdAt: string } | null;
+  existing: { id: string; title: string; assignedCount: number } | null;
+  nextRound: number;
+}
+export interface PlanCommitRequest {
+  fiscalYear: number; fundingSourceId: string; round?: number; title?: string; docNo?: string; docDate?: string; budgetType?: string;
+  /** ตารางมาตรฐานหลังตรวจแก้ */
+  table: string[][];
+  /** ตารางมาตรฐานตามต้นฉบับ (ก่อนแก้) — server ใช้คำนวณประวัติการแก้ */
+  originalTable?: string[][];
+  /** ไฟล์ต้นฉบับ (เก็บใน Drive และใช้ตรวจไฟล์ซ้ำ) */
+  fileName?: string; base64?: string;
+  /** ไฟล์ที่อ่านผ่าน server (plans.preview) — อ้างอิงไฟล์ที่เก็บแล้วแทนการส่งไฟล์ซ้ำ */
+  sourceFileId?: string; sourceFileName?: string; sourceSha256?: string;
+  acceptWarnings: boolean;
+  /** มีแผนของปี/แหล่งงบ/ครั้งที่เดียวกันอยู่แล้ว: true = แทนที่ (ทำได้เมื่อยังไม่มีกลุ่มงานเลือกรายการ) */
+  replaceExisting?: boolean;
+}
 export type PlanDocSummary = PlanDoc & { assignedCount: number; assignedSatang: number; groups: Array<{ workgroupId: string; count: number; satang: number }> };
 export interface PlanDetail { doc: PlanDoc; items: PlanItem[] }
 export interface AssignResult { assigned: number; skipped: Array<{ id: string; reason: string }> }
@@ -66,7 +87,17 @@ export interface PublicSummary {
   avgPhysicalProgress: number;
   byFundingSource: GroupTotal[];
   byWorkgroup: GroupTotal[];
+  /** แยกตามแผนงานในแผนงบประมาณที่นำเข้า (โครงการนอกแผนรวมเป็น "นอกแผน") */
+  byPlan: GroupTotal[];
   monthly: { disbursedCumulative: number[]; targetPct: number[] };
+  /**
+   * เป้าตามมาตรการเร่งรัดการเบิกจ่ายของรัฐบาล (ตั้งค่าได้):
+   * annualPct = เป้าเบิกจ่ายทั้งปี (รายจ่ายประจำ ≥ 98% ตามมติ ครม. 29 ก.ย. 2569)
+   * meetingDeadline = วันสุดท้ายของไตรมาส 3 ที่ค่าใช้จ่ายฝึกอบรม/ประชุม/สัมมนาต้องดำเนินการให้เสร็จ
+   */
+  targets: { annualPct: number; meetingDeadline: string };
+  /** กิจกรรมประเภทอบรม/ประชุม/สัมมนา/เวที ที่ยังมีงบเหลือ (ต้องเสร็จภายในไตรมาส 3) */
+  meetings: { activities: number; remaining: number; budget: number };
   risks: Array<{ projectId: string; name: string; flags: RiskFlag[] }>;
   dataQuality: { projectsWithoutBudget: number; projectsWithoutReport45d: number; lastImportAt: string };
 }
@@ -102,6 +133,8 @@ export interface OverviewData {
   failedLogins24h: number;
   recentAudit: AuditLog[];
   totals: BudgetSummary;
+  /** กิจกรรมย่อยในแผนปีนี้ที่ยังไม่มีกลุ่มงานรับผิดชอบ (งบที่ยังไม่มีใครเบิกได้) */
+  unassignedPlan: { items: number; satang: number; planDocId: string };
 }
 
 export interface HealthData {
@@ -154,7 +187,8 @@ export interface Actions {
   'imports.errorsCsv': [{ jobId: string }, { fileName: string; csv: string }];
   // แผนงบประมาณ
   'plans.preview': [{ fileName: string; mimeType?: string; base64?: string; sheetUrl?: string }, PlanPreview];
-  'plans.commit': [{ fiscalYear: number; fundingSourceId: string; round?: number; title?: string; docNo?: string; docDate?: string; budgetType?: string; table: string[][]; sourceFileId?: string; sourceFileName?: string; acceptWarnings: boolean }, PlanDoc];
+  'plans.check': [{ sha256?: string; fiscalYear: number; fundingSourceId: string; round?: number }, PlanCheck];
+  'plans.commit': [PlanCommitRequest, PlanDoc];
   'plans.list': [{ fiscalYear?: number }, PlanDocSummary[]];
   'plans.get': [{ id: string }, PlanDetail];
   'plans.assign': [{ itemIds: string[]; workgroupId: string }, AssignResult];
@@ -171,7 +205,12 @@ export interface Actions {
   'admin.saveSettings': [{ settings: Record<string, string> }, { ok: true }];
   'admin.saveMaster': [{ table: 'workgroups' | 'organizations' | 'fundingSources'; item: { id?: string; code: string; name: string; orgId?: string; shortName?: string } }, { id: string }];
   'admin.rebuildSnapshot': [Record<string, never>, { generatedAt: string }];
+  /** รวมคำขออ่านหลายรายการเป็นคำขอเดียว (ลดเวลารอของ Apps Script) — ใช้ได้เฉพาะ action ที่อ่านอย่างเดียว */
+  batch: [{ calls: BatchCall[] }, Array<ApiEnvelope<unknown>>];
 }
+
+export type BatchCall = { action: ActionName } & Record<string, unknown>;
+export const BATCH_MAX = 8;
 
 export type ActionName = keyof Actions;
 export type ActionRequest<A extends ActionName> = Actions[A][0];
@@ -179,5 +218,12 @@ export type ActionResponse<A extends ActionName> = Actions[A][1];
 
 export const PUBLIC_ACTIONS: ReadonlySet<ActionName> = new Set<ActionName>([
   'public.lookups', 'public.summary', 'public.projects', 'public.project',
-  'auth.requestAccess', 'auth.login', 'auth.loginSuper',
+  'auth.requestAccess', 'auth.login', 'auth.loginSuper', 'batch',
+]);
+
+/** action ที่อ่านอย่างเดียว — หน้าเว็บ cache ผลและรวมเป็น batch ได้ */
+export const READ_ACTIONS: ReadonlySet<ActionName> = new Set<ActionName>([
+  'public.lookups', 'public.summary', 'public.projects', 'public.project', 'auth.me',
+  'admin.overview', 'projects.list', 'projects.get', 'imports.get', 'imports.list', 'plans.check', 'plans.list', 'plans.get',
+  'admin.requests', 'admin.users', 'admin.loginReport', 'admin.audit', 'admin.health',
 ]);

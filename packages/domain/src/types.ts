@@ -210,6 +210,10 @@ export interface PlanDoc extends Meta {
   sourceFileName: string;
   status: 'ACTIVE' | 'REPLACED';
   note: string;
+  /** ลายนิ้วมือไฟล์ต้นฉบับ (กันนำเข้าไฟล์เดิมซ้ำ) */
+  sourceSha256: string;
+  /** จำนวนช่องที่แก้จากต้นฉบับก่อนนำเข้า (รายละเอียดอยู่ใน AuditLogs) */
+  editCount: number;
 }
 
 export interface PlanItem extends Meta {

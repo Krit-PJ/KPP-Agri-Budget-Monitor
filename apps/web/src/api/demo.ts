@@ -6,8 +6,8 @@ import { createMemoryEnv, type MemoryEnv } from '@kpp/gas/memory';
 import { handle } from '@kpp/gas/core/router';
 import { setSuperAdmin } from '@kpp/gas/core/auth';
 import { seedDemoPlan } from '@kpp/gas/core/setup';
-import { parseDelimited } from '@kpp/domain';
-import planCsv from '../../../../data/plans/2570-DOAE-r1-kamphaengphet.csv?raw';
+import { readXlsx } from '@kpp/domain';
+import { samplePlanBytes } from './samplePlan';
 import { SYSTEM_USER, newMeta, type Ctx } from '@kpp/gas/core/context';
 import { phoneHash } from '@kpp/gas/core/auth';
 import type { Workgroup } from '@kpp/domain';
@@ -15,10 +15,10 @@ import type { Workgroup } from '@kpp/domain';
 export const DEMO_SUPER = { username: 'demo', password: 'demo-password-1' };
 export const DEMO_ADMIN_PHONE = '0800000001';
 
-const KEY = 'kpp-abm-demo-db-v1';
+const KEY = 'kpp-abm-demo-db-v2';
 let env: MemoryEnv | null = null;
 
-function boot(): MemoryEnv {
+async function boot(): Promise<MemoryEnv> {
   const e = createMemoryEnv(new Date());
   const ctx: Ctx = { env: e, requestId: 'demo', user: SYSTEM_USER, device: 'demo' };
   let saved: string | null = null;
@@ -32,7 +32,7 @@ function boot(): MemoryEnv {
     return e;
   }
   setSuperAdmin(ctx, DEMO_SUPER.username, DEMO_SUPER.password);
-  seedDemoPlan(ctx, parseDelimited(planCsv));
+  seedDemoPlan(ctx, readXlsx(await samplePlanBytes())[0].rows);
   const prod = e.db.list<Workgroup>('Workgroups').find((g) => g.code === 'PROD')!;
   e.db.insert('Users', [{
     ...newMeta(ctx), phone: DEMO_ADMIN_PHONE, phoneHash: phoneHash(ctx, DEMO_ADMIN_PHONE), fullName: 'ผู้ดูแลกลุ่มงาน (สาธิต)',
@@ -49,8 +49,10 @@ function persist(e: MemoryEnv): void {
   } catch { /* quota — ข้ามได้ในโหมดสาธิต */ }
 }
 
-export function demoCall(payload: Record<string, unknown>): unknown {
-  env ??= boot();
+let booting: Promise<MemoryEnv> | null = null;
+
+export async function demoCall(payload: Record<string, unknown>): Promise<unknown> {
+  env ??= await (booting ??= boot());
   const res = handle(env, payload);
   persist(env);
   // ผ่าน JSON เหมือนเรียกผ่านเครือข่ายจริง
@@ -62,4 +64,5 @@ export function resetDemo(): void {
     sessionStorage.removeItem(KEY);
   } catch { /* ignore */ }
   env = null;
+  booting = null;
 }

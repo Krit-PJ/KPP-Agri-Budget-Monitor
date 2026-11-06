@@ -3,21 +3,40 @@ import {
   formatBaht, formatBahtShort, PROJECT_STATUS_LABEL, RISK_LABEL, THAI_MONTH_SHORT,
   type ActionName, type ActionRequest, type ActionResponse, type BudgetSummary, type Lookups, type ProjectStatus, type RiskFlag,
 } from '@kpp/domain';
-import { ApiError, call } from '../api/client';
+import { ApiError, load, peek } from '../api/client';
 
 /* ------------------------------- data hooks ------------------------------- */
 
-export interface Loadable<T> { data: T | null; error: ApiError | null; loading: boolean; reload: () => void }
+export interface Loadable<T> { data: T | null; error: ApiError | null; loading: boolean; refreshing: boolean; reload: () => void }
 
+/** ข้อมูลที่ดึงภายในเวลานี้ถือว่าใหม่ ไม่ดึงซ้ำเมื่อสลับหน้าไปมา */
+const FRESH_MS = 20_000;
+
+/**
+ * โหลดข้อมูลแบบ stale-while-revalidate: มีข้อมูลเดิมใน cache ก็แสดงทันที แล้วอัปเดตเบื้องหลัง
+ * reload() บังคับดึงใหม่ (ใช้หลังบันทึกข้อมูล)
+ */
 export function useApi<A extends ActionName>(action: A, body: ActionRequest<A>, deps: unknown[] = []): Loadable<ActionResponse<A>> {
-  const [state, setState] = useState<{ data: ActionResponse<A> | null; error: ApiError | null; loading: boolean }>({ data: null, error: null, loading: true });
+  type S = { data: ActionResponse<A> | null; error: ApiError | null; loading: boolean; refreshing: boolean };
+  const [state, setState] = useState<S>(() => {
+    const e = peek(action, body);
+    return { data: e?.data ?? null, error: null, loading: !e, refreshing: false };
+  });
   const [tick, setTick] = useState(0);
   useEffect(() => {
     let alive = true;
-    setState((s) => ({ ...s, loading: true, error: null }));
-    call(action, body)
-      .then((data) => alive && setState({ data, error: null, loading: false }))
-      .catch((e: unknown) => alive && setState({ data: null, error: e instanceof ApiError ? e : new ApiError('INTERNAL_ERROR', String(e)), loading: false }));
+    const e = peek(action, body);
+    const fresh = !!e && tick === 0 && Date.now() - e.at < FRESH_MS;
+    setState({ data: e?.data ?? null, error: null, loading: !e, refreshing: !!e && !fresh });
+    if (fresh) return;
+    load(action, body)
+      .then((data) => alive && setState({ data, error: null, loading: false, refreshing: false }))
+      .catch((err: unknown) => {
+        if (!alive) return;
+        const error = err instanceof ApiError ? err : new ApiError('INTERNAL_ERROR', String(err));
+        // มีข้อมูลเดิมอยู่: แสดงต่อไป (เช่น เน็ตหลุดชั่วคราว) — ไม่มี: แสดงข้อผิดพลาด
+        setState((s) => (s.data && error.code === 'NETWORK' ? { ...s, refreshing: false } : { data: null, error, loading: false, refreshing: false }));
+      });
     return () => {
       alive = false;
     };
@@ -121,8 +140,33 @@ export function MiniStrip({ b }: { b: BudgetSummary }) {
   );
 }
 
+/**
+ * แถบเปรียบเทียบผลกับเป้า (bullet graph, Stephen Few): แถบ = เบิกจ่าย+ผูกพัน, ขีดตั้ง = เป้า ณ เดือนนี้
+ * อ่านได้ทันทีว่าแต่ละกลุ่ม "ทันแผน" หรือ "ช้ากว่าแผน" โดยไม่ต้องเทียบตัวเลข
+ */
+export function BulletBar({ b, targetPct }: { b: BudgetSummary; targetPct: number }) {
+  const total = Math.max(b.currentBudget, b.disbursed, 1);
+  const tick = Math.min(100, (targetPct / 100) * (b.currentBudget / total) * 100);
+  const behind = targetPct > 0 && b.spendingPct + 0.05 < targetPct;
+  return (
+    <div className="bullet" aria-hidden="true">
+      <div className="bullet-track">
+        <div style={{ width: `${(b.disbursed / total) * 100}%`, background: b.remaining < 0 ? 'var(--clay)' : behind ? 'var(--straw)' : 'var(--paddy)' }} />
+        <div style={{ width: `${(Math.max(0, Math.min(b.committed, b.currentBudget - b.disbursed)) / total) * 100}%`, background: 'var(--commit)' }} />
+      </div>
+      {targetPct > 0 && <span className="bullet-tick" style={{ left: `${tick}%` }} />}
+    </div>
+  );
+}
+
 /** เส้นเบิกจ่ายสะสมเทียบแผน (ต.ค.–ก.ย.) */
-export function PlanVsActual({ cumulative, targetPct, budget, upToMonth }: { cumulative: number[]; targetPct: number[]; budget: number; upToMonth: number }) {
+export function PlanVsActual({ cumulative, targetPct, budget, upToMonth, annualPct, markMonth }: {
+  cumulative: number[]; targetPct: number[]; budget: number; upToMonth: number;
+  /** เป้าทั้งปี (เส้นประแนวนอน) */
+  annualPct?: number;
+  /** เดือนที่ต้องเสร็จ (0 = ต.ค.) แสดงเป็นเส้นแนวตั้ง เช่น 8 = มิ.ย. (อบรม/ประชุมต้องเสร็จ) */
+  markMonth?: number;
+}) {
   const W = 640, H = 220, L = 44, R = 12, T = 12, B = 28;
   const months = [...THAI_MONTH_SHORT.slice(9), ...THAI_MONTH_SHORT.slice(0, 9)];
   const x = (i: number) => L + (i * (W - L - R)) / 11;
@@ -139,6 +183,18 @@ export function PlanVsActual({ cumulative, targetPct, budget, upToMonth }: { cum
           </g>
         ))}
         {months.map((m, i) => <text key={m} x={x(i)} y={H - 8} textAnchor="middle">{m}</text>)}
+        {annualPct !== undefined && (
+          <g>
+            <line x1={L} x2={W - R} y1={y(annualPct)} y2={y(annualPct)} stroke="var(--forest)" strokeDasharray="2 4" />
+            <text x={W - R} y={y(annualPct) - 6} textAnchor="end" style={{ fill: 'var(--forest)' }}>เป้าทั้งปี {annualPct}%</text>
+          </g>
+        )}
+        {markMonth !== undefined && (
+          <g>
+            <line x1={x(markMonth)} x2={x(markMonth)} y1={T} y2={H - B} stroke="var(--clay)" strokeDasharray="3 3" opacity=".7" />
+            <text x={x(markMonth) - 4} y={T + 10} textAnchor="end" style={{ fill: 'var(--clay)' }}>อบรม/ประชุมเสร็จ</text>
+          </g>
+        )}
         <path d={path(targetPct)} fill="none" stroke="var(--straw)" strokeWidth="2.5" strokeDasharray="6 5" />
         <path d={path(actualPct)} fill="none" stroke="var(--paddy)" strokeWidth="3" strokeLinejoin="round" />
         {actualPct.map((p, i) => <circle key={i} cx={x(i)} cy={y(p)} r="3.5" fill="var(--paddy)" />)}

@@ -21,6 +21,12 @@ export default function Overview({ user }: { user: SessionUser }) {
               <section className="panel" aria-labelledby="todo">
                 <h2 id="todo" style={{ fontSize: 'var(--fs-lg)' }}>รอดำเนินการ</h2>
                 <ul className="row-list">
+                  {d.unassignedPlan.items > 0 && (
+                    <li>
+                      <Link to="/admin/plans">กิจกรรมย่อยในแผนปี {l.currentFiscalYear} ยังไม่มีกลุ่มงานรับผิดชอบ {d.unassignedPlan.items} รายการ</Link>
+                      <div className="xs muted">งบ <Baht v={d.unassignedPlan.satang} short /> บาท ยังเบิกจ่ายไม่ได้จนกว่าจะมีผู้รับผิดชอบ</div>
+                    </li>
+                  )}
                   {d.pendingRequests > 0 && <li><Link to="/admin/users">คำขอสิทธิ์ใช้งาน {d.pendingRequests} รายการ</Link> รอการอนุมัติ</li>}
                   {d.stagedImports.map((j) => (
                     <li key={j.id}>
@@ -37,7 +43,7 @@ export default function Overview({ user }: { user: SessionUser }) {
                   {user.role !== 'admin' && d.failedLogins24h >= 10 && (
                     <li style={{ color: 'var(--clay)' }}>เข้าสู่ระบบไม่สำเร็จ {d.failedLogins24h} ครั้งใน 24 ชั่วโมง อาจมีการสุ่มเบอร์โทร</li>
                   )}
-                  {!d.pendingRequests && !d.stagedImports.length && <li className="muted">ไม่มีงานค้าง</li>}
+                  {!d.pendingRequests && !d.stagedImports.length && !d.unassignedPlan.items && <li className="muted">ไม่มีงานค้าง</li>}
                 </ul>
               </section>
               <section className="panel" aria-labelledby="risks">

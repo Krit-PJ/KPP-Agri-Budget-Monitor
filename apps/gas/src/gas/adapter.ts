@@ -66,12 +66,68 @@ function fileIds(): Record<FileKey, string> {
 }
 
 interface TableMemo {
-  sheet: GoogleAppsScript.Spreadsheet.Sheet;
   header: string[];
   rows: Row[];
   rowNum: Map<string, number>;
   pending: Row[];
 }
+
+/* ------------------------------ cache ข้ามคำขอ ------------------------------ */
+/**
+ * อ่านชีตทั้งตารางใช้เวลา 0.3–1 วินาทีต่อไฟล์ จึงเก็บค่าดิบของชีตไว้ใน CacheService
+ * - ทุกครั้งที่เขียนตารางผ่านระบบ (insert/update) จะเปลี่ยน "รุ่น" ของตารางนั้นทันที → คำขอถัดไปอ่านชีตใหม่
+ * - แก้ไขในชีตด้วยมือ: เห็นผลภายใน TABLE_TTL วินาที หรือกด "สร้างข้อมูลสาธารณะใหม่" ใน System Health
+ * - ไม่ cache ตารางที่โตเร็ว/อ่านไม่บ่อย (AuditLogs, LoginAttempts, ImportRows, Snapshots)
+ */
+const TABLE_TTL = 300;
+const CHUNK = 30_000; // อักษรต่อ key (ไทย UTF-8 ≈ 3 ไบต์ → < 100KB ต่อค่า)
+const NO_CACHE = new Set<TableName>(['AuditLogs', 'LoginAttempts', 'ImportRows', 'Snapshots']);
+
+function tableGen(table: TableName, renew = false): string {
+  const c = CacheService.getScriptCache();
+  const k = `tg:${table}`;
+  let g = renew ? null : c.get(k);
+  if (!g) {
+    g = Utilities.getUuid().slice(0, 8);
+    c.put(k, g, 21600);
+  }
+  return g;
+}
+
+function readCachedValues(table: TableName): unknown[][] | null {
+  try {
+    const c = CacheService.getScriptCache();
+    const base = `tv:${table}:${tableGen(table)}`;
+    const n = Number(c.get(`${base}:n`) || 0);
+    if (!n) return null;
+    const keys = Array.from({ length: n }, (_, i) => `${base}:${i}`);
+    const parts = c.getAll(keys);
+    if (keys.some((k) => parts[k] === undefined || parts[k] === null)) return null;
+    return JSON.parse(keys.map((k) => parts[k]).join('')) as unknown[][];
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedValues(table: TableName, values: unknown[][]): void {
+  try {
+    const json = JSON.stringify(values);
+    if (json.length > 2_000_000) return;
+    const base = `tv:${table}:${tableGen(table)}`;
+    const entries: Record<string, string> = {};
+    let n = 0;
+    for (let i = 0; i < json.length; i += CHUNK) entries[`${base}:${n++}`] = json.slice(i, i + CHUNK);
+    entries[`${base}:n`] = String(n);
+    CacheService.getScriptCache().putAll(entries, TABLE_TTL);
+  } catch { /* cache เต็ม/ผิดพลาด — อ่านจากชีตตามปกติ */ }
+}
+
+/** ให้ทุกตารางอ่านจากชีตใหม่ (เช่น หลังแก้ชีตด้วยมือ) */
+export function invalidateTableCache(): void {
+  for (const t of Object.keys(TABLES) as TableName[]) tableGen(t, true);
+}
+
+const bangkokIso = (d: Date) => Utilities.formatDate(d, 'Asia/Bangkok', "yyyy-MM-dd'T'HH:mm:ss'+07:00'");
 
 function toCell(type: string, v: unknown): unknown {
   if (type === 'number') return v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? 0 : Number(v);
@@ -82,12 +138,13 @@ function toCell(type: string, v: unknown): unknown {
 function fromCell(type: string, v: unknown): unknown {
   if (type === 'number') return v === '' ? 0 : Number(v);
   if (type === 'boolean') return v === true || v === 'TRUE' || v === 'true';
-  if (v instanceof Date) return Utilities.formatDate(v, 'Asia/Bangkok', "yyyy-MM-dd'T'HH:mm:ss'+07:00'");
+  if (v instanceof Date) return bangkokIso(v);
   return unescapeCell(v === null || v === undefined ? '' : String(v));
 }
 
 export class SheetsDb implements Db {
   private books = new Map<FileKey, GoogleAppsScript.Spreadsheet.Spreadsheet>();
+  private sheets = new Map<TableName, GoogleAppsScript.Spreadsheet.Sheet>();
   private memo = new Map<TableName, TableMemo>();
 
   private book(file: FileKey) {
@@ -95,13 +152,26 @@ export class SheetsDb implements Db {
     return this.books.get(file)!;
   }
 
+  /** เปิดชีตเมื่อจำเป็นเท่านั้น (อ่านจาก cache ได้ก็ไม่ต้องเปิดไฟล์) */
+  private sheet(table: TableName): GoogleAppsScript.Spreadsheet.Sheet {
+    let sh = this.sheets.get(table);
+    if (!sh) {
+      sh = this.book(TABLES[table].file).getSheetByName(table) ?? undefined;
+      if (!sh) throw new AppError('INTERNAL_ERROR', `ไม่พบชีต ${table} — รัน setup อีกครั้ง`);
+      this.sheets.set(table, sh);
+    }
+    return sh;
+  }
+
   private load(table: TableName): TableMemo {
     const cached = this.memo.get(table);
     if (cached) return cached;
     const def = TABLES[table];
-    const sheet = this.book(def.file).getSheetByName(table);
-    if (!sheet) throw new AppError('INTERNAL_ERROR', `ไม่พบชีต ${table} — รัน setup อีกครั้ง`);
-    const values = sheet.getDataRange().getValues();
+    let values = NO_CACHE.has(table) ? null : readCachedValues(table);
+    if (!values) {
+      values = this.sheet(table).getDataRange().getValues().map((line) => line.map((c) => (c instanceof Date ? bangkokIso(c) : c)));
+      if (!NO_CACHE.has(table)) writeCachedValues(table, values);
+    }
     const header = (values[0] ?? []).map(String);
     const idx = new Map(header.map((h, i) => [h, i]));
     const pk = primaryKeyOf(table);
@@ -115,10 +185,13 @@ export class SheetsDb implements Db {
       rows.push(obj);
       rowNum.set(String(obj[pk]), r + 1);
     }
-    const m: TableMemo = { sheet, header, rows, rowNum, pending: [] };
+    const m: TableMemo = { header, rows, rowNum, pending: [] };
     this.memo.set(table, m);
     return m;
   }
+
+  /** ตารางที่เขียนแล้วใน execution นี้ — เปลี่ยนรุ่น cache หลัง SpreadsheetApp.flush() ใน flush() */
+  private dirty = new Set<TableName>();
 
   private toLine(table: TableName, m: TableMemo, row: Row): unknown[] {
     const types = new Map(TABLES[table].columns.map(([c, t]) => [c, t] as const));
@@ -154,19 +227,33 @@ export class SheetsDb implements Db {
     }
     const n = m.rowNum.get(id);
     if (!n) throw new AppError('INTERNAL_ERROR', `ไม่พบตำแหน่งแถว ${table}`);
-    m.sheet.getRange(n, 1, 1, m.header.length).setValues([this.toLine(table, m, next)]);
+    this.sheet(table).getRange(n, 1, 1, m.header.length).setValues([this.toLine(table, m, next)]);
+    this.dirty.add(table);
   }
 
   flush(): void {
     for (const [table, m] of this.memo) {
       if (!m.pending.length) continue;
-      const start = m.sheet.getLastRow() + 1;
+      const sh = this.sheet(table);
+      const start = sh.getLastRow() + 1;
       const lines = m.pending.map((r) => this.toLine(table, m, r));
-      m.sheet.getRange(start, 1, lines.length, m.header.length).setValues(lines);
+      sh.getRange(start, 1, lines.length, m.header.length).setValues(lines);
+      this.dirty.add(table);
       const pk = primaryKeyOf(table);
       m.pending.forEach((r, i) => m.rowNum.set(String(r[pk]), start + i));
       m.pending = [];
     }
+    if (this.dirty.size) {
+      // Apps Script บัฟเฟอร์การเขียนชีต: ต้อง commit ก่อนเปลี่ยนรุ่น cache ไม่งั้นคำขออื่นอาจอ่านค่าเก่าไปเก็บใน cache รุ่นใหม่
+      SpreadsheetApp.flush();
+      for (const t of this.dirty) if (!NO_CACHE.has(t)) tableGen(t, true);
+      this.dirty.clear();
+    }
+  }
+
+  invalidate(): void {
+    invalidateTableCache();
+    this.memo.clear();
   }
 
   cellUsage(): Array<{ file: string; cells: number }> {

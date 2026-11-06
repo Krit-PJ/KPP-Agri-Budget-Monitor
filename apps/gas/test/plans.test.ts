@@ -1,13 +1,17 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { ApiEnvelope, AssignResult, Lookups, PlanDetail, PlanDoc, PlanDocSummary, PlanPreview, ProjectDetail, ProjectListItem } from '@kpp/domain';
+import { normalizePlanTable, readXlsx, type ApiEnvelope, type AssignResult, type AuditLog, type Lookups, type PlanCheck, type PlanDetail, type PlanDoc, type PlanDocSummary, type PlanPreview, type ProjectDetail, type ProjectListItem } from '@kpp/domain';
 import { createMemoryEnv, type MemoryEnv } from '../src/memory';
 import { handle } from '../src/core/router';
 import { setSuperAdmin } from '../src/core/auth';
 import { seedMasterData } from '../src/core/setup';
 import { SYSTEM_USER, type Ctx } from '../src/core/context';
 
-const CSV = readFileSync(new URL('../../../data/plans/2570-DOAE-r1-kamphaengphet.csv', import.meta.url), 'utf8');
+const XLSX_BYTES = readFileSync(new URL('../../../data/plans/2570-DOAE-r1-kamphaengphet.xlsx', import.meta.url));
+const B64 = XLSX_BYTES.toString('base64');
+/** สิ่งที่หน้าเว็บทำ: อ่าน Excel ในเบราว์เซอร์ → ตารางมาตรฐาน */
+const NORMALIZED = normalizePlanTable(readXlsx(new Uint8Array(XLSX_BYTES))[0].rows);
 let env: MemoryEnv;
 let superToken: string;
 let lookups: Lookups;
@@ -28,11 +32,10 @@ function adminFor(phone: string, group: string): string {
   return ok<{ token: string }>('auth.login', { phone }).token;
 }
 
-function importPlan(): { doc: PlanDoc; detail: PlanDetail } {
-  const pv = ok<PlanPreview>('plans.preview', { fileName: 'คง2-2570.csv', base64: Buffer.from(CSV).toString('base64') }, superToken);
+function importPlan(table = NORMALIZED.table): { doc: PlanDoc; detail: PlanDetail } {
   const doc = ok<PlanDoc>('plans.commit', {
     fiscalYear: 2570, fundingSourceId: fs('DOAE'), round: 1, title: 'งบกรมฯ ปี 2570 ครั้งที่ 1', docNo: 'กษ 1004/ว 1594',
-    table: pv.table, sourceFileId: pv.sourceFileId, sourceFileName: pv.sourceFileName, acceptWarnings: true,
+    table, originalTable: NORMALIZED.table, fileName: 'คง2-2570.xlsx', base64: B64, acceptWarnings: true,
   }, superToken);
   return { doc, detail: ok<PlanDetail>('plans.get', { id: doc.id }, superToken) };
 }
@@ -49,8 +52,10 @@ beforeEach(() => {
 
 describe('plan import', () => {
   it('previews, commits and stores the full tree with verified totals', () => {
-    const pv = ok<PlanPreview>('plans.preview', { fileName: 'p.csv', base64: Buffer.from(CSV).toString('base64') }, superToken);
+    const pv = ok<PlanPreview>('plans.preview', { fileName: 'p.xlsx', base64: B64 }, superToken);
     expect(pv.parsed.computedTotal).toBe(242_986_200);
+    expect(pv.meta).toMatchObject({ fiscalYear: 2570, round: 1, fundCode: 'DOAE' });
+    expect(pv.table).toEqual(NORMALIZED.table);
     expect(pv.parsed.issues.filter((i) => i.level === 'ERROR')).toHaveLength(0);
     const { doc, detail } = importPlan();
     expect(doc).toMatchObject({ fiscalYear: 2570, totalSatang: 242_986_200, leafCount: 87, status: 'ACTIVE' });
@@ -60,10 +65,39 @@ describe('plan import', () => {
 
   it('only Super/Mini Super Admin can import, and documents with errors are rejected', () => {
     const t = adminFor('0811111111', 'PROD');
-    expect(call('plans.preview', { fileName: 'p.csv', base64: Buffer.from(CSV).toString('base64') }, t).error?.code).toBe('FORBIDDEN_SCOPE');
+    expect(call('plans.preview', { fileName: 'p.xlsx', base64: B64 }, t).error?.code).toBe('FORBIDDEN_SCOPE');
     const bad = [['รายการ', 'หน่วยนับ', 'ปริมาณงาน', 'งบประมาณ'], ['1 โครงการ', '', '', '100'], ['1.1 กิจกรรม', 'ราย', '1', '90']];
     const r = call('plans.commit', { fiscalYear: 2570, fundingSourceId: fs('DOAE'), table: bad, acceptWarnings: true }, superToken);
     expect(r.error?.code).toBe('VALIDATION_FAILED');
+  });
+});
+
+describe('duplicates, replacement and edit history', () => {
+  it('blocks the same file twice and asks before replacing a plan of the same year/fund/round', () => {
+    const { doc } = importPlan();
+    const sha = createHash('sha256').update(XLSX_BYTES).digest('hex');
+    expect(doc.sourceSha256).toBe(sha);
+    const chk = ok<PlanCheck>('plans.check', { sha256: sha, fiscalYear: 2570, fundingSourceId: fs('DOAE'), round: 1 }, superToken);
+    expect(chk).toMatchObject({ duplicateOf: { id: doc.id }, existing: { id: doc.id, assignedCount: 0 }, nextRound: 2 });
+    const again = call('plans.commit', { fiscalYear: 2570, fundingSourceId: fs('DOAE'), round: 1, table: NORMALIZED.table, fileName: 'x.xlsx', base64: B64, acceptWarnings: true }, superToken);
+    expect(again.error?.code).toBe('DUPLICATE_IMPORT');
+    // ตารางเดียวกันแต่ไม่แนบไฟล์ (เช่น จาก Google Sheets): ต้องเลือกแทนที่
+    const noFile = call('plans.commit', { fiscalYear: 2570, fundingSourceId: fs('DOAE'), round: 1, table: NORMALIZED.table, acceptWarnings: true }, superToken);
+    expect(noFile.error?.code).toBe('IMPORT_REVIEW_REQUIRED');
+    const replaced = ok<PlanDoc>('plans.commit', { fiscalYear: 2570, fundingSourceId: fs('DOAE'), round: 1, table: NORMALIZED.table, acceptWarnings: true, replaceExisting: true }, superToken);
+    const list = ok<PlanDocSummary[]>('plans.list', { fiscalYear: 2570 }, superToken);
+    expect(list.map((d) => d.id)).toEqual([replaced.id]);
+  });
+
+  it('records every cell changed from the original document', () => {
+    const edited = NORMALIZED.table.map((r) => [...r]);
+    const row = edited.findIndex((r) => r[0].startsWith('(2.1) จัดกระบวนการเรียนรู้'));
+    edited[row][0] = edited[row][0].replace('(2.1)', '(1.1)');
+    const { doc } = importPlan(edited);
+    expect(doc).toMatchObject({ editCount: 1, note: 'แก้จากต้นฉบับ 1 ช่อง' });
+    const log = ok<AuditLog[]>('admin.audit', { entityId: doc.id }, superToken).find((a) => a.action === 'plan.import')!;
+    expect(log.before).toContain('(2.1) จัดกระบวนการเรียนรู้');
+    expect(log.before).toContain('(1.1) จัดกระบวนการเรียนรู้');
   });
 });
 
@@ -135,5 +169,22 @@ describe('selecting leaf activities per workgroup', () => {
     const s = ok<{ totals: { currentBudget: number } }>('public.summary', { fiscalYear: 2570 });
     expect(s.totals.currentBudget).toBe(242_986_200);
     expect(ok<PlanDocSummary[]>('plans.list', { fiscalYear: 2570 }, superToken)[0]).toMatchObject({ assignedCount: 87, assignedSatang: 242_986_200 });
+  });
+});
+
+describe('batch (หลายคำขออ่านในคำขอเดียว)', () => {
+  it('runs read actions with one token, per-call errors, and rejects writes', () => {
+    importPlan();
+    const out = ok<Array<ApiEnvelope<unknown>>>('batch', {
+      calls: [{ action: 'public.lookups' }, { action: 'plans.list', fiscalYear: 2570 }, { action: 'plans.get', id: 'nope' }, { action: 'plans.assign', itemIds: [], workgroupId: '' }],
+    }, superToken);
+    expect(out.map((e) => e.ok)).toEqual([true, true, false, false]);
+    expect((out[1].data as PlanDocSummary[])[0].leafCount).toBe(87);
+    expect(out[2].error?.code).toBe('NOT_FOUND');
+    expect(out[3].error?.message).toContain('อ่านข้อมูล');
+    // ไม่มี token: คำขอสาธารณะผ่าน คำขอของเจ้าหน้าที่ไม่ผ่าน
+    const anon = ok<Array<ApiEnvelope<unknown>>>('batch', { calls: [{ action: 'public.summary', fiscalYear: 2570 }, { action: 'plans.list' }] });
+    expect(anon.map((e) => e.error?.code ?? 'ok')).toEqual(['ok', 'AUTH_REQUIRED']);
+    expect(call('batch', { calls: [] }).error?.code).toBe('VALIDATION_FAILED');
   });
 });
