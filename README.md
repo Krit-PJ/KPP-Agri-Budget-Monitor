@@ -20,6 +20,11 @@
 | ไฟล์และหลักฐาน | Google Drive (โฟลเดอร์ของโครงการ) | `00_System`, `01_Imports`, `02_Project_Evidence`, `99_Archive` |
 | กฎธุรกิจ | TypeScript ใช้ร่วมกันทั้งหน้าเว็บและ backend | `packages/domain` |
 
+**ระบบใช้งานจริง** (deploy 6 พ.ย. 2569, เจ้าของ noonoy.cmu@gmail.com)
+- หน้าเว็บ: https://krit-pj.github.io/KPP-Agri-Budget-Monitor/
+- API (Apps Script Web App เวอร์ชัน 1): https://script.google.com/macros/s/AKfycbwW_a8BpJnnStYhGyH3-hFqwDiBOTCdi-TjLenv_dupfomy6LYYzclhm6XA7p8jJLZ1zw/exec
+  ตั้งไว้ใน Repository variable `KPP_API_URL` ถ้าอัปเดต Code.gs ให้ใช้ "จัดการการทำให้ใช้งานได้ › แก้ไข › เวอร์ชันใหม่" เพื่อให้ URL เดิมใช้ต่อได้
+
 การตัดสินใจหลักบันทึกไว้ใน [`docs/adr`](docs/adr)
 สถานะงานเทียบกับข้อกำหนดอยู่ใน [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
 
