@@ -5,4 +5,4 @@
  */
 var ROOT_FOLDER_ID = 'ใส่ ID โฟลเดอร์ Drive ของระบบ';   // ส่วนท้ายของลิงก์ drive.google.com/drive/folders/<ID>
 var INIT_SUPER_USER = 'ชื่อผู้ใช้ Super Admin';
-var INIT_SUPER_PASSWORD = 'รหัสผ่านอย่างน้อย 10 ตัวอักษร';
+var INIT_SUPER_PASSWORD = 'รหัสผ่านอย่างน้อย 8 ตัวอักษร';

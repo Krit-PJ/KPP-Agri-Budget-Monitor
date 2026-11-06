@@ -183,7 +183,8 @@ export function verifyPassword(ctx: Ctx, password: string, stored: string): bool
 /** ตั้ง/เปลี่ยนรหัส Super Admin — เรียกจาก Apps Script editor เท่านั้น และเพิกถอน token เดิม */
 export function setSuperAdmin(ctx: Ctx, username: string, password: string): void {
   const u = cleanText(username, 60);
-  if (!u || String(password).length < 10) throw new AppError('VALIDATION_FAILED', 'username ต้องไม่ว่าง และรหัสผ่านอย่างน้อย 10 ตัวอักษร');
+  // ขั้นต่ำ 8 ตัวอักษรตาม NIST SP 800-63B (มี throttling + ระงับชั่วคราวชดเชย)
+  if (!u || String(password).length < 8) throw new AppError('VALIDATION_FAILED', 'username ต้องไม่ว่าง และรหัสผ่านอย่างน้อย 8 ตัวอักษร');
   ctx.env.props.set('SUPER_USER', u);
   ctx.env.props.set('SUPER_HASH', hashPassword(ctx, String(password)));
   ctx.env.props.set('SUPER_TV', String(Number(ctx.env.props.get('SUPER_TV') || '1') + 1));

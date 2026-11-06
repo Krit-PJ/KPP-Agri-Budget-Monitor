@@ -2,7 +2,7 @@
 
 ## เปลี่ยนรหัส Super Admin
 1. เปิด Apps Script editor แล้วสร้างไฟล์ชั่วคราว `Tmp.gs`:
-   `function changePw(){ setSuperAdmin('ชื่อผู้ใช้', 'รหัสใหม่อย่างน้อย10ตัว'); }`
+   `function changePw(){ setSuperAdmin('ชื่อผู้ใช้', 'รหัสใหม่อย่างน้อย8ตัว'); }`
 2. รัน `changePw` แล้ว**ลบ `Tmp.gs` ทันที**
 3. token เดิมของ Super Admin ถูกเพิกถอนทันที (ระบบเพิ่ม `SUPER_TV`)
 

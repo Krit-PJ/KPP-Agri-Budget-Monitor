@@ -24,7 +24,7 @@ npm run build:gas
 5. สร้างไฟล์ใหม่ `Secrets.gs` แล้ววางจาก `Secrets.example.gs` และใส่ค่า:
    - `ROOT_FOLDER_ID` = `1h-WWQZ2mWLdeotUY-M8sivPGmhpDA-AI`
    - `INIT_SUPER_USER` = ชื่อผู้ใช้ Super Admin
-   - `INIT_SUPER_PASSWORD` = รหัสผ่านอย่างน้อย 10 ตัวอักษร ส่งผ่านช่องทางนอกระบบ ห้ามพิมพ์ลงแชตหรือเอกสาร
+   - `INIT_SUPER_PASSWORD` = รหัสผ่านอย่างน้อย 8 ตัวอักษร ส่งผ่านช่องทางนอกระบบ ห้ามพิมพ์ลงแชตหรือเอกสาร
 6. เลือกฟังก์ชัน `setup` แล้วกด Run และอนุญาตสิทธิ์ (Sheets, Drive, Docs, Triggers)
 7. ตรวจ Execution log ว่าสร้างโฟลเดอร์ ไฟล์ และ trigger ครบ
 8. **ลบไฟล์ `Secrets.gs`** แล้วกด Save

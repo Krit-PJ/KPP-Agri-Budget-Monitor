@@ -1639,7 +1639,7 @@ var KPP = (() => {
   }
   function setSuperAdmin(ctx, username, password) {
     const u = cleanText(username, 60);
-    if (!u || String(password).length < 10) throw new AppError("VALIDATION_FAILED", "username \u0E15\u0E49\u0E2D\u0E07\u0E44\u0E21\u0E48\u0E27\u0E48\u0E32\u0E07 \u0E41\u0E25\u0E30\u0E23\u0E2B\u0E31\u0E2A\u0E1C\u0E48\u0E32\u0E19\u0E2D\u0E22\u0E48\u0E32\u0E07\u0E19\u0E49\u0E2D\u0E22 10 \u0E15\u0E31\u0E27\u0E2D\u0E31\u0E01\u0E29\u0E23");
+    if (!u || String(password).length < 8) throw new AppError("VALIDATION_FAILED", "username \u0E15\u0E49\u0E2D\u0E07\u0E44\u0E21\u0E48\u0E27\u0E48\u0E32\u0E07 \u0E41\u0E25\u0E30\u0E23\u0E2B\u0E31\u0E2A\u0E1C\u0E48\u0E32\u0E19\u0E2D\u0E22\u0E48\u0E32\u0E07\u0E19\u0E49\u0E2D\u0E22 8 \u0E15\u0E31\u0E27\u0E2D\u0E31\u0E01\u0E29\u0E23");
     ctx.env.props.set("SUPER_USER", u);
     ctx.env.props.set("SUPER_HASH", hashPassword(ctx, String(password)));
     ctx.env.props.set("SUPER_TV", String(Number(ctx.env.props.get("SUPER_TV") || "1") + 1));
