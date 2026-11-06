@@ -203,6 +203,7 @@ export default function Reports({ user }: { user: SessionUser }) {
               <p className="small">{asOf}</p>
             </header>
             {model.lines.length <= 1 ? <p className="muted">ไม่มีข้อมูลตามเงื่อนไขนี้</p> : (
+              <div className="report-scroll">
               <table className="report-table">
                 <thead><tr>{model.cols.map((c) => <th key={c.label} className={c.kind === 'text' ? '' : 'r'}>{c.label}</th>)}</tr></thead>
                 <tbody>
@@ -217,6 +218,7 @@ export default function Reports({ user }: { user: SessionUser }) {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
             <footer className="report-foot">
               <p className="small">หมายเหตุ: ข้อมูลจากระบบติดตามโครงการและการเบิกจ่ายงบประมาณ ใช้ติดตามภายใน ยอดเบิกจ่ายทางการให้อ้างอิงระบบ New GFMIS Thai

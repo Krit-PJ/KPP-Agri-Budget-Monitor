@@ -360,6 +360,9 @@ input.is-edited { border-color: var(--straw); }
 /* ===== รายงาน: หน้าจอ + พิมพ์ A4 แนวนอน ===== */
 .report { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--s5); }
 .report-head { text-align: center; margin-bottom: var(--s4); }
+.report-scroll { overflow-x: auto; }
+.report-table { min-width: 720px; }
+.admin-shell > * { min-width: 0; }
 .report-head h2 { font-size: var(--fs-lg); margin: var(--s1) 0; }
 .report-head p { margin: 2px 0; }
 .report-org { font-weight: 600; }
@@ -381,6 +384,8 @@ input.is-edited { border-color: var(--straw); }
   .topbar, .side, footer, .no-print, .demo-band, .skip-link, .toast-stack { display: none !important; }
   .admin-shell, main { display: block !important; padding: 0 !important; margin: 0 !important; max-width: none !important; }
   .report { border: 0; padding: 0; }
+  .report-scroll { overflow: visible; }
+  .report-table { min-width: 0; }
   .report-table { font-size: 9pt; }
   .report-table thead { display: table-header-group; }
   .report-table tr { page-break-inside: avoid; }
