@@ -406,3 +406,6 @@ input.is-edited { border-color: var(--straw); }
   .bd-table { font-size: 9pt; }
   .segmented, .fy-picker { display: none !important; }
 }
+@media (max-width: 760px) {
+  table.data.stack.bd-table td > div.xs { display: inline; margin-left: .5em; }
+}
