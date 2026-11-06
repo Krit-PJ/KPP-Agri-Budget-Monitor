@@ -32,7 +32,7 @@ jobs:
           KPP_API_URL: ${{ vars.KPP_API_URL }}
         run: |
           node -e "const u=process.env.KPP_API_URL||''; if(u && !/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(u)) { console.error('KPP_API_URL ไม่ถูกต้อง'); process.exit(1) } require('fs').writeFileSync('apps/web/dist/config.js', 'window.KPP_CONFIG = ' + JSON.stringify({ API_URL: u }) + ';\n')"
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v3
         with:
           path: apps/web/dist
