@@ -10,9 +10,11 @@ import {
 import { dataVersion, getSettings, live, nowIso, type Ctx } from '../context';
 import { budgetsByProject, loadDataset, today } from './projects';
 import { buildUnitRows, listUnits, planSeries, summarizeRows } from './units';
+import { SCHEMA_VERSION } from '../schema';
 
 function cached<T>(ctx: Ctx, key: string, build: () => T): T {
-  const full = `pub:${dataVersion(ctx)}:${key}`;
+  // รวม SCHEMA_VERSION: deploy โค้ดใหม่ที่เปลี่ยนรูปข้อมูลแล้ว cache เดิมใช้ไม่ได้ทันที
+  const full = `pub:${SCHEMA_VERSION}:${dataVersion(ctx)}:${key}`;
   const hit = ctx.env.cache.get(full);
   if (hit) {
     try {

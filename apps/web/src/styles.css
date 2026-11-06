@@ -198,9 +198,9 @@ dialog.sheet::backdrop { background: rgba(22, 40, 32, 0.45); }
 .side .who { padding: var(--s3); margin-bottom: var(--s2); border-radius: var(--r-md); background: var(--paper); box-shadow: var(--shadow); font-size: var(--fs-sm); }
 @media (max-width: 860px) {
   .admin-shell { grid-template-columns: 1fr; }
-  .side { position: static; flex-direction: row; overflow-x: auto; }
+  .side { position: static; flex-direction: row; align-items: center; overflow-x: auto; padding-bottom: 4px; }
   .side .who { display: none; }
-  .side a { white-space: nowrap; }
+  .side a, .side button { white-space: nowrap; flex: none; }
 }
 .dropzone { border: 2px dashed #9fb3a5; border-radius: var(--r-lg); padding: var(--s6) var(--s5); background: var(--paper); text-align: center; cursor: pointer; }
 .dropzone.drag { border-color: var(--forest); background: #eef4ef; }

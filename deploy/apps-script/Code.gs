@@ -441,13 +441,15 @@ var KPP = (() => {
     }
     return Math.round(budget * monthlyTargetPct(quarterTargets)[month - 1] / 100);
   }
-  function splitEqual(total, n) {
+  function splitEqual(total, n, step = 1) {
     if (n <= 0) return [];
-    const base = Math.floor(total / n);
-    const out = new Array(n).fill(base);
-    out[0] += total - base * n;
-    return out;
+    const unit = step > 1 && total % step === 0 ? step : 1;
+    const units = Math.round(total / unit);
+    const base = Math.floor(units / n);
+    const rest = units - base * n;
+    return Array.from({ length: n }, (_, i) => (base + (i < rest ? 1 : 0)) * unit);
   }
+  var splitMoney = (total, n) => splitEqual(total, n, 100);
   function riskFlags(project, summary, today2 = todayBangkok()) {
     const flags = [];
     if (summary.remaining < 0) flags.push("OVER_BUDGET");
@@ -2241,7 +2243,7 @@ var KPP = (() => {
       try {
         const a = findById(ctx, "Activities", id, "\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21");
         const st = activityState(ctx, a);
-        const shares = splitEqual(st.budget, ordered.length);
+        const shares = splitMoney(st.budget, ordered.length);
         const qty = splitEqual(Math.round(Number(a.targetQty) || 0), ordered.length);
         setActivityUnits(ctx, { activityId: id, units: ordered.map((unitId, i) => ({ unitId, budgetSatang: shares[i], targetQty: qty[i] })) });
         updated++;
@@ -2784,7 +2786,7 @@ var KPP = (() => {
 
   // src/core/services/public.ts
   function cached(ctx, key, build) {
-    const full = `pub:${dataVersion(ctx)}:${key}`;
+    const full = `pub:${SCHEMA_VERSION}:${dataVersion(ctx)}:${key}`;
     const hit = ctx.env.cache.get(full);
     if (hit) {
       try {

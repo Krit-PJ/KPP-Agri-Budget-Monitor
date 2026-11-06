@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parsePlanQuarters, planToDate, splitByWeight, splitEqual } from '../src/index';
+import { parsePlanQuarters, planToDate, splitByWeight, splitEqual, splitMoney } from '../src/index';
 
 describe('แผนรายไตรมาสและการแบ่งงบ (ADR-006)', () => {
   it('planToDate interpolates the activity quarterly plan, else the percentage targets', () => {
@@ -15,6 +15,10 @@ describe('แผนรายไตรมาสและการแบ่งง�
   });
   it('splits money exactly with the remainder going to one row', () => {
     expect(splitEqual(1000, 3)).toEqual([334, 333, 333]);
+    expect(splitEqual(16, 11)).toEqual([2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1]);
+    // 3,040 บาท ÷ 11 อำเภอ → บาทเต็ม: 277 ×4 + 276 ×7
+    expect(splitMoney(304_000, 11)).toEqual([...Array(4).fill(27_700), ...Array(7).fill(27_600)]);
+    expect(splitMoney(100_050, 2)).toEqual([50_025, 50_025]);
     expect(splitByWeight(1000, [1, 1, 2])).toEqual([250, 250, 500]);
     expect(splitByWeight(1001, [1, 1, 1]).reduce((a, b) => a + b, 0)).toBe(1001);
     expect(splitByWeight(100, [0, 0])).toEqual([50, 50]);

@@ -5,7 +5,7 @@
  * - แผนการเบิกจ่าย ณ เดือนใด ๆ: แผนรายไตรมาสของกิจกรรม (ถ้ามี) ไม่เช่นนั้นใช้เป้าร้อยละของโครงการ
  */
 import {
-  AppError, MEETING_RE, computeBudget, pct, planToDate, splitEqual,
+  AppError, MEETING_RE, computeBudget, pct, planToDate, splitEqual, splitMoney,
   type Activity, type ActivityUnit, type Allocation, type BudgetSummary, type Disbursement, type PlanActivityState,
   type Project, type ReportRow, type Satang, type Unit, type UnitShareInput,
 } from '@kpp/domain';
@@ -110,7 +110,7 @@ export function setActivityUnits(ctx: Ctx, b: { activityId: string; units: UnitS
   return activityState(ctx, { ...a, planQuarters });
 }
 
-/** หลายกิจกรรมพร้อมกัน: แบ่งงบเท่ากันให้หน่วยที่เลือก (ข้ามรายการที่แบ่งไม่ได้ เช่น มีเบิกจ่ายในหน่วยอื่นแล้ว) */
+/** หลายกิจกรรมพร้อมกัน: แบ่งงบเท่ากัน (บาทเต็มเมื่อทำได้) ให้หน่วยที่เลือก (ข้ามรายการที่แบ่งไม่ได้ เช่น มีเบิกจ่ายในหน่วยอื่นแล้ว) */
 export function setActivityUnitsBulk(ctx: Ctx, b: { activityIds: string[]; unitIds: string[] }): { updated: number; skipped: Array<{ id: string; reason: string }> } {
   const ids = [...new Set((b.activityIds ?? []).map(String))].slice(0, 300);
   const unitIds = [...new Set((b.unitIds ?? []).map(String))];
@@ -124,7 +124,7 @@ export function setActivityUnitsBulk(ctx: Ctx, b: { activityIds: string[]; unitI
     try {
       const a = findById<Activity>(ctx, 'Activities', id, 'กิจกรรม');
       const st = activityState(ctx, a);
-      const shares = splitEqual(st.budget, ordered.length);
+      const shares = splitMoney(st.budget, ordered.length);
       const qty = splitEqual(Math.round(Number(a.targetQty) || 0), ordered.length);
       setActivityUnits(ctx, { activityId: id, units: ordered.map((unitId, i) => ({ unitId, budgetSatang: shares[i], targetQty: qty[i] })) });
       updated++;

@@ -152,23 +152,31 @@ export function planToDate(budget: Satang, planQuarters: string | null | undefin
   return Math.round((budget * monthlyTargetPct(quarterTargets)[month - 1]) / 100);
 }
 
-/** แบ่งยอดเท่า ๆ กัน (สตางค์) — เศษไปที่รายการแรก */
-export function splitEqual(total: Satang, n: number): Satang[] {
+/**
+ * แบ่งยอดเท่า ๆ กัน — เศษกระจายทีละ 1 หน่วยให้รายการแรก ๆ (เช่น 16 คน ÷ 11 = 2,2,2,2,2,1,…)
+ * step: หน่วยที่ใช้แบ่ง เช่น 100 = แบ่งเป็นบาทเต็ม (ใช้เมื่อยอดรวมเป็นบาทเต็ม)
+ */
+export function splitEqual(total: number, n: number, step = 1): number[] {
   if (n <= 0) return [];
-  const base = Math.floor(total / n);
-  const out = new Array<number>(n).fill(base);
-  out[0] += total - base * n;
-  return out;
+  const unit = step > 1 && total % step === 0 ? step : 1;
+  const units = Math.round(total / unit);
+  const base = Math.floor(units / n);
+  const rest = units - base * n;
+  return Array.from({ length: n }, (_, i) => (base + (i < rest ? 1 : 0)) * unit);
 }
 
-/** แบ่งยอดตามสัดส่วนน้ำหนัก (เช่น ปริมาณงาน) — เศษไปที่รายการที่น้ำหนักมากที่สุด */
-export function splitByWeight(total: Satang, weights: number[]): Satang[] {
+/** แบ่งเงิน (สตางค์) เท่า ๆ กัน เป็นบาทเต็มเมื่อทำได้ */
+export const splitMoney = (total: Satang, n: number): Satang[] => splitEqual(total, n, 100);
+
+/** แบ่งยอดตามสัดส่วนน้ำหนัก (เช่น ปริมาณงาน) — เศษไปที่รายการที่น้ำหนักมากที่สุด; step เหมือน splitEqual */
+export function splitByWeight(total: number, weights: number[], step = 1): number[] {
   const sum = weights.reduce((a, w) => a + Math.max(0, w), 0);
-  if (sum <= 0) return splitEqual(total, weights.length);
-  const out = weights.map((w) => Math.floor((total * Math.max(0, w)) / sum));
-  const rest = total - out.reduce((a, v) => a + v, 0);
-  out[weights.indexOf(Math.max(...weights))] += rest;
-  return out;
+  if (sum <= 0) return splitEqual(total, weights.length, step);
+  const unit = step > 1 && total % step === 0 ? step : 1;
+  const units = Math.round(total / unit);
+  const out = weights.map((w) => Math.floor((units * Math.max(0, w)) / sum));
+  out[weights.indexOf(Math.max(...weights))] += units - out.reduce((a, v) => a + v, 0);
+  return out.map((v) => v * unit);
 }
 
 export type RiskFlag = 'OVER_BUDGET' | 'BEHIND_SPENDING' | 'OVERDUE' | 'NO_RECENT_REPORT';

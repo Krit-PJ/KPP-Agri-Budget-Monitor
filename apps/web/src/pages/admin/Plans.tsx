@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  formatBaht, normalizeKey, splitByWeight, splitEqual,
+  formatBaht, normalizeKey, splitByWeight, splitEqual, splitMoney,
   type PlanActivityState, type PlanDetail, type PlanItem, type SessionUser,
 } from '@kpp/domain';
 import { ApiError, call } from '../../api/client';
@@ -272,11 +272,13 @@ function UnitEditor({ item, st, onDone }: { item: PlanItem; st: PlanActivityStat
   const [showPlan, setShowPlan] = useState(!!st.planQuarters);
 
   const ordered = l.units.filter((u) => sel.includes(u.id));
-  const qtyNums = ordered.map((u) => Number(qty[u.id] || 0));
-  const amounts: number[] = split === 'equal' ? splitEqual(st.budget, ordered.length)
-    : split === 'qty' ? splitByWeight(st.budget, qtyNums)
+  // ปริมาณงาน: ค่าที่กรอก หรือแบ่งเป้าหมายกิจกรรมเท่า ๆ กัน (ค่าที่เห็นในช่อง = ค่าที่ใช้คำนวณ)
+  const defaultQty = splitEqual(Math.round(item.quantity || 0), ordered.length);
+  const qtyNums = ordered.map((u, i) => (qty[u.id] !== undefined && qty[u.id] !== '' ? Number(qty[u.id]) : defaultQty[i]));
+  const amounts: number[] = split === 'equal' ? splitMoney(st.budget, ordered.length)
+    : split === 'qty' ? splitByWeight(st.budget, qtyNums, 100)
     : ordered.map((u) => bahtInputToSatang(money[u.id] ?? '') ?? 0);
-  const qtys = split === 'equal' && !Object.values(qty).some(Boolean) ? splitEqual(Math.round(item.quantity || 0), ordered.length) : qtyNums;
+  const qtys = qtyNums;
   const sum = amounts.reduce((a, v) => a + v, 0);
   const planSat = plan.map((v) => (v.trim() ? bahtInputToSatang(v) : 0));
   const planSum = planSat.reduce((a: number, v) => a + (v ?? 0), 0);
@@ -291,16 +293,16 @@ function UnitEditor({ item, st, onDone }: { item: PlanItem; st: PlanActivityStat
   const toggle = (id: string, on: boolean) => setSel((s0) => (on ? [...new Set([...s0, id])] : s0.filter((x) => x !== id)));
   const allDist = districts.every((u) => sel.includes(u.id));
   const save = () => void run(async () => {
-    const onlyPao = ordered.length === 1 && ordered[0].id === pao.id;
+    // บันทึกตามที่เลือกเสมอ (เลือกเฉพาะ สนง.เกษตรจังหวัด = ยืนยันว่าจังหวัดดำเนินการเอง)
     await call('activities.setUnits', {
       activityId: st.activityId,
-      units: onlyPao && !qtys[0] ? [] : ordered.map((u, i) => ({ unitId: u.id, budgetSatang: amounts[i], targetQty: qtys[i] || 0 })),
+      units: ordered.map((u, i) => ({ unitId: u.id, budgetSatang: amounts[i], targetQty: qtys[i] || 0 })),
       planQuarters: planOn ? (planSat as number[]) : null,
     });
     toast('บันทึกหน่วยดำเนินการแล้ว');
     onDone();
   });
-  const fillPlanEven = () => setPlan(splitEqual(st.budget, 4).reverse().map(toBaht));
+  const fillPlanEven = () => setPlan(splitMoney(st.budget, 4).map(toBaht));
 
   return (
     <div className="unit-editor">
@@ -333,7 +335,7 @@ function UnitEditor({ item, st, onDone }: { item: PlanItem; st: PlanActivityStat
             {ordered.map((u, i) => (
               <tr key={u.id}>
                 <td>{u.shortName}</td>
-                <td className="r"><input inputMode="numeric" value={qty[u.id] ?? (qtys[i] ? String(qtys[i]) : '')} onChange={(e) => setQty({ ...qty, [u.id]: e.target.value.replace(/[^\d]/g, '') })} aria-label={`ปริมาณ ${u.shortName}`} /></td>
+                <td className="r"><input inputMode="numeric" value={qty[u.id] ?? (qtys[i] ? String(qtys[i]) : '')} placeholder="0" onChange={(e) => setQty({ ...qty, [u.id]: e.target.value.replace(/[^\d]/g, '') })} aria-label={`ปริมาณ ${u.shortName}`} /></td>
                 <td className="r">
                   {split === 'manual'
                     ? <input inputMode="decimal" value={money[u.id] ?? ''} onChange={(e) => setMoney({ ...money, [u.id]: e.target.value })} aria-label={`งบ ${u.shortName}`} />
@@ -352,7 +354,7 @@ function UnitEditor({ item, st, onDone }: { item: PlanItem; st: PlanActivityStat
         </table>
       )}
       {sum !== st.budget && ordered.length > 0 && <p className="small" style={{ color: 'var(--clay)' }}>ผลรวมต้องเท่างบกิจกรรม {formatBaht(st.budget)} บาท (ต่างกัน {formatBaht(st.budget - sum)})</p>}
-      {split === 'qty' && qtyNums.every((v) => !v) && <p className="small muted">กรอกปริมาณงานของแต่ละหน่วย ระบบแบ่งงบตามสัดส่วนให้</p>}
+      {split === 'qty' && <p className="small muted">แก้ปริมาณงานของแต่ละหน่วย ระบบแบ่งงบตามสัดส่วนให้ (เป็นบาทเต็ม)</p>}
 
       <details open={showPlan} onToggle={(e) => setShowPlan((e.target as HTMLDetailsElement).open)} className="plan-q">
         <summary>แผนการใช้จ่ายรายไตรมาส (ไม่บังคับ)</summary>
