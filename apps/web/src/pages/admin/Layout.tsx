@@ -7,6 +7,7 @@ import ProjectDetail from './ProjectDetail';
 import ImportCenter from './ImportCenter';
 import Users from './Users';
 import System from './System';
+import Plans from './Plans';
 
 const ROLE_LABEL: Record<SessionUser['role'], string> = { admin: 'Admin', minisuper: 'Mini Super Admin', superadmin: 'Super Admin' };
 
@@ -30,8 +31,9 @@ export default function AdminLayout({ user }: { user: SessionUser }) {
           <div className="xs muted">{user.workgroupName}</div>
         </div>
         <NavLink to="/admin" end>งานที่ต้องทำ</NavLink>
-        <NavLink to="/admin/projects">โครงการและงบประมาณ</NavLink>
-        <NavLink to="/admin/import">นำเข้าข้อมูล</NavLink>
+        <NavLink to="/admin/plans">แผนงบประมาณ</NavLink>
+        <NavLink to="/admin/projects">โครงการและการเบิกจ่าย</NavLink>
+        <NavLink to="/admin/import">นำเข้าผลการเบิกจ่าย</NavLink>
         {canManageUsers && <NavLink to="/admin/users">ผู้ใช้และสิทธิ์</NavLink>}
         {isSuper && <NavLink to="/admin/system">ตั้งค่าระบบ</NavLink>}
         <button className="btn btn-ghost btn-sm" style={{ marginTop: 'var(--s3)' }} onClick={() => void logout()}>ออกจากระบบ</button>
@@ -39,6 +41,7 @@ export default function AdminLayout({ user }: { user: SessionUser }) {
       <div style={{ minWidth: 0 }}>
         <Routes>
           <Route index element={<Overview user={user} />} />
+          <Route path="plans" element={<Plans user={user} />} />
           <Route path="projects" element={<ProjectsAdmin user={user} />} />
           <Route path="projects/:id" element={<ProjectDetail user={user} />} />
           <Route path="import" element={<ImportCenter user={user} />} />

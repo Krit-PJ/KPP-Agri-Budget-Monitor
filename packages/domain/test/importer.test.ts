@@ -90,7 +90,7 @@ describe('planImport — BUDGET_SUMMARY', () => {
     const project: Project = {
       ...meta, id: 'p1', fiscalYear: 2570, fundingSourceId: 'fs1', projectCode: 'P70-001', name: 'โครงการส่งเสริมการผลิตข้าวคุณภาพ',
       workgroupId: 'wg2', ownerName: '', startDate: '', endDate: '', status: 'IN_PROGRESS', physicalProgress: 0,
-      quarterTargets: '', description: '', published: true, lastProgressAt: '', idempotencyKey: '',
+      quarterTargets: '', description: '', published: true, lastProgressAt: '', idempotencyKey: '', planDocId: '', planNodeSeq: 0,
     };
     const allocations = [{ ...meta, id: 'a1', projectId: 'p1', activityId: '', type: 'ORIGINAL', amountSatang: 120000000 } as Allocation];
     const disbursements = [{ ...meta, id: 'd1', projectId: 'p1', activityId: '', status: 'APPROVED', amountSatang: 30000000, date: '2026-11-01' } as Disbursement];
@@ -104,7 +104,7 @@ describe('planImport — BUDGET_SUMMARY', () => {
   it('warns on budget change and on cumulative decrease; errors on overspend and out-of-scope', () => {
     const project: Project = {
       ...meta, id: 'p1', fiscalYear: 2570, fundingSourceId: 'fs1', projectCode: 'P70-001', name: 'x', workgroupId: 'wg2',
-      ownerName: '', startDate: '', endDate: '', status: 'IN_PROGRESS', physicalProgress: 0, quarterTargets: '', description: '', published: true, lastProgressAt: '', idempotencyKey: '',
+      ownerName: '', startDate: '', endDate: '', status: 'IN_PROGRESS', physicalProgress: 0, quarterTargets: '', description: '', published: true, lastProgressAt: '', idempotencyKey: '', planDocId: '', planNodeSeq: 0,
     };
     const allocations = [{ ...meta, id: 'a1', projectId: 'p1', activityId: '', type: 'ORIGINAL', amountSatang: 100000000 } as Allocation];
     const disbursements = [{ ...meta, id: 'd1', projectId: 'p1', activityId: '', status: 'APPROVED', amountSatang: 50000000, date: '2026-11-01' } as Disbursement];
@@ -142,7 +142,7 @@ describe('planImport — BUDGET_SUMMARY', () => {
 describe('planImport — DISBURSEMENT_LIST', () => {
   const project: Project = {
     ...meta, id: 'p1', fiscalYear: 2570, fundingSourceId: 'fs1', projectCode: 'P70-001', name: 'x', workgroupId: 'wg2',
-    ownerName: '', startDate: '', endDate: '', status: 'IN_PROGRESS', physicalProgress: 0, quarterTargets: '', description: '', published: true, lastProgressAt: '', idempotencyKey: '',
+    ownerName: '', startDate: '', endDate: '', status: 'IN_PROGRESS', physicalProgress: 0, quarterTargets: '', description: '', published: true, lastProgressAt: '', idempotencyKey: '', planDocId: '', planNodeSeq: 0,
   };
   const allocations = [{ ...meta, id: 'a1', projectId: 'p1', activityId: '', type: 'ORIGINAL', amountSatang: 100000 } as Allocation];
   const rows = [

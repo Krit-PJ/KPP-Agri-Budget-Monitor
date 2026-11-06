@@ -21,10 +21,10 @@ export default function ProjectsAdmin({ user }: { user: SessionUser }) {
   return (
     <>
       <div className="section-head">
-        <h1 style={{ margin: 0 }}>โครงการและงบประมาณ</h1>
+        <h1 style={{ margin: 0 }}>โครงการและการเบิกจ่าย</h1>
         <div className="btn-row">
-          <Link className="btn btn-ghost" to="/admin/import">นำเข้าจากไฟล์</Link>
-          <button className="btn" onClick={() => setOpen(true)}>เพิ่มโครงการ</button>
+          <Link className="btn" to="/admin/plans">เลือกกิจกรรมจากแผนงบประมาณ</Link>
+          <button className="btn btn-ghost" onClick={() => setOpen(true)}>เพิ่มโครงการนอกแผน</button>
         </div>
       </div>
       <div className="toolbar">
@@ -52,12 +52,12 @@ export default function ProjectsAdmin({ user }: { user: SessionUser }) {
           </table>
         ) : (
           <Empty title={`ยังไม่มีโครงการในปีงบ ${fy}`}>
-            <p>เพิ่มทีละโครงการ หรือนำเข้าจากไฟล์ Excel ที่มีอยู่แล้วได้ในครั้งเดียว</p>
-            <div className="btn-row"><button className="btn" onClick={() => setOpen(true)}>เพิ่มโครงการ</button><Link className="btn btn-ghost" to="/admin/import">นำเข้าจากไฟล์</Link></div>
+            <p>เริ่มจากเลือกกิจกรรมที่กลุ่มงานรับผิดชอบในแผนงบประมาณ ระบบจะสร้างโครงการและงบให้อัตโนมัติ</p>
+            <div className="btn-row"><Link className="btn" to="/admin/plans">ไปที่แผนงบประมาณ</Link><button className="btn btn-ghost" onClick={() => setOpen(true)}>เพิ่มโครงการนอกแผน</button></div>
           </Empty>
         )}
       </Async>
-      <Sheet open={open} title="เพิ่มโครงการ" onClose={() => setOpen(false)}>
+      <Sheet open={open} title="เพิ่มโครงการนอกแผน" onClose={() => setOpen(false)}>
         <NewProjectForm user={user} fy={fy} onDone={() => { setOpen(false); s.reload(); }} />
       </Sheet>
     </>

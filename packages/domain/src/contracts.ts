@@ -9,6 +9,13 @@ import type {
 } from './types';
 import type { CoverLetterResult } from './coverLetter';
 import type { StagedRow } from './importer';
+import type { ParsedPlan } from './plan';
+import type { PlanDoc, PlanItem } from './types';
+
+export interface PlanPreview { table: string[][]; parsed: ParsedPlan; sourceFileId: string; sourceFileName: string; fromOcr: boolean }
+export type PlanDocSummary = PlanDoc & { assignedCount: number; assignedSatang: number; groups: Array<{ workgroupId: string; count: number; satang: number }> };
+export interface PlanDetail { doc: PlanDoc; items: PlanItem[] }
+export interface AssignResult { assigned: number; skipped: Array<{ id: string; reason: string }> }
 
 export const API_VERSION = '1.0.0';
 
@@ -145,6 +152,13 @@ export interface Actions {
   'imports.commit': [{ jobId: string; acceptWarnings: boolean }, { committed: number; skipped: number; job: ImportJob }];
   'imports.cancel': [{ jobId: string }, { ok: true }];
   'imports.errorsCsv': [{ jobId: string }, { fileName: string; csv: string }];
+  // แผนงบประมาณ
+  'plans.preview': [{ fileName: string; mimeType?: string; base64?: string; sheetUrl?: string }, PlanPreview];
+  'plans.commit': [{ fiscalYear: number; fundingSourceId: string; round?: number; title?: string; docNo?: string; docDate?: string; budgetType?: string; table: string[][]; sourceFileId?: string; sourceFileName?: string; acceptWarnings: boolean }, PlanDoc];
+  'plans.list': [{ fiscalYear?: number }, PlanDocSummary[]];
+  'plans.get': [{ id: string }, PlanDetail];
+  'plans.assign': [{ itemIds: string[]; workgroupId: string }, AssignResult];
+  'plans.unassign': [{ itemIds: string[] }, { unassigned: number; skipped: Array<{ id: string; reason: string }> }];
   // super admin
   'admin.requests': [{ status?: string }, AccessRequest[]];
   'admin.decideRequest': [{ requestId: string; approve: boolean; reason?: string; role?: 'admin' | 'minisuper' }, { ok: true }];

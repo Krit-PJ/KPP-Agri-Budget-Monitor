@@ -41,6 +41,12 @@ Types ของ request/response: `packages/domain/src/contracts.ts` (interface 
 | `imports.commit` | ใช่ | ใช่ | import |
 | `imports.cancel` | ใช่ | ใช่ | admin |
 | `imports.errorsCsv` | ใช่ |  | admin |
+| `plans.preview` | ใช่ | ใช่ | import |
+| `plans.commit` | ใช่ | ใช่ | import |
+| `plans.list` | ใช่ |  | admin |
+| `plans.get` | ใช่ |  | admin |
+| `plans.assign` | ใช่ | ใช่ | admin |
+| `plans.unassign` | ใช่ | ใช่ | admin |
 | `admin.requests` | ใช่ |  | admin |
 | `admin.decideRequest` | ใช่ | ใช่ | admin |
 | `admin.users` | ใช่ |  | admin |

@@ -2,7 +2,7 @@
  * Schema ของตารางใน Google Sheets (versioned) — header แถวที่ 1 ของแต่ละแท็บ
  * เปลี่ยน schema: เพิ่มคอลัมน์ต่อท้ายเท่านั้น แล้วเพิ่ม SCHEMA_VERSION; provisioning เติมหัวคอลัมน์ให้เอง
  */
-export const SCHEMA_VERSION = '2026.11.05-1';
+export const SCHEMA_VERSION = '2026.11.06-1';
 
 export type ColType = 'string' | 'number' | 'boolean' | 'json';
 export type FileKey = 'IDENTITY' | 'CORE' | 'STAGING' | 'REPORTING';
@@ -43,10 +43,12 @@ export const TABLES = {
     ['fiscalYear', 'number'], ['fundingSourceId', 'string'], ['projectCode', 'string'], ['name', 'string'], ['workgroupId', 'string'],
     ['ownerName', 'string'], ['startDate', 'string'], ['endDate', 'string'], ['status', 'string'], ['physicalProgress', 'number'],
     ['quarterTargets', 'string'], ['description', 'string'], ['published', 'boolean'], ['lastProgressAt', 'string'], ['idempotencyKey', 'string'],
+    ['planDocId', 'string'], ['planNodeSeq', 'number'],
   ]),
   Activities: t('CORE', [
     ['projectId', 'string'], ['activityCode', 'string'], ['name', 'string'], ['startDate', 'string'], ['endDate', 'string'],
     ['status', 'string'], ['progressPct', 'number'], ['idempotencyKey', 'string'],
+    ['planItemId', 'string'], ['unit', 'string'], ['targetQty', 'number'],
   ]),
   Allocations: t('CORE', [
     ['projectId', 'string'], ['activityId', 'string'], ['type', 'string'], ['amountSatang', 'number'], ['date', 'string'],
@@ -71,6 +73,18 @@ export const TABLES = {
     ['after', 'string'], ['reason', 'string'],
   ], false),
   Settings: t('CORE', [['key', 'string'], ['value', 'string'], ['updatedAt', 'string'], ['updatedBy', 'string']], false),
+  PlanDocs: t('CORE', [
+    ['fiscalYear', 'number'], ['fundingSourceId', 'string'], ['round', 'number'], ['title', 'string'], ['docNo', 'string'],
+    ['docDate', 'string'], ['budgetType', 'string'], ['totalSatang', 'number'], ['leafCount', 'number'], ['sourceFileId', 'string'],
+    ['sourceFileName', 'string'], ['status', 'string'], ['note', 'string'],
+  ]),
+  PlanItems: t('CORE', [
+    ['planDocId', 'string'], ['fiscalYear', 'number'], ['seq', 'number'], ['parentSeq', 'number'], ['depth', 'number'],
+    ['kind', 'string'], ['number', 'string'], ['name', 'string'], ['unit', 'string'], ['quantity', 'number'],
+    ['amountSatang', 'number'], ['isLeaf', 'boolean'], ['planIndex', 'number'], ['projectSeq', 'number'], ['activitySeq', 'number'],
+    ['code', 'string'], ['workgroupId', 'string'], ['projectId', 'string'], ['activityId', 'string'], ['assignedAt', 'string'],
+    ['assignedBy', 'string'],
+  ]),
   ImportJobs: t('STAGING', [
     ['fileName', 'string'], ['sha256', 'string'], ['driveFileId', 'string'], ['channel', 'string'], ['kind', 'string'],
     ['fiscalYear', 'number'], ['fundingSourceId', 'string'], ['headerRow', 'number'], ['mapping', 'string'], ['status', 'string'],

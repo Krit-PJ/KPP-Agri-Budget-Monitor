@@ -65,6 +65,9 @@ export interface Project extends Meta {
   published: boolean;
   lastProgressAt: string;
   idempotencyKey: string;
+  /** ถ้าสร้างจากแผนงบประมาณ: เอกสารแผน และ seq ของโครงการในแผน */
+  planDocId: string;
+  planNodeSeq: number;
 }
 
 export interface Activity extends Meta {
@@ -76,6 +79,10 @@ export interface Activity extends Meta {
   status: ProjectStatus;
   progressPct: number;
   idempotencyKey: string;
+  /** รายการย่อยในแผนงบประมาณที่กิจกรรมนี้มาจาก */
+  planItemId: string;
+  unit: string;
+  targetQty: number;
 }
 
 export interface Allocation extends Meta {
@@ -186,6 +193,48 @@ export interface AuditLog {
   before: string;
   after: string;
   reason: string;
+}
+
+export interface PlanDoc extends Meta {
+  fiscalYear: number;
+  fundingSourceId: string;
+  /** งวด/ครั้งที่จัดสรร เช่น 1 */
+  round: number;
+  title: string;
+  docNo: string;
+  docDate: string;
+  budgetType: string;
+  totalSatang: number;
+  leafCount: number;
+  sourceFileId: string;
+  sourceFileName: string;
+  status: 'ACTIVE' | 'REPLACED';
+  note: string;
+}
+
+export interface PlanItem extends Meta {
+  planDocId: string;
+  fiscalYear: number;
+  seq: number;
+  parentSeq: number;
+  depth: number;
+  kind: string;
+  number: string;
+  name: string;
+  unit: string;
+  quantity: number;
+  amountSatang: number;
+  isLeaf: boolean;
+  planIndex: number;
+  projectSeq: number;
+  activitySeq: number;
+  code: string;
+  /** กลุ่มงานที่รับผิดชอบ (เฉพาะรายการย่อยสุดท้าย — 1 รายการ 1 กลุ่ม) */
+  workgroupId: string;
+  projectId: string;
+  activityId: string;
+  assignedAt: string;
+  assignedBy: string;
 }
 
 export type ImportKind = 'BUDGET_SUMMARY' | 'DISBURSEMENT_LIST';

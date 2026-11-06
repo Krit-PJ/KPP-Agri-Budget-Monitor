@@ -3,6 +3,8 @@ import { currentFiscalYear, type FundingSource, type Organization, type Workgrou
 import { live, newMeta, type Ctx } from './context';
 import { createAllocation, createActivity, createDisbursement, createProgress, createProject } from './services/projects';
 import { SYSTEM_USER } from './context';
+import { assignPlanItems, importPlanTable } from './services/plans';
+import type { PlanItem } from '@kpp/domain';
 
 export const SEED_FUNDING_SOURCES = [
   { code: 'DOAE', name: 'งบกรมส่งเสริมการเกษตร', shortName: 'กรมฯ' },
@@ -78,5 +80,52 @@ export function seedDemoData(ctx: Ctx): void {
     }));
     if (p.progress) createProgress(ctx, { idempotencyKey: `demo:${p.code}:pr`, projectId: project.id, progressPct: p.progress, detail: 'ดำเนินการตามแผน (ข้อมูลสาธิต)' });
   }
+  ctx.user = saved;
+}
+
+/** กลุ่มงานตัวอย่างตามคำสำคัญของกิจกรรม (ใช้เฉพาะโหมดสาธิต) */
+const DEMO_GROUP_RULES: Array<[RegExp, string]> = [
+  [/ศัตรูพืช|อารักขา|ชีวภัณฑ์|ศจช|สารเคมี|สุขภาพพืช/, 'PROTECT'],
+  [/ยุวเกษตรกร|แม่บ้าน|Smart Farmer|Young Smart|สูงวัย|วิสาหกิจ|อาสาสมัคร|อกม|ส่งเสริมอาชีพ/, 'FARMER'],
+  [/แปลงใหญ่|GAP|ข้าวโพด|มันสำปะหลัง|ไม้ผล|ดิน|ปุ๋ย|ศดปช|ศพก|ตลาด/, 'PROD'],
+  [/ทะเบียน|ผังแปลง|ภูมิสารสนเทศ|ข้อมูล|District Workshop|ระบบส่งเสริม/, 'STRAT'],
+];
+
+/** ข้อมูลสาธิตจากแผนจริง (แบบ คง.2 ปี 2570 ครั้งที่ 1) + การเบิกจ่ายจำลองบางส่วน */
+export function seedDemoPlan(ctx: Ctx, table: unknown[][]): void {
+  seedMasterData(ctx);
+  const saved = ctx.user;
+  ctx.user = SYSTEM_USER;
+  const fs = live(ctx.env.db.list<FundingSource>('FundingSources'));
+  const groups = live(ctx.env.db.list<Workgroup>('Workgroups'));
+  const doc = importPlanTable(ctx, table, {
+    fiscalYear: 2570, fundingSourceId: fs.find((f) => f.code === 'DOAE')!.id, round: 1,
+    title: 'งบกรมส่งเสริมการเกษตร ปี 2570 ครั้งที่ 1 (โครงการตามตัวชี้วัด)', docNo: 'กษ 1004/ว 1594',
+  });
+  const leaves = live(ctx.env.db.list<PlanItem>('PlanItems')).filter((i) => i.planDocId === doc.id && i.isLeaf);
+  const byGroup = new Map<string, string[]>();
+  leaves.forEach((leaf, k) => {
+    const path: string[] = [];
+    let cur: PlanItem | undefined = leaf;
+    const all = live(ctx.env.db.list<PlanItem>('PlanItems')).filter((i) => i.planDocId === doc.id);
+    while (cur) { path.push(cur.name); cur = all.find((x) => x.seq === cur!.parentSeq); }
+    const text = path.join(' ');
+    const rule = DEMO_GROUP_RULES.find(([re]) => re.test(text));
+    if (!rule || k % 7 === 3) return; // เว้นบางรายการให้ทดลองเลือกเอง
+    const g = groups.find((x) => x.code === rule[1])!.id;
+    (byGroup.get(g) ?? byGroup.set(g, []).get(g)!).push(leaf.id);
+  });
+  for (const [workgroupId, itemIds] of byGroup) assignPlanItems(ctx, { itemIds, workgroupId });
+  // เบิกจ่ายจำลอง ~ 15–40% ของบางกิจกรรม
+  const assigned = live(ctx.env.db.list<PlanItem>('PlanItems')).filter((i) => i.planDocId === doc.id && i.isLeaf && i.activityId);
+  const daysAgo = (n: number) => new Date(ctx.env.now().getTime() - n * 86400000).toISOString().slice(0, 10);
+  assigned.forEach((i, k) => {
+    if (k % 3 === 2 || i.amountSatang < 100000) return;
+    const amount = Math.round((i.amountSatang * (15 + ((k * 7) % 26))) / 100 / 100) * 100;
+    createDisbursement(ctx, {
+      idempotencyKey: `demo:plan:${i.id}`, projectId: i.projectId, activityId: i.activityId, status: k % 2 ? 'APPROVED' : 'PAID',
+      amountSatang: amount, date: daysAgo(1 + (k % 25)), docNo: `ฎ ${100 + k}/2570`, description: 'ข้อมูลสาธิต',
+    });
+  });
   ctx.user = saved;
 }

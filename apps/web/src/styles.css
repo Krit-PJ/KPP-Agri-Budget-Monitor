@@ -216,3 +216,30 @@ dialog.sheet::backdrop { background: rgba(22, 40, 32, 0.45); }
 
 .stat-btn { background: none; border: 0; padding: 0; margin: 0; font: inherit; text-align: left; cursor: pointer; color: inherit; border-radius: var(--r-sm); }
 .stat-btn:hover .l { text-decoration: underline; }
+
+/* ===== Plan tree ===== */
+.plan-list { list-style: none; margin: 0; padding: 0; }
+.plan-row { display: flex; gap: var(--s3); align-items: baseline; padding: var(--s2) var(--s4); border-bottom: 1px solid var(--line); font-size: var(--fs-sm); }
+.plan-project { width: 100%; background: none; border: 0; border-bottom: 1px solid var(--line); font: inherit; font-size: var(--fs-md); text-align: left; cursor: pointer; color: var(--forest-ink); font-weight: 500; padding: var(--s3) var(--s4); }
+.plan-project:hover { background: #f4f8f4; }
+.plan-caret { width: 1em; color: var(--ink-3); }
+.plan-node { color: var(--ink-2); }
+.plan-leaf { background: var(--paper); }
+.plan-leaf:hover { background: #f7faf7; }
+.plan-qty { white-space: nowrap; min-width: 7em; text-align: right; }
+.plan-amt { white-space: nowrap; min-width: 7.5em; text-align: right; }
+.plan-owner { min-width: 11em; text-align: right; }
+.plan-bar { position: sticky; bottom: 8px; display: flex; gap: var(--s3); align-items: center; flex-wrap: wrap; margin-top: var(--s4); border: 2px solid var(--forest); }
+.linkish { background: none; border: 0; padding: 0; color: var(--clay); text-decoration: underline; cursor: pointer; font: inherit; }
+@media (max-width: 720px) {
+  .plan-row { flex-wrap: wrap; }
+  .plan-leaf > label, .plan-leaf > span:first-child { flex-basis: 100%; }
+  .plan-qty, .plan-amt, .plan-owner { min-width: 0; text-align: left; }
+  .plan-qty { margin-left: 30px; }
+}
+@media (max-width: 720px) {
+  .plan-project { flex-wrap: wrap; }
+  .plan-project > span:nth-child(2) { flex: 1 1 calc(100% - 2em); }
+  .plan-project > span:nth-child(3) { margin-left: 1.6em; }
+  .plan-project > span:nth-child(4) { margin-left: auto; }
+}

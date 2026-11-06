@@ -145,11 +145,12 @@ function ActivitiesTab({ d, reload }: { d: Detail; reload: () => void }) {
       {error && <ErrorBox error={error} />}
       {d.activities.length ? (
         <table className="data stack">
-          <thead><tr><th>กิจกรรม</th><th className="r">งบประมาณ</th><th className="r">เบิกจ่าย</th><th className="r">ผลงาน</th><th>สถานะ</th></tr></thead>
+          <thead><tr><th>กิจกรรม</th><th className="r">เป้าหมาย</th><th className="r">งบประมาณ</th><th className="r">เบิกจ่าย</th><th className="r">ผลงาน</th><th>สถานะ</th></tr></thead>
           <tbody>
             {d.activities.map((a) => (
               <tr key={a.id}>
-                <td className="primary">{a.activityCode} {a.name}</td>
+                <td className="primary">{a.name}<div className="xs muted">{a.planItemId ? `แผน: ${a.activityCode}` : a.activityCode}</div></td>
+                <td data-label="เป้าหมาย" className="r">{a.targetQty ? `${a.targetQty.toLocaleString('th-TH')} ${a.unit}` : '–'}</td>
                 <td data-label="งบประมาณ" className="r"><Baht v={a.budget.currentBudget} /></td>
                 <td data-label="เบิกจ่าย" className="r"><Baht v={a.budget.disbursed} /></td>
                 <td data-label="ผลงาน" className="r"><Pct v={a.progressPct} /></td>

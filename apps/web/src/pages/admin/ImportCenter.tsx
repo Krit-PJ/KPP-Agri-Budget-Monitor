@@ -85,7 +85,7 @@ export default function ImportCenter({ user }: { user: SessionUser }) {
 
   return (
     <>
-      <h1>นำเข้าข้อมูล</h1>
+      <h1>นำเข้าผลการเบิกจ่าย</h1>
       {!pv && (
         <>
           <p className="muted" style={{ maxWidth: '68ch' }}>

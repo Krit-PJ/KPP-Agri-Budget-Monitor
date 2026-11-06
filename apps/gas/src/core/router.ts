@@ -11,6 +11,7 @@ import * as filesSvc from './services/files';
 import * as importsSvc from './services/imports';
 import * as projectsSvc from './services/projects';
 import * as publicSvc from './services/public';
+import * as plansSvc from './services/plans';
 
 type Handler = (ctx: Ctx, body: Record<string, unknown>) => unknown;
 interface Route { fn: Handler; write: boolean; limit: 'public' | 'auth' | 'admin' | 'import' }
@@ -52,6 +53,12 @@ export const ROUTES: Record<ActionName, Route> = {
   'imports.commit': r(importsSvc.commitImport, true, 'import'),
   'imports.cancel': r(importsSvc.cancelImport, true, 'admin'),
   'imports.errorsCsv': r(importsSvc.errorsCsv, false, 'admin'),
+  'plans.preview': r(plansSvc.previewPlan, true, 'import'),
+  'plans.commit': r(plansSvc.commitPlan, true, 'import'),
+  'plans.list': r(plansSvc.listPlans, false, 'admin'),
+  'plans.get': r(plansSvc.getPlan, false, 'admin'),
+  'plans.assign': r(plansSvc.assignPlanItems, true, 'admin'),
+  'plans.unassign': r(plansSvc.unassignPlanItems, true, 'admin'),
   'admin.requests': r(adminSvc.listRequests, false, 'admin'),
   'admin.decideRequest': r(adminSvc.decideRequest, true, 'admin'),
   'admin.users': r((c) => adminSvc.listUsers(c), false, 'admin'),

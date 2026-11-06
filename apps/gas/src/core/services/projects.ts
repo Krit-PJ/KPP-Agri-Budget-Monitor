@@ -181,7 +181,10 @@ export function createProject(ctx: Ctx, b: Partial<Project> & { idempotencyKey: 
   });
   if (!input.workgroupId) throw new AppError('VALIDATION_FAILED', 'กรุณาเลือกกลุ่มงาน');
   if (!input.fundingSourceId) throw new AppError('VALIDATION_FAILED', 'กรุณาเลือกแหล่งงบ');
-  const project = { ...newMeta(ctx), lastProgressAt: '', idempotencyKey: String(b.idempotencyKey), ...input } as Project;
+  // ลิงก์ไปแผนงบประมาณตั้งได้จาก service แผนเท่านั้น: อ่านจาก Symbol ซึ่ง JSON จาก client สร้างไม่ได้
+  const { planDocId, planNodeSeq } = planLinkOf(b);
+  const fromPlan = { planDocId, planNodeSeq };
+  const project = { ...newMeta(ctx), lastProgressAt: '', idempotencyKey: String(b.idempotencyKey), ...fromPlan, ...input } as Project;
   assertUniqueCode(ctx, project);
   ctx.env.db.insert('Projects', [project as unknown as Record<string, unknown>]);
   audit(ctx, 'project.create', 'Project', project.id, { after: project, projectId: project.id });
@@ -222,7 +225,7 @@ export function deleteProject(ctx: Ctx, b: { id: string; version: number; reason
   return { ok: true };
 }
 
-export function createActivity(ctx: Ctx, b: { projectId: string; activityCode?: string; name: string; startDate?: string; endDate?: string; idempotencyKey: string }): Activity {
+export function createActivity(ctx: Ctx, b: { projectId: string; activityCode?: string; name: string; startDate?: string; endDate?: string; idempotencyKey: string; unit?: string; targetQty?: number }): Activity {
   const p = findById<Project>(ctx, 'Projects', String(b.projectId), 'โครงการ');
   requireWorkgroup(ctx, p.workgroupId);
   const existing = findByIdempotency<Activity>(ctx, 'Activities', String(b.idempotencyKey));
@@ -235,6 +238,7 @@ export function createActivity(ctx: Ctx, b: { projectId: string; activityCode?: 
   const a: Activity = {
     ...newMeta(ctx), projectId: p.id, activityCode: code, name, startDate: validDate(b.startDate, 'วันเริ่มต้น'),
     endDate: validDate(b.endDate, 'วันสิ้นสุด'), status: 'PLANNED', progressPct: 0, idempotencyKey: String(b.idempotencyKey),
+    planItemId: planLinkOf(b).planItemId ?? '', unit: cleanText(b.unit, 40), targetQty: Math.max(0, Number(b.targetQty) || 0),
   };
   ctx.env.db.insert('Activities', [a as unknown as Record<string, unknown>]);
   audit(ctx, 'activity.create', 'Activity', a.id, { after: a, projectId: p.id });
@@ -426,4 +430,14 @@ export function createProgress(ctx: Ctx, b: { projectId: string; activityId?: st
   audit(ctx, 'progress.create', 'ProgressReport', row.id, { after: row, projectId: p.id });
   bumpDataVersion(ctx);
   return row;
+}
+
+/** ลิงก์แผน: ยอมรับเฉพาะ planDocId ที่มีอยู่จริง (ตรวจโดย service แผนก่อนเรียก) */
+const PLAN_LINK = Symbol('planLink');
+interface PlanLink { planDocId: string; planNodeSeq: number; planItemId?: string }
+export function withPlanLink<T extends object>(b: T, link: PlanLink): T {
+  return Object.assign(b, { [PLAN_LINK]: link });
+}
+function planLinkOf(b: object): PlanLink {
+  return (b as Record<symbol, PlanLink>)[PLAN_LINK] ?? { planDocId: '', planNodeSeq: 0 };
 }

@@ -5,7 +5,9 @@
 import { createMemoryEnv, type MemoryEnv } from '@kpp/gas/memory';
 import { handle } from '@kpp/gas/core/router';
 import { setSuperAdmin } from '@kpp/gas/core/auth';
-import { seedDemoData } from '@kpp/gas/core/setup';
+import { seedDemoPlan } from '@kpp/gas/core/setup';
+import { parseDelimited } from '@kpp/domain';
+import planCsv from '../../../../data/plans/2570-DOAE-r1-kamphaengphet.csv?raw';
 import { SYSTEM_USER, newMeta, type Ctx } from '@kpp/gas/core/context';
 import { phoneHash } from '@kpp/gas/core/auth';
 import type { Workgroup } from '@kpp/domain';
@@ -30,7 +32,7 @@ function boot(): MemoryEnv {
     return e;
   }
   setSuperAdmin(ctx, DEMO_SUPER.username, DEMO_SUPER.password);
-  seedDemoData(ctx);
+  seedDemoPlan(ctx, parseDelimited(planCsv));
   const prod = e.db.list<Workgroup>('Workgroups').find((g) => g.code === 'PROD')!;
   e.db.insert('Users', [{
     ...newMeta(ctx), phone: DEMO_ADMIN_PHONE, phoneHash: phoneHash(ctx, DEMO_ADMIN_PHONE), fullName: 'ผู้ดูแลกลุ่มงาน (สาธิต)',

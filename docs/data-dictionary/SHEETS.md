@@ -1,6 +1,6 @@
 # พจนานุกรมข้อมูล (Google Sheets)
 
-Schema version `2026.11.05-1` — สร้างอัตโนมัติจาก `apps/gas/src/core/schema.ts`
+Schema version `2026.11.06-1` — สร้างอัตโนมัติจาก `apps/gas/src/core/schema.ts`
 
 - วันที่: `YYYY-MM-DD`; timestamp: UTC ISO 8601
 - เงิน: สตางค์ (integer) ห้ามมีข้อความสกุลเงินใน cell
@@ -142,6 +142,8 @@ Schema version `2026.11.05-1` — สร้างอัตโนมัติจ�
 | `published` | boolean | แสดงบนหน้าสาธารณะ |
 | `lastProgressAt` | string |  |
 | `idempotencyKey` | string | กันการบันทึกซ้ำเมื่อกดซ้ำ/ส่งซ้ำ |
+| `planDocId` | string |  |
+| `planNodeSeq` | number |  |
 
 ### แท็บ `Activities` (key: `id`)
 
@@ -162,6 +164,9 @@ Schema version `2026.11.05-1` — สร้างอัตโนมัติจ�
 | `status` | string | สถานะ (ดู enum ใน packages/domain/src/types.ts) |
 | `progressPct` | number |  |
 | `idempotencyKey` | string | กันการบันทึกซ้ำเมื่อกดซ้ำ/ส่งซ้ำ |
+| `planItemId` | string |  |
+| `unit` | string |  |
+| `targetQty` | number |  |
 
 ### แท็บ `Allocations` (key: `id`)
 
@@ -276,6 +281,64 @@ Schema version `2026.11.05-1` — สร้างอัตโนมัติจ�
 | `value` | string |  |
 | `updatedAt` | string | เวลาแก้ไขล่าสุด UTC |
 | `updatedBy` | string | ผู้แก้ไขล่าสุด |
+
+### แท็บ `PlanDocs` (key: `id`)
+
+| คอลัมน์ | ชนิด | คำอธิบาย |
+|---|---|---|
+| `id` | string | UUID (primary key — ห้ามใช้เลขแถว) |
+| `createdAt` | string | เวลาสร้าง UTC ISO 8601 |
+| `createdBy` | string | ผู้สร้าง (user id / SUPER:… / SYSTEM / PUBLIC) |
+| `updatedAt` | string | เวลาแก้ไขล่าสุด UTC |
+| `updatedBy` | string | ผู้แก้ไขล่าสุด |
+| `version` | number | เลข version สำหรับ optimistic lock |
+| `isDeleted` | boolean | soft delete |
+| `fiscalYear` | number | ปีงบประมาณ พ.ศ. (ต.ค.–ก.ย.) |
+| `fundingSourceId` | string |  |
+| `round` | number |  |
+| `title` | string |  |
+| `docNo` | string |  |
+| `docDate` | string |  |
+| `budgetType` | string |  |
+| `totalSatang` | number |  |
+| `leafCount` | number |  |
+| `sourceFileId` | string |  |
+| `sourceFileName` | string |  |
+| `status` | string | สถานะ (ดู enum ใน packages/domain/src/types.ts) |
+| `note` | string |  |
+
+### แท็บ `PlanItems` (key: `id`)
+
+| คอลัมน์ | ชนิด | คำอธิบาย |
+|---|---|---|
+| `id` | string | UUID (primary key — ห้ามใช้เลขแถว) |
+| `createdAt` | string | เวลาสร้าง UTC ISO 8601 |
+| `createdBy` | string | ผู้สร้าง (user id / SUPER:… / SYSTEM / PUBLIC) |
+| `updatedAt` | string | เวลาแก้ไขล่าสุด UTC |
+| `updatedBy` | string | ผู้แก้ไขล่าสุด |
+| `version` | number | เลข version สำหรับ optimistic lock |
+| `isDeleted` | boolean | soft delete |
+| `planDocId` | string |  |
+| `fiscalYear` | number | ปีงบประมาณ พ.ศ. (ต.ค.–ก.ย.) |
+| `seq` | number |  |
+| `parentSeq` | number |  |
+| `depth` | number |  |
+| `kind` | string |  |
+| `number` | string |  |
+| `name` | string |  |
+| `unit` | string |  |
+| `quantity` | number |  |
+| `amountSatang` | number | จำนวนเงินหน่วยสตางค์ (จำนวนเต็ม) — 1 บาท = 100 |
+| `isLeaf` | boolean |  |
+| `planIndex` | number |  |
+| `projectSeq` | number |  |
+| `activitySeq` | number |  |
+| `code` | string |  |
+| `workgroupId` | string |  |
+| `projectId` | string |  |
+| `activityId` | string |  |
+| `assignedAt` | string |  |
+| `assignedBy` | string |  |
 
 ## ไฟล์ `KPP_ABM_STAGING`
 
