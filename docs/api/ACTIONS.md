@@ -48,6 +48,9 @@ Types ของ request/response: `packages/domain/src/contracts.ts` (interface 
 | `plans.get` | ใช่ |  | admin |
 | `plans.assign` | ใช่ | ใช่ | admin |
 | `plans.unassign` | ใช่ | ใช่ | admin |
+| `activities.setUnits` | ใช่ | ใช่ | admin |
+| `activities.setUnitsBulk` | ใช่ | ใช่ | admin |
+| `reports.data` | ใช่ |  | admin |
 | `admin.requests` | ใช่ |  | admin |
 | `admin.decideRequest` | ใช่ | ใช่ | admin |
 | `admin.users` | ใช่ |  | admin |

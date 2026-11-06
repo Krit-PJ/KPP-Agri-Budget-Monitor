@@ -1,6 +1,7 @@
 /** ข้อมูลตั้งต้น (master data) + ข้อมูลสาธิต (ใช้เฉพาะโหมดสาธิต/ทดสอบ — ไม่มี PII จริง) */
-import { currentFiscalYear, type FundingSource, type Organization, type Workgroup } from '@kpp/domain';
-import { live, newMeta, type Ctx } from './context';
+import { currentFiscalYear, type AccessRequest, type FundingSource, type Organization, type Project, type Unit, type User, type Workgroup } from '@kpp/domain';
+import { live, newMeta, nowIso, type Ctx } from './context';
+import { activityUnitsOf, listUnits, setActivityUnitsBulk } from './services/units';
 import { createAllocation, createActivity, createDisbursement, createProgress, createProject } from './services/projects';
 import { SYSTEM_USER } from './context';
 import { assignPlanItems, importPlanTable } from './services/plans';
@@ -21,9 +22,13 @@ export const SEED_ORGS = [
     { code: 'FARMER', name: 'กลุ่มส่งเสริมและพัฒนาเกษตรกร' },
     { code: 'PROTECT', name: 'กลุ่มอารักขาพืช' },
   ] },
-  { code: 'KPP-DISTRICT', name: 'สำนักงานเกษตรอำเภอ (จังหวัดกำแพงเพชร)', groups: [
-    { code: 'DIST', name: 'สำนักงานเกษตรอำเภอ' },
-  ] },
+];
+
+/** หน่วยดำเนินการ: สำนักงานเกษตรจังหวัด + สำนักงานเกษตรอำเภอ 11 อำเภอ (รหัสตามรหัสอำเภอของกรมการปกครอง) */
+export const SEED_UNITS: Array<{ code: string; name: string; shortName: string; kind: 'PROVINCE' | 'DISTRICT' }> = [
+  { code: '6200', name: 'สำนักงานเกษตรจังหวัดกำแพงเพชร', shortName: 'สนง.เกษตรจังหวัด', kind: 'PROVINCE' },
+  ...['เมืองกำแพงเพชร', 'ไทรงาม', 'คลองลาน', 'ขาณุวรลักษบุรี', 'คลองขลุง', 'พรานกระต่าย', 'ลานกระบือ', 'ทรายทองวัฒนา', 'ปางศิลาทอง', 'บึงสามัคคี', 'โกสัมพีนคร']
+    .map((n, i) => ({ code: `62${String(i + 1).padStart(2, '0')}`, name: `สำนักงานเกษตรอำเภอ${n}`, shortName: `อ.${n}`, kind: 'DISTRICT' as const })),
 ];
 
 /** idempotent: เติมเฉพาะรายการที่ยังไม่มี (ตรวจจาก code) */
@@ -41,6 +46,29 @@ export function seedMasterData(ctx: Ctx): void {
     }
     const add = o.groups.filter((g) => !groups.some((x) => x.code === g.code)).map((g) => ({ ...newMeta(ctx), orgId: org!.id, ...g }));
     if (add.length) ctx.env.db.insert('Workgroups', add);
+  }
+  const units = live(ctx.env.db.list<Unit>('Units'));
+  const newUnits = SEED_UNITS.map((u, i) => ({ ...u, sortOrder: i })).filter((u) => !units.some((x) => x.code === u.code)).map((u) => ({ ...newMeta(ctx), ...u }));
+  if (newUnits.length) ctx.env.db.insert('Units', newUnits);
+  retireDistrictWorkgroup(ctx);
+}
+
+/**
+ * อำเภอเป็น "หน่วยดำเนินการ" แล้ว (ADR-006) — กลุ่มงานเดิม "สำนักงานเกษตรอำเภอ" (DIST) เลิกใช้
+ * ลบแบบ soft delete เฉพาะเมื่อไม่มีโครงการ ผู้ใช้ หรือรายการในแผนอ้างถึง
+ */
+function retireDistrictWorkgroup(ctx: Ctx): void {
+  const dist = live(ctx.env.db.list<Workgroup>('Workgroups')).find((g) => g.code === 'DIST');
+  if (!dist) return;
+  const used = live(ctx.env.db.list<Project>('Projects')).some((p) => p.workgroupId === dist.id) ||
+    live(ctx.env.db.list<User>('Users')).some((u) => u.workgroupId === dist.id || String(u.scopeWorkgroups ?? '').includes(dist.id)) ||
+    live(ctx.env.db.list<PlanItem>('PlanItems')).some((i) => i.workgroupId === dist.id) ||
+    live(ctx.env.db.list<AccessRequest>('AccessRequests')).some((r) => r.status === 'pending' && r.workgroupId === dist.id);
+  if (used) return;
+  ctx.env.db.update('Workgroups', dist.id, { ...dist, isDeleted: true, version: dist.version + 1, updatedAt: nowIso(ctx), updatedBy: 'system' });
+  const org = live(ctx.env.db.list<Organization>('Organizations')).find((o) => o.id === dist.orgId && o.code === 'KPP-DISTRICT');
+  if (org && !live(ctx.env.db.list<Workgroup>('Workgroups')).some((g) => g.orgId === org.id && g.id !== dist.id)) {
+    ctx.env.db.update('Organizations', org.id, { ...org, isDeleted: true, version: org.version + 1, updatedAt: nowIso(ctx), updatedBy: 'system' });
   }
 }
 
@@ -116,15 +144,27 @@ export function seedDemoPlan(ctx: Ctx, table: unknown[][]): void {
     (byGroup.get(g) ?? byGroup.set(g, []).get(g)!).push(leaf.id);
   });
   for (const [workgroupId, itemIds] of byGroup) assignPlanItems(ctx, { itemIds, workgroupId });
-  // เบิกจ่ายจำลอง ~ 15–40% ของบางกิจกรรม
+  // หน่วยดำเนินการจำลอง: ราว 1 ใน 3 ของกิจกรรมทำทั้ง 11 อำเภอ, บางส่วน 3 อำเภอ, ที่เหลือจังหวัดทำเอง
   const assigned = live(ctx.env.db.list<PlanItem>('PlanItems')).filter((i) => i.planDocId === doc.id && i.isLeaf && i.activityId);
+  const districts = listUnits(ctx).filter((u) => u.kind === 'DISTRICT').map((u) => u.id);
+  assigned.forEach((i, k) => {
+    if (k % 3 === 0) setActivityUnitsBulk(ctx, { activityIds: [i.activityId], unitIds: districts });
+    else if (k % 5 === 1) setActivityUnitsBulk(ctx, { activityIds: [i.activityId], unitIds: districts.filter((_, j) => (j + k) % 4 === 0).slice(0, 3) });
+  });
+  // เบิกจ่ายจำลอง ~ 15–40% ของบางกิจกรรม (กระจายตามหน่วยที่ได้รับงบ)
   const daysAgo = (n: number) => new Date(ctx.env.now().getTime() - n * 86400000).toISOString().slice(0, 10);
   assigned.forEach((i, k) => {
     if (k % 3 === 2 || i.amountSatang < 100000) return;
-    const amount = Math.round((i.amountSatang * (15 + ((k * 7) % 26))) / 100 / 100) * 100;
-    createDisbursement(ctx, {
-      idempotencyKey: `demo:plan:${i.id}`, projectId: i.projectId, activityId: i.activityId, status: k % 2 ? 'APPROVED' : 'PAID',
-      amountSatang: amount, date: daysAgo(1 + (k % 25)), docNo: `ฎ ${100 + k}/2570`, description: 'ข้อมูลสาธิต',
+    const shares = activityUnitsOf(ctx, i.activityId);
+    const targets = shares.length ? shares.filter((_, j) => (j + k) % 3 !== 1) : [null];
+    targets.forEach((sh, j) => {
+      const base = sh ? Number(sh.budgetSatang) : i.amountSatang;
+      const amount = Math.round((base * (15 + ((k * 7 + j * 11) % 26))) / 100 / 100) * 100;
+      if (amount <= 0) return;
+      createDisbursement(ctx, {
+        idempotencyKey: `demo:plan:${i.id}:${j}`, projectId: i.projectId, activityId: i.activityId, unitId: sh?.unitId, status: (k + j) % 2 ? 'APPROVED' : 'PAID',
+        amountSatang: amount, date: daysAgo(1 + ((k + j) % 25)), docNo: `ฎ ${100 + k}/2570`, description: 'ข้อมูลสาธิต',
+      });
     });
   });
   ctx.user = saved;

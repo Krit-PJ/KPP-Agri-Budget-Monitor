@@ -4,9 +4,10 @@
  */
 import type { BudgetSummary, RiskFlag } from './budget';
 import type {
-  AccessRequest, Activity, Allocation, Attachment, AuditLog, Disbursement, FundingSource, ImportJob, ImportKind,
-  LoginAttempt, Organization, Project, ProgressReport, ProjectStatus, Role, User, Workgroup,
+  AccessRequest, Activity, ActivityUnit, Allocation, Attachment, AuditLog, Disbursement, FundingSource, ImportJob, ImportKind,
+  LoginAttempt, Organization, Project, ProgressReport, ProjectStatus, Role, Unit, User, Workgroup,
 } from './types';
+import type { Satang } from './money';
 import type { CoverLetterResult } from './coverLetter';
 import type { StagedRow } from './importer';
 import type { ParsedPlan, PlanMeta } from './plan';
@@ -35,7 +36,18 @@ export interface PlanCommitRequest {
   replaceExisting?: boolean;
 }
 export type PlanDocSummary = PlanDoc & { assignedCount: number; assignedSatang: number; groups: Array<{ workgroupId: string; count: number; satang: number }> };
-export interface PlanDetail { doc: PlanDoc; items: PlanItem[] }
+/** สถานะกิจกรรมที่สร้างจากแผน — ใช้ในหน้า "แผนและผู้รับผิดชอบ" */
+export interface PlanActivityState { activityId: string; projectId: string; budget: Satang; disbursed: Satang; committed: Satang; planQuarters: string; units: ActivityUnit[]; hasDisbursement: boolean }
+export interface PlanDetail { doc: PlanDoc; items: PlanItem[]; activities: Record<string, PlanActivityState> }
+export interface UnitShareInput { unitId: string; budgetSatang: Satang; targetQty?: number }
+/** แถวข้อมูลรายงาน: 1 แถว = กิจกรรม × หน่วยดำเนินการ */
+export interface ReportRow {
+  workgroupId: string; fundingSourceId: string; projectId: string; projectCode: string; projectName: string;
+  activityId: string; activityCode: string; activityName: string; unit: string; targetQty: number;
+  unitId: string; isMeeting: boolean;
+  budget: Satang; plan: Satang; committed: Satang; disbursed: Satang; remaining: Satang;
+}
+export interface ReportData { fiscalYear: number; generatedAt: string; monthIndex: number; rows: ReportRow[] }
 export interface AssignResult { assigned: number; skipped: Array<{ id: string; reason: string }> }
 
 export const API_VERSION = '1.0.0';
@@ -53,6 +65,8 @@ export interface Lookups {
   organizations: Pick<Organization, 'id' | 'code' | 'name'>[];
   workgroups: Pick<Workgroup, 'id' | 'orgId' | 'code' | 'name'>[];
   fundingSources: Pick<FundingSource, 'id' | 'code' | 'name' | 'shortName'>[];
+  /** หน่วยดำเนินการ เรียงตามรหัส (สำนักงานเกษตรจังหวัดก่อน) */
+  units: Pick<Unit, 'id' | 'code' | 'name' | 'shortName' | 'kind'>[];
   fiscalYears: number[];
   currentFiscalYear: number;
 }
@@ -76,7 +90,15 @@ export interface PublicProject {
   monthly?: { disbursedCumulative: number[]; targetPct: number[] };
 }
 
-export interface GroupTotal { key: string; label: string; budget: BudgetSummary; projects: number }
+export interface GroupTotal {
+  key: string; label: string; budget: BudgetSummary; projects: number;
+  /** แผนการเบิกจ่ายสะสม ณ เดือนปัจจุบัน (สตางค์) */
+  plan?: Satang;
+  /** แยกตามหน่วยดำเนินการ (เฉพาะ byWorkgroup / byUnit) */
+  units?: GroupTotal[];
+  /** จำนวนกิจกรรม */
+  activities?: number;
+}
 
 export interface PublicSummary {
   fiscalYear: number;
@@ -89,6 +111,10 @@ export interface PublicSummary {
   byWorkgroup: GroupTotal[];
   /** แยกตามแผนงานในแผนงบประมาณที่นำเข้า (โครงการนอกแผนรวมเป็น "นอกแผน") */
   byPlan: GroupTotal[];
+  /** แยกตามหน่วยดำเนินการ (สำนักงานเกษตรจังหวัด + อำเภอ) */
+  byUnit: GroupTotal[];
+  /** กิจกรรมที่ยังไม่ได้แบ่งงบให้หน่วยดำเนินการ (นับเป็นของสำนักงานเกษตรจังหวัด) */
+  activitiesWithoutUnits?: number;
   monthly: { disbursedCumulative: number[]; targetPct: number[] };
   /**
    * เป้าตามมาตรการเร่งรัดการเบิกจ่ายของรัฐบาล (ตั้งค่าได้):
@@ -106,7 +132,7 @@ export interface ProjectDetail {
   project: Project;
   budget: BudgetSummary;
   risks: RiskFlag[];
-  activities: Array<Activity & { budget: BudgetSummary }>;
+  activities: Array<Activity & { budget: BudgetSummary; units: ActivityUnit[] }>;
   allocations: Allocation[];
   disbursements: Disbursement[];
   progress: ProgressReport[];
@@ -172,7 +198,7 @@ export interface Actions {
   'activities.update': [{ id: string; version: number; patch: Partial<Activity> }, Activity];
   'allocations.create': [{ projectId: string; activityId?: string; type: Allocation['type']; amountSatang: number; date?: string; docNo?: string; note?: string; idempotencyKey: string }, Allocation];
   'allocations.void': [{ id: string; reason: string }, { ok: true }];
-  'disbursements.create': [{ projectId: string; activityId?: string; status: Disbursement['status']; amountSatang: number; date: string; docNo?: string; description?: string; attachmentId?: string; idempotencyKey: string; overrideReason?: string }, Disbursement];
+  'disbursements.create': [{ projectId: string; activityId?: string; unitId?: string; status: Disbursement['status']; amountSatang: number; date: string; docNo?: string; description?: string; attachmentId?: string; idempotencyKey: string; overrideReason?: string }, Disbursement];
   'disbursements.setStatus': [{ id: string; version: number; status: 'APPROVED' | 'PAID' }, Disbursement];
   'disbursements.void': [{ id: string; reason: string; replacement?: { amountSatang: number; date: string; docNo?: string; description?: string; status: Disbursement['status'] } }, { voided: Disbursement; replacement: Disbursement | null }];
   'progress.create': [{ projectId: string; activityId?: string; reportDate?: string; progressPct: number; detail?: string; issues?: string; idempotencyKey: string }, ProgressReport];
@@ -191,7 +217,13 @@ export interface Actions {
   'plans.commit': [PlanCommitRequest, PlanDoc];
   'plans.list': [{ fiscalYear?: number }, PlanDocSummary[]];
   'plans.get': [{ id: string }, PlanDetail];
-  'plans.assign': [{ itemIds: string[]; workgroupId: string }, AssignResult];
+  /** กำหนดกลุ่มงาน: reassign = ย้ายรายการที่มีกลุ่มอื่นอยู่แล้ว (ได้เมื่อยังไม่มีการเบิกจ่าย) */
+  'plans.assign': [{ itemIds: string[]; workgroupId: string; reassign?: boolean }, AssignResult];
+  /** กำหนดหน่วยดำเนินการ + แบ่งงบ/เป้า + แผนรายไตรมาส ของกิจกรรมเดียว */
+  'activities.setUnits': [{ activityId: string; units: UnitShareInput[]; planQuarters?: Satang[] | null }, PlanActivityState];
+  /** กำหนดหน่วยให้หลายกิจกรรมพร้อมกัน: แบ่งงบเท่ากัน (เศษสตางค์ไปหน่วยแรก) */
+  'activities.setUnitsBulk': [{ activityIds: string[]; unitIds: string[] }, { updated: number; skipped: Array<{ id: string; reason: string }> }];
+  'reports.data': [{ fiscalYear: number }, ReportData];
   'plans.unassign': [{ itemIds: string[] }, { unassigned: number; skipped: Array<{ id: string; reason: string }> }];
   // super admin
   'admin.requests': [{ status?: string }, AccessRequest[]];
@@ -224,6 +256,6 @@ export const PUBLIC_ACTIONS: ReadonlySet<ActionName> = new Set<ActionName>([
 /** action ที่อ่านอย่างเดียว — หน้าเว็บ cache ผลและรวมเป็น batch ได้ */
 export const READ_ACTIONS: ReadonlySet<ActionName> = new Set<ActionName>([
   'public.lookups', 'public.summary', 'public.projects', 'public.project', 'auth.me',
-  'admin.overview', 'projects.list', 'projects.get', 'imports.get', 'imports.list', 'plans.check', 'plans.list', 'plans.get',
+  'admin.overview', 'projects.list', 'projects.get', 'imports.get', 'imports.list', 'plans.check', 'plans.list', 'plans.get', 'reports.data',
   'admin.requests', 'admin.users', 'admin.loginReport', 'admin.audit', 'admin.health',
 ]);

@@ -85,7 +85,7 @@ export default function ImportCenter({ user }: { user: SessionUser }) {
 
   return (
     <>
-      <h1>นำเข้าผลการเบิกจ่าย</h1>
+      <h1>นำเข้าผลการเบิกจ่ายจากไฟล์</h1>
       {!pv && (
         <>
           <p className="muted" style={{ maxWidth: '68ch' }}>
@@ -120,7 +120,7 @@ export default function ImportCenter({ user }: { user: SessionUser }) {
             </div>
             <div className="panel">
               <h2 style={{ fontSize: 'var(--fs-lg)' }}>นำเข้าอัตโนมัติจาก Google Drive</h2>
-              <p className="small">วางไฟล์ไว้ในโฟลเดอร์ <strong>01_Imports/Inbox</strong> ของระบบ ระบบจะตรวจทุก 15 นาที แล้วแจ้งในหน้างานที่ต้องทำ</p>
+              <p className="small">วางไฟล์ไว้ในโฟลเดอร์ <strong>01_Imports/Inbox</strong> ของระบบ ระบบจะตรวจทุก 15 นาที แล้วแจ้งในหน้าหลัก</p>
               <button className="btn btn-ghost btn-sm" onClick={() => download('แม่แบบนำเข้างบประมาณ.csv', toCsv(TEMPLATE))}>ดาวน์โหลดแม่แบบไฟล์</button>
             </div>
           </div>

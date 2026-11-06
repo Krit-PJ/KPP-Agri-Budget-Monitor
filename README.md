@@ -25,6 +25,10 @@
 - API (Apps Script Web App เวอร์ชัน 1): https://script.google.com/macros/s/AKfycbwW_a8BpJnnStYhGyH3-hFqwDiBOTCdi-TjLenv_dupfomy6LYYzclhm6XA7p8jJLZ1zw/exec
   ตั้งไว้ใน Repository variable `KPP_API_URL` ถ้าอัปเดต Code.gs ให้ใช้ "จัดการการทำให้ใช้งานได้ › แก้ไข › เวอร์ชันใหม่" เพื่อให้ URL เดิมใช้ต่อได้
 
+**เมนูเจ้าหน้าที่:** หน้าหลัก / แผนและผู้รับผิดชอบ / บันทึกการเบิกจ่าย / นำเข้าจากไฟล์ / รายงาน / ผู้ใช้งาน / ตั้งค่าระบบ
+- ผู้รับผิดชอบ 2 ระดับ: กลุ่มงาน และหน่วยดำเนินการ (สนง.เกษตรจังหวัด + 11 อำเภอ) พร้อมแบ่งงบรายอำเภอ (ADR-006)
+- รายงาน 4 แบบ พิมพ์/บันทึกเป็น PDF, Excel, CSV
+
 การตัดสินใจหลักบันทึกไว้ใน [`docs/adr`](docs/adr)
 สถานะงานเทียบกับข้อกำหนดอยู่ใน [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
 

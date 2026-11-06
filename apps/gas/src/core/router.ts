@@ -12,6 +12,8 @@ import * as importsSvc from './services/imports';
 import * as projectsSvc from './services/projects';
 import * as publicSvc from './services/public';
 import * as plansSvc from './services/plans';
+import * as reportsSvc from './services/reports';
+import * as unitsSvc from './services/units';
 
 type Handler = (ctx: Ctx, body: Record<string, unknown>) => unknown;
 interface Route { fn: Handler; write: boolean; limit: 'public' | 'auth' | 'admin' | 'import' }
@@ -60,6 +62,9 @@ export const ROUTES: Record<Exclude<ActionName, 'batch'>, Route> = {
   'plans.get': r(plansSvc.getPlan, false, 'admin'),
   'plans.assign': r(plansSvc.assignPlanItems, true, 'admin'),
   'plans.unassign': r(plansSvc.unassignPlanItems, true, 'admin'),
+  'activities.setUnits': r(unitsSvc.setActivityUnits, true, 'admin'),
+  'activities.setUnitsBulk': r(unitsSvc.setActivityUnitsBulk, true, 'admin'),
+  'reports.data': r(reportsSvc.reportData, false, 'admin'),
   'admin.requests': r(adminSvc.listRequests, false, 'admin'),
   'admin.decideRequest': r(adminSvc.decideRequest, true, 'admin'),
   'admin.users': r((c) => adminSvc.listUsers(c), false, 'admin'),

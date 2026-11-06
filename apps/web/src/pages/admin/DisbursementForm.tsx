@@ -3,7 +3,7 @@ import {
   formatBaht, formatThaiDate, todayBangkok, type CoverLetterResult, type DisbursementStatus, type ProjectDetail, type SessionUser,
 } from '@kpp/domain';
 import { ApiError, call, fileToBase64, newKey, shrinkImage } from '../../api/client';
-import { bahtInputToSatang, ErrorBox, useSubmit, useToast } from '../../components/ui';
+import { bahtInputToSatang, ErrorBox, useLookups, useSubmit, useToast } from '../../components/ui';
 
 const ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf';
 
@@ -21,7 +21,9 @@ function Conf({ c }: { c?: number }) {
 export default function DisbursementForm({ d, user, onDone }: { d: ProjectDetail; user: SessionUser; onDone: () => void }) {
   const toast = useToast();
   const [key] = useState(() => newKey('disb'));
-  const [f, setF] = useState({ amount: '', date: todayBangkok(), docNo: '', description: '', status: 'APPROVED' as DisbursementStatus, activityId: '', override: '' });
+  const l = useLookups();
+  const [f, setF] = useState({ amount: '', date: todayBangkok(), docNo: '', description: '', status: 'APPROVED' as DisbursementStatus, activityId: '', unitId: '', override: '' });
+  const actUnits = d.activities.find((a) => a.id === f.activityId)?.units ?? [];
   const [file, setFile] = useState<{ id: string; name: string; preview: string } | null>(null);
   const [ocr, setOcr] = useState<CoverLetterResult | null>(null);
   const [stage, setStage] = useState<'' | 'upload' | 'ocr'>('');
@@ -64,7 +66,7 @@ export default function DisbursementForm({ d, user, onDone }: { d: ProjectDetail
     if (!satang) return setError(new ApiError('VALIDATION_FAILED', 'กรอกจำนวนเงินเป็นตัวเลข เช่น 12500 หรือ 12,500.50'));
     void run(async () => {
       await call('disbursements.create', {
-        projectId: d.project.id, activityId: f.activityId || undefined, status: f.status, amountSatang: satang, date: f.date,
+        projectId: d.project.id, activityId: f.activityId || undefined, unitId: f.unitId || undefined, status: f.status, amountSatang: satang, date: f.date,
         docNo: f.docNo, description: f.description, attachmentId: file?.id, idempotencyKey: key, overrideReason: f.override || undefined,
       });
       toast(`บันทึกการเบิกจ่าย ${formatBaht(satang)} บาทแล้ว`);
@@ -128,12 +130,21 @@ export default function DisbursementForm({ d, user, onDone }: { d: ProjectDetail
         <label className="field"><span>เลขที่หนังสือ/เอกสาร</span><input value={f.docNo} onChange={set('docNo')} /></label>
         {!!d.activities.length && (
           <label className="field"><span>กิจกรรม</span>
-            <select value={f.activityId} onChange={set('activityId')}>
+            <select value={f.activityId} onChange={(e) => setF({ ...f, activityId: e.target.value, unitId: '' })}>
               <option value="">ระดับโครงการ</option>
               {d.activities.map((a) => <option key={a.id} value={a.id}>{a.activityCode} {a.name}</option>)}
             </select>
           </label>
         )}
+        {(actUnits.length > 1) && (
+          <label className="field"><span className="req">หน่วยดำเนินการ</span>
+            <select value={f.unitId} onChange={set('unitId')} required>
+              <option value="">เลือกอำเภอ/หน่วย</option>
+              {actUnits.map((s) => <option key={s.unitId} value={s.unitId}>{l.units.find((u) => u.id === s.unitId)?.shortName ?? '?'}</option>)}
+            </select>
+          </label>
+        )}
+        {actUnits.length === 1 && <p className="small muted field">หน่วยดำเนินการ: {l.units.find((u) => u.id === actUnits[0].unitId)?.shortName}</p>}
         <label className="field wide"><span>รายการ</span><input value={f.description} onChange={set('description')} placeholder="เช่น ค่าวัสดุอบรมเกษตรกร" /></label>
         {willExceed && user.role === 'superadmin' && (
           <label className="field wide"><span className="req">เหตุผลการอนุมัติเกินงบ</span><input value={f.override} onChange={set('override')} /></label>

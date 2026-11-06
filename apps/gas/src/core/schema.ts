@@ -2,7 +2,7 @@
  * Schema ของตารางใน Google Sheets (versioned) — header แถวที่ 1 ของแต่ละแท็บ
  * เปลี่ยน schema: เพิ่มคอลัมน์ต่อท้ายเท่านั้น แล้วเพิ่ม SCHEMA_VERSION; provisioning เติมหัวคอลัมน์ให้เอง
  */
-export const SCHEMA_VERSION = '2026.11.07-1';
+export const SCHEMA_VERSION = '2026.11.07-2';
 
 export type ColType = 'string' | 'number' | 'boolean' | 'json';
 export type FileKey = 'IDENTITY' | 'CORE' | 'STAGING' | 'REPORTING';
@@ -39,6 +39,8 @@ export const TABLES = {
   Organizations: t('CORE', [['code', 'string'], ['name', 'string']]),
   Workgroups: t('CORE', [['orgId', 'string'], ['code', 'string'], ['name', 'string']]),
   FundingSources: t('CORE', [['code', 'string'], ['name', 'string'], ['shortName', 'string']]),
+  Units: t('CORE', [['code', 'string'], ['name', 'string'], ['shortName', 'string'], ['kind', 'string'], ['sortOrder', 'number']]),
+  ActivityUnits: t('CORE', [['projectId', 'string'], ['activityId', 'string'], ['unitId', 'string'], ['budgetSatang', 'number'], ['targetQty', 'number']]),
   Projects: t('CORE', [
     ['fiscalYear', 'number'], ['fundingSourceId', 'string'], ['projectCode', 'string'], ['name', 'string'], ['workgroupId', 'string'],
     ['ownerName', 'string'], ['startDate', 'string'], ['endDate', 'string'], ['status', 'string'], ['physicalProgress', 'number'],
@@ -48,7 +50,7 @@ export const TABLES = {
   Activities: t('CORE', [
     ['projectId', 'string'], ['activityCode', 'string'], ['name', 'string'], ['startDate', 'string'], ['endDate', 'string'],
     ['status', 'string'], ['progressPct', 'number'], ['idempotencyKey', 'string'],
-    ['planItemId', 'string'], ['unit', 'string'], ['targetQty', 'number'],
+    ['planItemId', 'string'], ['unit', 'string'], ['targetQty', 'number'], ['planQuarters', 'string'],
   ]),
   Allocations: t('CORE', [
     ['projectId', 'string'], ['activityId', 'string'], ['type', 'string'], ['amountSatang', 'number'], ['date', 'string'],
@@ -57,7 +59,7 @@ export const TABLES = {
   Disbursements: t('CORE', [
     ['projectId', 'string'], ['activityId', 'string'], ['status', 'string'], ['amountSatang', 'number'], ['date', 'string'],
     ['docNo', 'string'], ['description', 'string'], ['source', 'string'], ['idempotencyKey', 'string'], ['voidReason', 'string'],
-    ['replacesId', 'string'], ['attachmentId', 'string'],
+    ['replacesId', 'string'], ['attachmentId', 'string'], ['unitId', 'string'],
   ]),
   ProgressReports: t('CORE', [
     ['projectId', 'string'], ['activityId', 'string'], ['reportDate', 'string'], ['progressPct', 'number'], ['detail', 'string'],

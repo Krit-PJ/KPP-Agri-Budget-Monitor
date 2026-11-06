@@ -1,6 +1,6 @@
 # พจนานุกรมข้อมูล (Google Sheets)
 
-Schema version `2026.11.07-1` — สร้างอัตโนมัติจาก `apps/gas/src/core/schema.ts`
+Schema version `2026.11.07-2` — สร้างอัตโนมัติจาก `apps/gas/src/core/schema.ts`
 
 - วันที่: `YYYY-MM-DD`; timestamp: UTC ISO 8601
 - เงิน: สตางค์ (integer) ห้ามมีข้อความสกุลเงินใน cell
@@ -116,6 +116,40 @@ Schema version `2026.11.07-1` — สร้างอัตโนมัติจ�
 | `name` | string |  |
 | `shortName` | string |  |
 
+### แท็บ `Units` (key: `id`)
+
+| คอลัมน์ | ชนิด | คำอธิบาย |
+|---|---|---|
+| `id` | string | UUID (primary key — ห้ามใช้เลขแถว) |
+| `createdAt` | string | เวลาสร้าง UTC ISO 8601 |
+| `createdBy` | string | ผู้สร้าง (user id / SUPER:… / SYSTEM / PUBLIC) |
+| `updatedAt` | string | เวลาแก้ไขล่าสุด UTC |
+| `updatedBy` | string | ผู้แก้ไขล่าสุด |
+| `version` | number | เลข version สำหรับ optimistic lock |
+| `isDeleted` | boolean | soft delete |
+| `code` | string |  |
+| `name` | string |  |
+| `shortName` | string |  |
+| `kind` | string |  |
+| `sortOrder` | number |  |
+
+### แท็บ `ActivityUnits` (key: `id`)
+
+| คอลัมน์ | ชนิด | คำอธิบาย |
+|---|---|---|
+| `id` | string | UUID (primary key — ห้ามใช้เลขแถว) |
+| `createdAt` | string | เวลาสร้าง UTC ISO 8601 |
+| `createdBy` | string | ผู้สร้าง (user id / SUPER:… / SYSTEM / PUBLIC) |
+| `updatedAt` | string | เวลาแก้ไขล่าสุด UTC |
+| `updatedBy` | string | ผู้แก้ไขล่าสุด |
+| `version` | number | เลข version สำหรับ optimistic lock |
+| `isDeleted` | boolean | soft delete |
+| `projectId` | string |  |
+| `activityId` | string |  |
+| `unitId` | string |  |
+| `budgetSatang` | number |  |
+| `targetQty` | number |  |
+
 ### แท็บ `Projects` (key: `id`)
 
 | คอลัมน์ | ชนิด | คำอธิบาย |
@@ -167,6 +201,7 @@ Schema version `2026.11.07-1` — สร้างอัตโนมัติจ�
 | `planItemId` | string |  |
 | `unit` | string |  |
 | `targetQty` | number |  |
+| `planQuarters` | string |  |
 
 ### แท็บ `Allocations` (key: `id`)
 
@@ -212,6 +247,7 @@ Schema version `2026.11.07-1` — สร้างอัตโนมัติจ�
 | `voidReason` | string | เหตุผลการยกเลิก (void-and-replace) |
 | `replacesId` | string | รายการเดิมที่ถูกแทนที่ |
 | `attachmentId` | string |  |
+| `unitId` | string |  |
 
 ### แท็บ `ProgressReports` (key: `id`)
 

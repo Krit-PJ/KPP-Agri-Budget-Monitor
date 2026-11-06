@@ -45,6 +45,13 @@ export interface Meta {
 export interface Organization extends Meta { code: string; name: string }
 export interface Workgroup extends Meta { orgId: string; code: string; name: string }
 export interface FundingSource extends Meta { code: string; name: string; shortName: string }
+/**
+ * หน่วยดำเนินการ: สำนักงานเกษตรจังหวัด และสำนักงานเกษตรอำเภอ 11 อำเภอ
+ * (เป็นผู้ดำเนินกิจกรรมและใช้งบ — ไม่ใช่ "หน่วยเบิกจ่าย" ตามความหมายของ GFMIS)
+ */
+export interface Unit extends Meta { code: string; name: string; shortName: string; kind: 'PROVINCE' | 'DISTRICT'; sortOrder: number }
+/** งบและเป้าหมายของกิจกรรมที่แบ่งให้หน่วยดำเนินการ — ผลรวมงบต้องเท่างบกิจกรรม (ส่วนที่ไม่ได้แบ่งนับเป็นของสำนักงานเกษตรจังหวัด) */
+export interface ActivityUnit extends Meta { projectId: string; activityId: string; unitId: string; budgetSatang: Satang; targetQty: number }
 
 export interface Project extends Meta {
   fiscalYear: number;
@@ -83,6 +90,8 @@ export interface Activity extends Meta {
   planItemId: string;
   unit: string;
   targetQty: number;
+  /** แผนการใช้จ่ายรายไตรมาส (สตางค์, ไม่สะสม) "q1,q2,q3,q4" — ว่าง = ใช้เป้ามาตรฐานของโครงการ */
+  planQuarters: string;
 }
 
 export interface Allocation extends Meta {
@@ -111,6 +120,8 @@ export interface Disbursement extends Meta {
   voidReason: string;
   replacesId: string;
   attachmentId: string;
+  /** หน่วยดำเนินการที่ใช้งบ — ว่าง = สำนักงานเกษตรจังหวัด */
+  unitId: string;
 }
 
 export interface ProgressReport extends Meta {

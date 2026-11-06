@@ -122,6 +122,55 @@ export function parseQuarterTargets(s: string): [number, number, number, number]
   return parts as [number, number, number, number];
 }
 
+/** กิจกรรมประเภทอบรม/ประชุม/สัมมนา — มาตรการเร่งรัดฯ กำหนดให้ดำเนินการให้เสร็จภายในไตรมาส 3 */
+export const MEETING_RE = /อบรม|ประชุม|สัมมนา|ถ่ายทอดความรู้|เวที|ศึกษาดูงาน|Field Day|Workshop/i;
+
+/** แผนรายไตรมาส "q1,q2,q3,q4" (สตางค์) → อาร์เรย์ หรือ null ถ้าว่าง/ไม่ถูกต้อง */
+export function parsePlanQuarters(s: string | null | undefined): [number, number, number, number] | null {
+  if (!s) return null;
+  const q = String(s).split(',').map((x) => Number(x.trim()));
+  if (q.length !== 4 || q.some((n) => !Number.isInteger(n) || n < 0)) return null;
+  return q as [number, number, number, number];
+}
+
+/**
+ * แผนการเบิกจ่ายสะสม (สตางค์) ณ สิ้นเดือนที่ m ของปีงบ (1 = ต.ค. … 12 = ก.ย.; 0 = ยังไม่เริ่ม)
+ * ใช้แผนรายไตรมาสของกิจกรรมถ้ามี (ปรับสัดส่วนตามงบปัจจุบัน) ไม่เช่นนั้นใช้เป้าร้อยละรายไตรมาส
+ */
+export function planToDate(budget: Satang, planQuarters: string | null | undefined, quarterTargets: string, m: number): Satang {
+  if (m <= 0 || budget <= 0) return 0;
+  const month = Math.min(12, m);
+  const q = parsePlanQuarters(planQuarters);
+  const total = q ? q[0] + q[1] + q[2] + q[3] : 0;
+  if (q && total > 0) {
+    const cum = [q[0], q[0] + q[1], q[0] + q[1] + q[2], total];
+    const k = Math.ceil(month / 3);
+    const prev = k > 1 ? cum[k - 2] : 0;
+    const v = prev + ((cum[k - 1] - prev) * (month - 3 * (k - 1))) / 3;
+    return Math.round((v / total) * budget);
+  }
+  return Math.round((budget * monthlyTargetPct(quarterTargets)[month - 1]) / 100);
+}
+
+/** แบ่งยอดเท่า ๆ กัน (สตางค์) — เศษไปที่รายการแรก */
+export function splitEqual(total: Satang, n: number): Satang[] {
+  if (n <= 0) return [];
+  const base = Math.floor(total / n);
+  const out = new Array<number>(n).fill(base);
+  out[0] += total - base * n;
+  return out;
+}
+
+/** แบ่งยอดตามสัดส่วนน้ำหนัก (เช่น ปริมาณงาน) — เศษไปที่รายการที่น้ำหนักมากที่สุด */
+export function splitByWeight(total: Satang, weights: number[]): Satang[] {
+  const sum = weights.reduce((a, w) => a + Math.max(0, w), 0);
+  if (sum <= 0) return splitEqual(total, weights.length);
+  const out = weights.map((w) => Math.floor((total * Math.max(0, w)) / sum));
+  const rest = total - out.reduce((a, v) => a + v, 0);
+  out[weights.indexOf(Math.max(...weights))] += rest;
+  return out;
+}
+
 export type RiskFlag = 'OVER_BUDGET' | 'BEHIND_SPENDING' | 'OVERDUE' | 'NO_RECENT_REPORT';
 export const RISK_LABEL: Record<RiskFlag, string> = {
   OVER_BUDGET: 'งบติดลบ',

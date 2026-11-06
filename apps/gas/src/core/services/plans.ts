@@ -6,13 +6,14 @@
  */
 import {
   AppError, cleanText, diffPlanTables, normalizePlanTable, parsePlanTable, parsePlanText, planToTable,
-  type Activity, type Allocation, type Disbursement, type FundingSource, type PlanCheck, type PlanCommitRequest, type PlanDoc, type PlanDetail,
+  type Activity, type ActivityUnit, type Allocation, type Disbursement, type FundingSource, type PlanCheck, type PlanCommitRequest, type PlanDoc, type PlanDetail,
   type PlanDocSummary, type PlanItem, type PlanPreview, type Project, type Workgroup,
 } from '@kpp/domain';
 import { canAccessWorkgroup, requireRole } from '../auth';
 import { audit, bumpDataVersion, findById, live, newMeta, nowIso, type Ctx } from '../context';
 import { decodeUpload, MIME_OF, safeFileName, sniff } from './files';
 import { createActivity, createAllocation, createProject, withPlanLink } from './projects';
+import { activityState, activityUnitsOf } from './units';
 
 const MAX_ROWS = 3000;
 
@@ -185,7 +186,15 @@ export function getPlan(ctx: Ctx, b: { id: string }): PlanDetail {
   requireRole(ctx, 'admin', 'minisuper', 'superadmin');
   const doc = findById<PlanDoc>(ctx, 'PlanDocs', String(b.id), 'แผนงบประมาณ');
   const items = live(ctx.env.db.list<PlanItem>('PlanItems')).filter((i) => i.planDocId === doc.id).sort((x, y) => x.seq - y.seq);
-  return { doc, items };
+  // สถานะของกิจกรรมที่สร้างจากแผน: งบ เบิกจ่าย หน่วยดำเนินการ แผนรายไตรมาส
+  const actIds = new Set(items.filter((i) => i.activityId).map((i) => i.activityId));
+  const acts = live(ctx.env.db.list<Activity>('Activities')).filter((a) => actIds.has(a.id));
+  const allocs = live(ctx.env.db.list<Allocation>('Allocations')).filter((x) => actIds.has(x.activityId));
+  const disbs = live(ctx.env.db.list<Disbursement>('Disbursements')).filter((x) => actIds.has(x.activityId));
+  const shares = activityUnitsOf(ctx).filter((x) => actIds.has(x.activityId));
+  const activities: PlanDetail['activities'] = {};
+  for (const a of acts) activities[a.id] = activityState(ctx, a, allocs, disbs, shares);
+  return { doc, items, activities };
 }
 
 /* --------------------------------- assignment -------------------------------- */
@@ -194,8 +203,12 @@ function projectCodeFor(doc: PlanDoc, projectNode: PlanItem, wg: Workgroup): str
   return `P${projectNode.planIndex}-${projectNode.number || projectNode.seq}-${wg.code}`;
 }
 
-/** เลือกรายการย่อยสุดท้ายให้กลุ่มงาน — รายการที่กลุ่มอื่นเลือกแล้วจะไม่ถูกเปลี่ยน */
-export function assignPlanItems(ctx: Ctx, b: { itemIds: string[]; workgroupId: string }): { assigned: number; skipped: Array<{ id: string; reason: string }> } {
+/**
+ * กำหนดกลุ่มงานให้กิจกรรมย่อยสุดท้าย
+ * - reassign = ย้ายจากกลุ่มเดิม: ได้เมื่อยังไม่มีการเบิกจ่าย และผู้ใช้มีสิทธิ์ทั้งกลุ่มเดิมและกลุ่มใหม่
+ *   (ย้ายหน่วยดำเนินการและแผนรายไตรมาสไปด้วย)
+ */
+export function assignPlanItems(ctx: Ctx, b: { itemIds: string[]; workgroupId: string; reassign?: boolean }): { assigned: number; skipped: Array<{ id: string; reason: string }> } {
   const u = requireRole(ctx, 'admin', 'minisuper', 'superadmin');
   const wg = live(ctx.env.db.list<Workgroup>('Workgroups')).find((g) => g.id === b.workgroupId);
   if (!wg) throw new AppError('VALIDATION_FAILED', 'กรุณาเลือกกลุ่มงาน');
@@ -210,7 +223,16 @@ export function assignPlanItems(ctx: Ctx, b: { itemIds: string[]; workgroupId: s
     if (!item) { skipped.push({ id, reason: 'ไม่พบรายการ' }); continue; }
     if (!item.isLeaf) { skipped.push({ id, reason: 'เลือกได้เฉพาะกิจกรรมย่อยสุดท้าย' }); continue; }
     if (item.workgroupId === wg.id) continue; // เลือกไว้แล้ว (กดซ้ำได้)
-    if (item.workgroupId) { skipped.push({ id, reason: 'กลุ่มงานอื่นเลือกรายการนี้แล้ว' }); continue; }
+    let carry: { shares: ActivityUnit[]; planQuarters: string } | null = null;
+    if (item.workgroupId) {
+      if (!b.reassign) { skipped.push({ id, reason: 'กลุ่มงานอื่นเลือกรายการนี้แล้ว' }); continue; }
+      if (!canAccessWorkgroup(u, item.workgroupId)) { skipped.push({ id, reason: 'ย้ายรายการของกลุ่มงานอื่นได้เฉพาะผู้ดูแลระบบ' }); continue; }
+      const oldAct = live(ctx.env.db.list<Activity>('Activities')).find((a) => a.id === item.activityId);
+      carry = { shares: activityUnitsOf(ctx, item.activityId), planQuarters: oldAct?.planQuarters ?? '' };
+      const r = unassignPlanItems(ctx, { itemIds: [id] });
+      if (r.skipped.length) { skipped.push({ id, reason: r.skipped[0].reason }); continue; }
+      Object.assign(item, findById<PlanItem>(ctx, 'PlanItems', id, 'รายการ'));
+    }
     const doc = findById<PlanDoc>(ctx, 'PlanDocs', item.planDocId, 'แผนงบประมาณ');
     if (doc.status !== 'ACTIVE') { skipped.push({ id, reason: 'แผนนี้ถูกแทนที่แล้ว' }); continue; }
     const projectNode = all.find((i) => i.planDocId === doc.id && i.seq === item.projectSeq) ?? item;
@@ -235,6 +257,17 @@ export function assignPlanItems(ctx: Ctx, b: { itemIds: string[]; workgroupId: s
         idempotencyKey: `plan:${item.id}:${item.version}:alloc`, projectId: project.id, activityId: activity.id, type: 'ORIGINAL',
         amountSatang: Number(item.amountSatang), note: `${doc.title}${doc.docNo ? ` (${doc.docNo})` : ''}`, source: `PLAN:${item.id}`,
       });
+    }
+    if (carry && (carry.shares.length || carry.planQuarters)) {
+      if (carry.shares.length) {
+        ctx.env.db.insert('ActivityUnits', carry.shares.map((s) => ({
+          ...newMeta(ctx), projectId: project!.id, activityId: activity.id, unitId: s.unitId, budgetSatang: Number(s.budgetSatang), targetQty: Number(s.targetQty),
+        })));
+      }
+      if (carry.planQuarters) {
+        const fresh = findById<Activity>(ctx, 'Activities', activity.id, 'กิจกรรม');
+        ctx.env.db.update('Activities', fresh.id, { ...fresh, planQuarters: carry.planQuarters, version: fresh.version + 1, updatedAt: nowIso(ctx), updatedBy: u.sub });
+      }
     }
     const next = { ...item, workgroupId: wg.id, projectId: project.id, activityId: activity.id, assignedAt: nowIso(ctx), assignedBy: u.sub, version: item.version + 1, updatedAt: nowIso(ctx), updatedBy: u.sub };
     ctx.env.db.update('PlanItems', item.id, next);
@@ -265,6 +298,7 @@ export function unassignPlanItems(ctx: Ctx, b: { itemIds: string[] }): { unassig
     }
     const act = live(ctx.env.db.list<Activity>('Activities')).find((a) => a.id === item.activityId);
     if (act) ctx.env.db.update('Activities', act.id, { ...act, isDeleted: true, version: act.version + 1, updatedAt: at, updatedBy: u.sub });
+    for (const s of activityUnitsOf(ctx, item.activityId)) ctx.env.db.update('ActivityUnits', s.id, { ...s, isDeleted: true, version: s.version + 1, updatedAt: at, updatedBy: u.sub });
     const project = live(ctx.env.db.list<Project>('Projects')).find((p) => p.id === item.projectId);
     if (project) {
       const stillUsed = live(ctx.env.db.list<Activity>('Activities')).some((a) => a.projectId === project.id) ||

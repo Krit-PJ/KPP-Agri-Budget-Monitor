@@ -7,7 +7,7 @@ export default function Overview({ user }: { user: SessionUser }) {
   const s = useApi('admin.overview', { fiscalYear: l.currentFiscalYear });
   return (
     <>
-      <h1>งานที่ต้องทำ</h1>
+      <h1>หน้าหลัก</h1>
       <Async s={s} lines={6}>
         {(d) => (
           <>

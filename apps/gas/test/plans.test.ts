@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { normalizePlanTable, readXlsx, type ApiEnvelope, type AssignResult, type AuditLog, type Lookups, type PlanCheck, type PlanDetail, type PlanDoc, type PlanDocSummary, type PlanPreview, type ProjectDetail, type ProjectListItem } from '@kpp/domain';
+import { fiscalMonthIndex, normalizePlanTable, planToDate, readXlsx, todayBangkok, type ApiEnvelope, type AssignResult, type AuditLog, type Lookups, type PlanCheck, type PlanDetail, type PlanDoc, type PlanDocSummary, type PlanPreview, type ProjectDetail, type ProjectListItem } from '@kpp/domain';
 import { createMemoryEnv, type MemoryEnv } from '../src/memory';
 import { handle } from '../src/core/router';
 import { setSuperAdmin } from '../src/core/auth';
@@ -186,5 +186,104 @@ describe('batch (หลายคำขออ่านในคำขอเดี
     const anon = ok<Array<ApiEnvelope<unknown>>>('batch', { calls: [{ action: 'public.summary', fiscalYear: 2570 }, { action: 'plans.list' }] });
     expect(anon.map((e) => e.error?.code ?? 'ok')).toEqual(['ok', 'AUTH_REQUIRED']);
     expect(call('batch', { calls: [] }).error?.code).toBe('VALIDATION_FAILED');
+  });
+});
+
+describe('หน่วยดำเนินการ (ADR-006)', () => {
+  const unit = (code: string) => lookups.units.find((u) => u.code === code)!.id;
+  const districts = () => lookups.units.filter((u) => u.kind === 'DISTRICT').map((u) => u.id);
+  function assignedLeaf(name: string, group = 'PROD') {
+    const { detail } = importPlan();
+    const leaf = detail.items.find((i) => i.isLeaf && i.name.includes(name))!;
+    ok<AssignResult>('plans.assign', { itemIds: [leaf.id], workgroupId: wg(group) }, superToken);
+    const d = ok<PlanDetail>('plans.get', { id: detail.doc.id }, superToken);
+    const item = d.items.find((i) => i.id === leaf.id)!;
+    return { detail: d, item, state: d.activities[item.activityId] };
+  }
+
+  it('seeds the province office + 11 districts and retires the old "สำนักงานเกษตรอำเภอ" workgroup', () => {
+    expect(lookups.units.map((u) => u.code)).toEqual(['6200', ...Array.from({ length: 11 }, (_, i) => `62${String(i + 1).padStart(2, '0')}`)]);
+    expect(lookups.units[0]).toMatchObject({ kind: 'PROVINCE', shortName: 'สนง.เกษตรจังหวัด' });
+    expect(lookups.units.find((u) => u.code === '6211')!.name).toBe('สำนักงานเกษตรอำเภอโกสัมพีนคร');
+    expect(lookups.workgroups.some((g) => g.code === 'DIST')).toBe(false);
+  });
+
+  it('splits an activity budget across districts, records disbursements per district and shows them on the dashboard', () => {
+    const { item, state } = assignedLeaf('Smart Group');
+    expect(state).toMatchObject({ budget: item.amountSatang, units: [], hasDisbursement: false });
+    // แบ่งไม่ครบ → ไม่ได้
+    const ids = districts().slice(0, 3);
+    const bad = call('activities.setUnits', { activityId: item.activityId, units: ids.map((unitId) => ({ unitId, budgetSatang: 100 })) }, superToken);
+    expect(bad.error?.message).toContain('ไม่เท่างบกิจกรรม');
+    const share = [Math.floor(item.amountSatang / 3), Math.floor(item.amountSatang / 3)];
+    share.push(item.amountSatang - share[0] - share[1]);
+    const st = ok<PlanDetail['activities'][string]>('activities.setUnits', {
+      activityId: item.activityId, units: ids.map((unitId, i) => ({ unitId, budgetSatang: share[i], targetQty: 1 })),
+      planQuarters: [item.amountSatang, 0, 0, 0],
+    }, superToken);
+    expect(st.units).toHaveLength(3);
+    expect(st.planQuarters).toBe(`${item.amountSatang},0,0,0`);
+    // เบิกจ่ายในอำเภอที่ไม่ได้รับงบ → ไม่ได้; อำเภอที่ได้รับงบ → ได้
+    const base = { projectId: item.projectId, activityId: item.activityId, status: 'APPROVED', amountSatang: 1_000_00, date: '2025-11-01' };
+    expect(call('disbursements.create', { ...base, unitId: districts()[5], idempotencyKey: 'u1' }, superToken).error?.message).toContain('ไม่ได้รับงบ');
+    ok('disbursements.create', { ...base, unitId: ids[1], idempotencyKey: 'u2' }, superToken);
+    // เอาอำเภอที่มีเบิกจ่ายออก → ไม่ได้
+    const drop = call('activities.setUnits', { activityId: item.activityId, units: [{ unitId: ids[0], budgetSatang: item.amountSatang }] }, superToken);
+    expect(drop.error?.message).toContain('มีรายการเบิกจ่ายแล้ว');
+    // dashboard: กลุ่มงาน → รายอำเภอ
+    const sum = ok<{ byWorkgroup: Array<{ key: string; plan: number; units: Array<{ key: string; budget: { currentBudget: number; disbursed: number } }> }>; activitiesWithoutUnits: number }>('public.summary', { fiscalYear: 2570 });
+    const prod = sum.byWorkgroup.find((g) => g.key === wg('PROD'))!;
+    expect(prod.units.map((u) => u.key)).toEqual(ids);
+    expect(prod.units[1].budget).toMatchObject({ currentBudget: share[1], disbursed: 1_000_00 });
+    // แผนไตรมาส 1 = เต็มงบ: แผน ณ เดือนนี้ไล่ขึ้นทีละ 1/3 ในไตรมาส (ปัดเศษรายหน่วยได้ ±1 สตางค์ต่อหน่วย)
+    const m = fiscalMonthIndex(todayBangkok(env.now()));
+    expect(Math.abs(prod.plan - planToDate(item.amountSatang, `${item.amountSatang},0,0,0`, '', m))).toBeLessThanOrEqual(3);
+    expect(sum.activitiesWithoutUnits).toBe(0);
+    // รายงาน: 1 แถวต่อ กิจกรรม × หน่วย
+    const rep = ok<{ rows: Array<{ unitId: string; budget: number; disbursed: number }> }>('reports.data', { fiscalYear: 2570 }, superToken);
+    expect(rep.rows.map((r) => r.unitId)).toEqual(ids);
+    expect(rep.rows.reduce((a, r) => a + r.budget, 0)).toBe(item.amountSatang);
+  });
+
+  it('unsplit budget and unit-less disbursements belong to the province office', () => {
+    const { item } = assignedLeaf('Smart Group');
+    ok('disbursements.create', { projectId: item.projectId, activityId: item.activityId, status: 'PAID', amountSatang: 500_00, date: '2025-11-02', idempotencyKey: 'p1' }, superToken);
+    const rep = ok<{ rows: Array<{ unitId: string; budget: number; disbursed: number }> }>('reports.data', { fiscalYear: 2570 }, superToken);
+    expect(rep.rows).toEqual([expect.objectContaining({ unitId: unit('6200'), budget: item.amountSatang, disbursed: 500_00 })]);
+  });
+
+  it('bulk-assigns all 11 districts with an equal split (remainder to the first)', () => {
+    const { detail } = importPlan();
+    const leaves = detail.items.filter((i) => i.isLeaf).slice(0, 4);
+    ok<AssignResult>('plans.assign', { itemIds: leaves.map((i) => i.id), workgroupId: wg('FARMER') }, superToken);
+    const d = ok<PlanDetail>('plans.get', { id: detail.doc.id }, superToken);
+    const actIds = leaves.map((l) => d.items.find((i) => i.id === l.id)!.activityId);
+    const r = ok<{ updated: number }>('activities.setUnitsBulk', { activityIds: actIds, unitIds: districts() }, superToken);
+    expect(r.updated).toBe(4);
+    const after = ok<PlanDetail>('plans.get', { id: detail.doc.id }, superToken);
+    for (const id of actIds) {
+      const s = after.activities[id];
+      expect(s.units).toHaveLength(11);
+      expect(s.units.reduce((a, u) => a + u.budgetSatang, 0)).toBe(s.budget);
+    }
+  });
+
+  it('moves an activity to another group (keeping its districts) while it has no disbursements', () => {
+    const { detail, item } = assignedLeaf('Smart Group');
+    ok('activities.setUnitsBulk', { activityIds: [item.activityId], unitIds: districts().slice(0, 2) }, superToken);
+    const prod = adminFor('0844444444', 'PROD');
+    // admin กลุ่มเดียวย้ายไปกลุ่มที่ตนไม่มีสิทธิ์ไม่ได้
+    expect(call('plans.assign', { itemIds: [item.id], workgroupId: wg('FARMER'), reassign: true }, prod).error?.code).toBe('FORBIDDEN_SCOPE');
+    const moved = ok<AssignResult>('plans.assign', { itemIds: [item.id], workgroupId: wg('FARMER'), reassign: true }, superToken);
+    expect(moved.assigned).toBe(1);
+    const d = ok<PlanDetail>('plans.get', { id: detail.doc.id }, superToken);
+    const now = d.items.find((i) => i.id === item.id)!;
+    expect(now.workgroupId).toBe(wg('FARMER'));
+    expect(d.activities[now.activityId].units.map((u) => u.unitId)).toEqual(districts().slice(0, 2));
+    expect(ok<ProjectListItem[]>('projects.list', { fiscalYear: 2570 }, prod)).toHaveLength(0); // โครงการเดิมของ PROD ว่างแล้วจึงถูกลบ
+    // มีเบิกจ่ายแล้ว → ย้ายไม่ได้
+    ok('disbursements.create', { projectId: now.projectId, activityId: now.activityId, unitId: districts()[0], status: 'COMMITTED', amountSatang: 100_00, date: '2025-11-01', idempotencyKey: 'm1' }, superToken);
+    const blocked = ok<AssignResult>('plans.assign', { itemIds: [item.id], workgroupId: wg('PROD'), reassign: true }, superToken);
+    expect(blocked.skipped[0].reason).toContain('มีรายการเบิกจ่ายแล้ว');
   });
 });

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  classifyPlanLine, detectPlanMeta, diffPlanTables, normalizePlanTable, parseDelimited, parsePlanTable, parsePlanText, planToTable, readXlsx, toCsv,
+  classifyPlanLine, detectPlanMeta, diffPlanTables, normalizePlanTable, parseDelimited, parsePlanTable, parsePlanText, planToTable, readXlsx, toCsv, writeXlsx,
 } from '../src/index';
 
 /** ไฟล์ต้นฉบับจากสำนักงาน (แบบ คง.2 หัวตาราง 3 แถวผสานเซลล์) */
@@ -155,5 +155,14 @@ describe('parsePlanText (OCR draft)', () => {
     expect(leaf).toMatchObject({ unit: 'แปลง', quantity: 21250, amountSatang: 5_550_000 });
     expect(p.issues[0].message).toContain('OCR');
     expect(p.issues.some((i) => i.message.includes('ยอดรวมทั้งสิ้น'))).toBe(true); // 2,429,862 ≠ 55,500 → ต้องตรวจ
+  });
+});
+
+describe('writeXlsx', () => {
+  it('round-trips Thai text, numbers and styles through readXlsx', () => {
+    const bytes = writeXlsx([{ name: 'สรุป/กลุ่มงาน', rows: [[{ v: 'รายงาน', s: 't' }], [{ v: 'กลุ่มงาน', s: 'h' }, { v: 'งบ', s: 'h' }], ['กลุ่มอารักขาพืช <&>', { v: 286300.5, fmt: 'money' }], [{ v: 'รวม', s: 'b' }, { v: 286300.5, s: 'b', fmt: 'money' }]], widths: [30, 14], merges: ['A1:B1'], freezeRow: 2 }]);
+    const [sheet] = readXlsx(bytes);
+    expect(sheet.name).toBe('สรุป กลุ่มงาน');
+    expect(sheet.rows).toEqual([['รายงาน'], ['กลุ่มงาน', 'งบ'], ['กลุ่มอารักขาพืช <&>', 286300.5], ['รวม', 286300.5]]);
   });
 });

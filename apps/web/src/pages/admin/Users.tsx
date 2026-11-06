@@ -13,7 +13,7 @@ export default function Users({ user }: { user: SessionUser }) {
   const [tab, setTab] = useState<(typeof TABS)[number]>('คำขอสิทธิ์');
   return (
     <>
-      <h1>ผู้ใช้และสิทธิ์</h1>
+      <h1>ผู้ใช้งาน</h1>
       <div className="tabs" role="tablist">
         {TABS.map((t) => <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>{t}</button>)}
       </div>

@@ -420,6 +420,34 @@ var KPP = (() => {
     }
     return parts;
   }
+  var MEETING_RE = /อบรม|ประชุม|สัมมนา|ถ่ายทอดความรู้|เวที|ศึกษาดูงาน|Field Day|Workshop/i;
+  function parsePlanQuarters(s) {
+    if (!s) return null;
+    const q = String(s).split(",").map((x) => Number(x.trim()));
+    if (q.length !== 4 || q.some((n) => !Number.isInteger(n) || n < 0)) return null;
+    return q;
+  }
+  function planToDate(budget, planQuarters, quarterTargets, m) {
+    if (m <= 0 || budget <= 0) return 0;
+    const month = Math.min(12, m);
+    const q = parsePlanQuarters(planQuarters);
+    const total = q ? q[0] + q[1] + q[2] + q[3] : 0;
+    if (q && total > 0) {
+      const cum = [q[0], q[0] + q[1], q[0] + q[1] + q[2], total];
+      const k = Math.ceil(month / 3);
+      const prev = k > 1 ? cum[k - 2] : 0;
+      const v = prev + (cum[k - 1] - prev) * (month - 3 * (k - 1)) / 3;
+      return Math.round(v / total * budget);
+    }
+    return Math.round(budget * monthlyTargetPct(quarterTargets)[month - 1] / 100);
+  }
+  function splitEqual(total, n) {
+    if (n <= 0) return [];
+    const base = Math.floor(total / n);
+    const out = new Array(n).fill(base);
+    out[0] += total - base * n;
+    return out;
+  }
   function riskFlags(project, summary, today2 = todayBangkok()) {
     const flags = [];
     if (summary.remaining < 0) flags.push("OVER_BUDGET");
@@ -1129,6 +1157,7 @@ var KPP = (() => {
     "plans.check",
     "plans.list",
     "plans.get",
+    "reports.data",
     "admin.requests",
     "admin.users",
     "admin.loginReport",
@@ -1857,7 +1886,7 @@ var KPP = (() => {
   }
 
   // src/core/schema.ts
-  var SCHEMA_VERSION = "2026.11.07-1";
+  var SCHEMA_VERSION = "2026.11.07-2";
   var META = [
     ["id", "string"],
     ["createdAt", "string"],
@@ -1913,6 +1942,8 @@ var KPP = (() => {
     Organizations: t("CORE", [["code", "string"], ["name", "string"]]),
     Workgroups: t("CORE", [["orgId", "string"], ["code", "string"], ["name", "string"]]),
     FundingSources: t("CORE", [["code", "string"], ["name", "string"], ["shortName", "string"]]),
+    Units: t("CORE", [["code", "string"], ["name", "string"], ["shortName", "string"], ["kind", "string"], ["sortOrder", "number"]]),
+    ActivityUnits: t("CORE", [["projectId", "string"], ["activityId", "string"], ["unitId", "string"], ["budgetSatang", "number"], ["targetQty", "number"]]),
     Projects: t("CORE", [
       ["fiscalYear", "number"],
       ["fundingSourceId", "string"],
@@ -1943,7 +1974,8 @@ var KPP = (() => {
       ["idempotencyKey", "string"],
       ["planItemId", "string"],
       ["unit", "string"],
-      ["targetQty", "number"]
+      ["targetQty", "number"],
+      ["planQuarters", "string"]
     ]),
     Allocations: t("CORE", [
       ["projectId", "string"],
@@ -1968,7 +2000,8 @@ var KPP = (() => {
       ["idempotencyKey", "string"],
       ["voidReason", "string"],
       ["replacesId", "string"],
-      ["attachmentId", "string"]
+      ["attachmentId", "string"],
+      ["unitId", "string"]
     ]),
     ProgressReports: t("CORE", [
       ["projectId", "string"],
@@ -2107,6 +2140,213 @@ var KPP = (() => {
     return table === "Settings" ? "key" : "id";
   }
 
+  // src/core/services/units.ts
+  function listUnits(ctx) {
+    return live(ctx.env.db.list("Units")).sort((a, b) => Number(a.sortOrder) - Number(b.sortOrder) || a.code.localeCompare(b.code));
+  }
+  function provinceUnitId(units) {
+    return units.find((u) => u.kind === "PROVINCE")?.id ?? "";
+  }
+  function activityUnitsOf(ctx, activityId) {
+    const all = live(ctx.env.db.list("ActivityUnits"));
+    return activityId ? all.filter((x) => x.activityId === activityId) : all;
+  }
+  function activityState(ctx, a, allocs, disbs, shares) {
+    const al = (allocs ?? live(ctx.env.db.list("Allocations"))).filter((x) => x.activityId === a.id);
+    const di = (disbs ?? live(ctx.env.db.list("Disbursements"))).filter((x) => x.activityId === a.id);
+    const b = computeBudget(al, di);
+    return {
+      activityId: a.id,
+      projectId: a.projectId,
+      budget: b.currentBudget,
+      disbursed: b.disbursed,
+      committed: b.committed,
+      planQuarters: a.planQuarters ?? "",
+      units: (shares ?? activityUnitsOf(ctx)).filter((x) => x.activityId === a.id),
+      hasDisbursement: di.some((d) => d.status !== "VOID" && !d.isDeleted)
+    };
+  }
+  function setActivityUnits(ctx, b) {
+    const a = findById(ctx, "Activities", String(b.activityId), "\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21");
+    const p = findById(ctx, "Projects", a.projectId, "\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23");
+    requireWorkgroup(ctx, p.workgroupId);
+    const units = listUnits(ctx);
+    const st = activityState(ctx, a);
+    const input = Array.isArray(b.units) ? b.units.slice(0, 50) : [];
+    const seen = /* @__PURE__ */ new Set();
+    const clean = input.map((x) => {
+      const unit = units.find((u) => u.id === x.unitId);
+      if (!unit) throw new AppError("VALIDATION_FAILED", "\u0E2B\u0E19\u0E48\u0E27\u0E22\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07");
+      if (seen.has(unit.id)) throw new AppError("VALIDATION_FAILED", `\u0E40\u0E25\u0E37\u0E2D\u0E01${unit.shortName}\u0E0B\u0E49\u0E33`);
+      seen.add(unit.id);
+      const budget = Number(x.budgetSatang);
+      if (!Number.isInteger(budget) || budget < 0) throw new AppError("VALIDATION_FAILED", `\u0E07\u0E1A\u0E02\u0E2D\u0E07${unit.shortName}\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07`);
+      const qty = Math.max(0, Number(x.targetQty) || 0);
+      return { unitId: unit.id, budgetSatang: budget, targetQty: qty };
+    });
+    if (clean.length) {
+      const sum = clean.reduce((s, x) => s + x.budgetSatang, 0);
+      if (sum !== st.budget) {
+        throw new AppError("VALIDATION_FAILED", `\u0E1C\u0E25\u0E23\u0E27\u0E21\u0E07\u0E1A\u0E17\u0E35\u0E48\u0E41\u0E1A\u0E48\u0E07 ${(sum / 100).toLocaleString("th-TH")} \u0E1A\u0E32\u0E17 \u0E44\u0E21\u0E48\u0E40\u0E17\u0E48\u0E32\u0E07\u0E1A\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21 ${(st.budget / 100).toLocaleString("th-TH")} \u0E1A\u0E32\u0E17`);
+      }
+    }
+    const pao = provinceUnitId(units);
+    const used = new Set(live(ctx.env.db.list("Disbursements")).filter((d) => d.activityId === a.id && d.status !== "VOID").map((d) => d.unitId || pao));
+    const keep = new Set(clean.map((x) => x.unitId));
+    const keepPao = clean.length === 0;
+    for (const uid of used) {
+      if (!keep.has(uid) && !(keepPao && uid === pao)) {
+        throw new AppError("VALIDATION_FAILED", `${units.find((u) => u.id === uid)?.shortName ?? "\u0E2B\u0E19\u0E48\u0E27\u0E22\u0E19\u0E35\u0E49"} \u0E21\u0E35\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E40\u0E1A\u0E34\u0E01\u0E08\u0E48\u0E32\u0E22\u0E41\u0E25\u0E49\u0E27 \u0E40\u0E2D\u0E32\u0E2D\u0E2D\u0E01\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49`);
+      }
+    }
+    let planQuarters = a.planQuarters ?? "";
+    if (b.planQuarters !== void 0) {
+      if (b.planQuarters === null || Array.isArray(b.planQuarters) && b.planQuarters.every((v) => !Number(v))) planQuarters = "";
+      else {
+        const q = (b.planQuarters ?? []).map(Number);
+        if (q.length !== 4 || q.some((v) => !Number.isInteger(v) || v < 0)) throw new AppError("VALIDATION_FAILED", "\u0E41\u0E1C\u0E19\u0E23\u0E32\u0E22\u0E44\u0E15\u0E23\u0E21\u0E32\u0E2A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07");
+        if (q.reduce((s, v) => s + v, 0) !== st.budget) throw new AppError("VALIDATION_FAILED", "\u0E1C\u0E25\u0E23\u0E27\u0E21\u0E41\u0E1C\u0E19\u0E23\u0E32\u0E22\u0E44\u0E15\u0E23\u0E21\u0E32\u0E2A\u0E15\u0E49\u0E2D\u0E07\u0E40\u0E17\u0E48\u0E32\u0E07\u0E1A\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21");
+        planQuarters = q.join(",");
+      }
+    }
+    const before = { units: st.units.map((x) => ({ unitId: x.unitId, budgetSatang: x.budgetSatang, targetQty: x.targetQty })), planQuarters: a.planQuarters };
+    const now = nowIso(ctx);
+    const actor2 = ctx.user?.sub ?? "system";
+    for (const old of st.units) {
+      const next = clean.find((x) => x.unitId === old.unitId);
+      if (!next) ctx.env.db.update("ActivityUnits", old.id, { ...old, isDeleted: true, version: old.version + 1, updatedAt: now, updatedBy: actor2 });
+      else if (next.budgetSatang !== Number(old.budgetSatang) || next.targetQty !== Number(old.targetQty)) {
+        ctx.env.db.update("ActivityUnits", old.id, { ...old, ...next, version: old.version + 1, updatedAt: now, updatedBy: actor2 });
+      }
+    }
+    const add = clean.filter((x) => !st.units.some((o) => o.unitId === x.unitId)).map((x) => ({ ...newMeta(ctx), projectId: p.id, activityId: a.id, ...x }));
+    if (add.length) ctx.env.db.insert("ActivityUnits", add);
+    if (planQuarters !== (a.planQuarters ?? "")) {
+      ctx.env.db.update("Activities", a.id, { ...a, planQuarters, version: a.version + 1, updatedAt: now, updatedBy: actor2 });
+    }
+    audit(ctx, "activity.units", "Activity", a.id, { before, after: { units: clean, planQuarters }, projectId: p.id });
+    bumpDataVersion(ctx);
+    return activityState(ctx, { ...a, planQuarters });
+  }
+  function setActivityUnitsBulk(ctx, b) {
+    const ids = [...new Set((b.activityIds ?? []).map(String))].slice(0, 300);
+    const unitIds = [...new Set((b.unitIds ?? []).map(String))];
+    if (!ids.length) throw new AppError("VALIDATION_FAILED", "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21");
+    if (!unitIds.length) throw new AppError("VALIDATION_FAILED", "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E2B\u0E19\u0E48\u0E27\u0E22\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23");
+    const units = listUnits(ctx);
+    const ordered = units.filter((u) => unitIds.includes(u.id)).map((u) => u.id);
+    let updated = 0;
+    const skipped = [];
+    for (const id of ids) {
+      try {
+        const a = findById(ctx, "Activities", id, "\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21");
+        const st = activityState(ctx, a);
+        const shares = splitEqual(st.budget, ordered.length);
+        const qty = splitEqual(Math.round(Number(a.targetQty) || 0), ordered.length);
+        setActivityUnits(ctx, { activityId: id, units: ordered.map((unitId, i) => ({ unitId, budgetSatang: shares[i], targetQty: qty[i] })) });
+        updated++;
+      } catch (e) {
+        skipped.push({ id, reason: e instanceof AppError ? e.message : "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08" });
+      }
+    }
+    return { updated, skipped };
+  }
+  function buildUnitRows(ctx, ds, projects, m) {
+    const units = listUnits(ctx);
+    const pao = provinceUnitId(units);
+    const shares = activityUnitsOf(ctx);
+    const ids = new Set(projects.map((p) => p.id));
+    const byProject = new Map(projects.map((p) => [p.id, p]));
+    const acts = ds.activities.filter((a) => ids.has(a.projectId));
+    const allocBy = /* @__PURE__ */ new Map();
+    const disbBy = /* @__PURE__ */ new Map();
+    const key = (projectId, activityId) => `${projectId}|${activityId}`;
+    for (const x of ds.allocations) if (ids.has(x.projectId)) (allocBy.get(key(x.projectId, x.activityId)) ?? allocBy.set(key(x.projectId, x.activityId), []).get(key(x.projectId, x.activityId))).push(x);
+    for (const x of ds.disbursements) if (ids.has(x.projectId)) (disbBy.get(key(x.projectId, x.activityId)) ?? disbBy.set(key(x.projectId, x.activityId), []).get(key(x.projectId, x.activityId))).push(x);
+    const rows = [];
+    const emit = (p, a, allocs, disbs) => {
+      const total = computeBudget(allocs, []).currentBudget;
+      const planTotal = planToDate(total, a?.planQuarters, p.quarterTargets, m);
+      const mine = a ? shares.filter((s) => s.activityId === a.id) : [];
+      const budgetOf = new Map(mine.map((s) => [s.unitId, Number(s.budgetSatang)]));
+      const qtyOf = new Map(mine.map((s) => [s.unitId, Number(s.targetQty)]));
+      const assigned = mine.reduce((s, x) => s + Number(x.budgetSatang), 0);
+      if (total - assigned !== 0 || !mine.length) budgetOf.set(pao, (budgetOf.get(pao) ?? 0) + (total - assigned));
+      if (!mine.length) qtyOf.set(pao, Number(a?.targetQty) || 0);
+      const unitIds = /* @__PURE__ */ new Set([...budgetOf.keys(), ...disbs.filter((d) => d.status !== "VOID").map((d) => d.unitId || pao)]);
+      for (const uid of units.map((u) => u.id).filter((id) => unitIds.has(id))) {
+        const s = computeBudget([], disbs.filter((d) => (d.unitId || pao) === uid));
+        const budget = budgetOf.get(uid) ?? 0;
+        rows.push({
+          workgroupId: p.workgroupId,
+          fundingSourceId: p.fundingSourceId,
+          projectId: p.id,
+          projectCode: p.projectCode,
+          projectName: p.name,
+          activityId: a?.id ?? "",
+          activityCode: a?.activityCode ?? "",
+          activityName: a?.name ?? "\u0E07\u0E1A\u0E23\u0E30\u0E14\u0E31\u0E1A\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23",
+          unit: a?.unit ?? "",
+          targetQty: qtyOf.get(uid) ?? 0,
+          unitId: uid,
+          isMeeting: !!a && MEETING_RE.test(a.name),
+          budget,
+          plan: total ? Math.round(planTotal * budget / total) : 0,
+          committed: s.committed,
+          disbursed: s.disbursed,
+          remaining: budget - s.disbursed
+        });
+      }
+    };
+    for (const a of acts) {
+      const p = byProject.get(a.projectId);
+      emit(p, a, allocBy.get(key(p.id, a.id)) ?? [], disbBy.get(key(p.id, a.id)) ?? []);
+    }
+    for (const p of projects) {
+      const al = allocBy.get(key(p.id, "")) ?? [];
+      const di = disbBy.get(key(p.id, "")) ?? [];
+      if (al.length || di.length) emit(p, null, al, di);
+    }
+    return rows;
+  }
+  function summarizeRows(rows) {
+    let budget = 0, committed = 0, disbursed = 0, plan = 0;
+    for (const r2 of rows) {
+      budget += r2.budget;
+      committed += r2.committed;
+      disbursed += r2.disbursed;
+      plan += r2.plan;
+    }
+    return {
+      originalBudget: budget,
+      transferIn: 0,
+      transferOut: 0,
+      currentBudget: budget,
+      committed,
+      disbursed,
+      paid: 0,
+      remaining: budget - disbursed,
+      spendingPct: pct(disbursed, budget),
+      plan
+    };
+  }
+  function planSeries(ds, projects) {
+    const out = new Array(12).fill(0);
+    const ids = new Set(projects.map((p) => p.id));
+    const byProject = new Map(projects.map((p) => [p.id, p]));
+    const budgetOf = /* @__PURE__ */ new Map();
+    for (const x of ds.allocations) if (ids.has(x.projectId)) (budgetOf.get(x.activityId || `P:${x.projectId}`) ?? budgetOf.set(x.activityId || `P:${x.projectId}`, []).get(x.activityId || `P:${x.projectId}`)).push(x);
+    const add = (budget, planQuarters, qt) => {
+      for (let m = 1; m <= 12; m++) out[m - 1] += planToDate(budget, planQuarters, qt, m);
+    };
+    for (const a of ds.activities) {
+      const p = byProject.get(a.projectId);
+      if (p) add(computeBudget(budgetOf.get(a.id) ?? [], []).currentBudget, a.planQuarters ?? "", p.quarterTargets);
+    }
+    for (const p of projects) add(computeBudget(budgetOf.get(`P:${p.id}`) ?? [], []).currentBudget, "", p.quarterTargets);
+    return out;
+  }
+
   // src/core/services/projects.ts
   function loadDataset(ctx) {
     return {
@@ -2151,11 +2391,16 @@ var KPP = (() => {
     const allocations = ctx.env.db.list("Allocations").filter((a) => a.projectId === p.id);
     const disbursements = ctx.env.db.list("Disbursements").filter((d) => d.projectId === p.id);
     const budget = computeBudget(live(allocations), live(disbursements));
+    const shares = activityUnitsOf(ctx);
     return {
       project: p,
       budget,
       risks: riskFlags(p, budget, today(ctx)),
-      activities: activities.map((a) => ({ ...a, budget: computeBudget(live(allocations).filter((x) => x.activityId === a.id), live(disbursements).filter((x) => x.activityId === a.id)) })).sort((x, y) => x.activityCode.localeCompare(y.activityCode, "th")),
+      activities: activities.map((a) => ({
+        ...a,
+        budget: computeBudget(live(allocations).filter((x) => x.activityId === a.id), live(disbursements).filter((x) => x.activityId === a.id)),
+        units: shares.filter((s) => s.activityId === a.id)
+      })).sort((x, y) => x.activityCode.localeCompare(y.activityCode, "th")),
       allocations: allocations.sort((x, y) => y.createdAt.localeCompare(x.createdAt)),
       disbursements: disbursements.sort((x, y) => (y.date || "").localeCompare(x.date || "") || y.createdAt.localeCompare(x.createdAt)),
       progress: live(ctx.env.db.list("ProgressReports")).filter((r2) => r2.projectId === p.id).sort((x, y) => y.reportDate.localeCompare(x.reportDate)),
@@ -2319,7 +2564,8 @@ var KPP = (() => {
       idempotencyKey: String(b.idempotencyKey),
       planItemId: planLinkOf(b).planItemId ?? "",
       unit: cleanText(b.unit, 40),
-      targetQty: Math.max(0, Number(b.targetQty) || 0)
+      targetQty: Math.max(0, Number(b.targetQty) || 0),
+      planQuarters: ""
     };
     ctx.env.db.insert("Activities", [a]);
     audit(ctx, "activity.create", "Activity", a.id, { after: a, projectId: p.id });
@@ -2343,6 +2589,17 @@ var KPP = (() => {
     audit(ctx, "activity.update", "Activity", cur.id, { before: cur, after: next, projectId: p.id });
     bumpDataVersion(ctx);
     return next;
+  }
+  function checkUnit(ctx, activityId, unitId) {
+    const shares = activityId ? activityUnitsOf(ctx, activityId) : [];
+    const id = cleanText(unitId, 60);
+    if (!id) return shares.length === 1 ? shares[0].unitId : "";
+    const units = listUnits(ctx);
+    if (!units.some((u) => u.id === id)) throw new AppError("VALIDATION_FAILED", "\u0E2B\u0E19\u0E48\u0E27\u0E22\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07");
+    const pao = provinceUnitId(units);
+    if (shares.length && !shares.some((s) => s.unitId === id)) throw new AppError("VALIDATION_FAILED", "\u0E2B\u0E19\u0E48\u0E27\u0E22\u0E19\u0E35\u0E49\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E23\u0E31\u0E1A\u0E07\u0E1A\u0E02\u0E2D\u0E07\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E19\u0E35\u0E49");
+    if (!shares.length && id !== pao) throw new AppError("VALIDATION_FAILED", '\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E19\u0E35\u0E49\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E41\u0E1A\u0E48\u0E07\u0E07\u0E1A\u0E43\u0E2B\u0E49\u0E2D\u0E33\u0E40\u0E20\u0E2D \u2014 \u0E01\u0E33\u0E2B\u0E19\u0E14\u0E43\u0E19\u0E2B\u0E19\u0E49\u0E32 "\u0E41\u0E1C\u0E19\u0E41\u0E25\u0E30\u0E1C\u0E39\u0E49\u0E23\u0E31\u0E1A\u0E1C\u0E34\u0E14\u0E0A\u0E2D\u0E1A"');
+    return id === pao && !shares.length ? "" : id;
   }
   function checkActivity(ctx, projectId, activityId) {
     if (!activityId) return "";
@@ -2399,6 +2656,7 @@ var KPP = (() => {
     if (!["COMMITTED", "APPROVED", "PAID"].includes(b.status)) throw new AppError("VALIDATION_FAILED", "\u0E2A\u0E16\u0E32\u0E19\u0E30\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07");
     const amount = validMoney(b.amountSatang, "\u0E08\u0E33\u0E19\u0E27\u0E19\u0E40\u0E07\u0E34\u0E19");
     const activityId = checkActivity(ctx, p.id, b.activityId);
+    const unitId = checkUnit(ctx, activityId, b.unitId);
     const date = validDate(b.date, "\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48", true);
     if (date > today(ctx)) throw new AppError("VALIDATION_FAILED", "\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E44\u0E21\u0E48\u0E40\u0E1B\u0E47\u0E19\u0E27\u0E31\u0E19\u0E43\u0E19\u0E2D\u0E19\u0E32\u0E04\u0E15");
     if (b.attachmentId) {
@@ -2428,7 +2686,8 @@ var KPP = (() => {
       idempotencyKey: String(b.idempotencyKey),
       voidReason: "",
       replacesId: b.replacesId ?? "",
-      attachmentId: b.attachmentId ?? ""
+      attachmentId: b.attachmentId ?? "",
+      unitId
     };
     ctx.env.db.insert("Disbursements", [row]);
     if (b.attachmentId) {
@@ -2471,6 +2730,7 @@ var KPP = (() => {
       replacement = createDisbursement(ctx, {
         projectId: p.id,
         activityId: cur.activityId,
+        unitId: cur.unitId || void 0,
         ...b.replacement,
         attachmentId: cur.attachmentId || void 0,
         idempotencyKey: `replace:${cur.id}`,
@@ -2546,6 +2806,7 @@ var KPP = (() => {
         organizations: live(ctx.env.db.list("Organizations")).map(({ id, code, name }) => ({ id, code, name })),
         workgroups: live(ctx.env.db.list("Workgroups")).map(({ id, orgId, code, name }) => ({ id, orgId, code, name })),
         fundingSources: live(ctx.env.db.list("FundingSources")).map(({ id, code, name, shortName }) => ({ id, code, name, shortName })),
+        units: listUnits(ctx).map(({ id, code, name, shortName, kind }) => ({ id, code, name, shortName, kind })),
         fiscalYears: [...years].sort((a, b) => b - a),
         currentFiscalYear: fyNow
       };
@@ -2610,18 +2871,27 @@ var KPP = (() => {
     const sources = live(ctx.env.db.list("FundingSources"));
     const groups = live(ctx.env.db.list("Workgroups"));
     const group = (keyOf, labelOf) => {
-      const m = /* @__PURE__ */ new Map();
-      for (const p of projects) (m.get(keyOf(p)) ?? m.set(keyOf(p), []).get(keyOf(p))).push(p);
-      return [...m.entries()].map(([key, ps]) => ({ key, label: labelOf(key), projects: ps.length, budget: addSummaries(ps.map((p) => budgets.get(p.id))) })).sort((a, b) => b.budget.currentBudget - a.budget.currentBudget);
+      const m2 = /* @__PURE__ */ new Map();
+      for (const p of projects) (m2.get(keyOf(p)) ?? m2.set(keyOf(p), []).get(keyOf(p))).push(p);
+      return [...m2.entries()].map(([key, ps]) => ({ key, label: labelOf(key), projects: ps.length, budget: addSummaries(ps.map((p) => budgets.get(p.id))) })).sort((a, b) => b.budget.currentBudget - a.budget.currentBudget);
     };
     const risks = projects.map((p) => ({ projectId: p.id, name: p.name, flags: riskFlags(p, budgets.get(p.id), t2) })).filter((r2) => r2.flags.length > 0);
     const totals = addSummaries(projects.map((p) => budgets.get(p.id)));
-    const targetSatang = new Array(12).fill(0);
-    for (const p of projects) {
-      const tp = monthlyTargetPct(p.quarterTargets || DEFAULT_QUARTER_TARGETS);
-      const cb = budgets.get(p.id).currentBudget;
-      tp.forEach((v, i) => targetSatang[i] += cb * v / 100);
-    }
+    const targetSatang = planSeries(ds, projects);
+    const fyNow = currentFiscalYear(ctx.env.now());
+    const m = fy < fyNow ? 12 : fy > fyNow ? 0 : fiscalMonthIndex(t2);
+    const unitRows = buildUnitRows(ctx, ds, projects, m);
+    const units = listUnits(ctx);
+    const unitName = (id) => units.find((u) => u.id === id)?.shortName ?? "\u0E44\u0E21\u0E48\u0E23\u0E30\u0E1A\u0E38";
+    const byUnitOf = (rows) => {
+      const mm = /* @__PURE__ */ new Map();
+      for (const r2 of rows) (mm.get(r2.unitId) ?? mm.set(r2.unitId, []).get(r2.unitId)).push(r2);
+      return units.filter((u) => mm.has(u.id)).map((u) => {
+        const rs = mm.get(u.id);
+        const { plan, ...budget } = summarizeRows(rs);
+        return { key: u.id, label: unitName(u.id), budget, plan, projects: new Set(rs.map((r2) => r2.projectId)).size, activities: new Set(rs.map((r2) => r2.activityId)).size };
+      });
+    };
     const settings = getSettings(ctx);
     const inScopeDisb = ds.disbursements.filter((d) => ids.has(d.projectId));
     const planItems = projects.some((p) => p.planDocId) ? live(ctx.env.db.list("PlanItems")) : [];
@@ -2631,8 +2901,7 @@ var KPP = (() => {
       const plan = node && planItems.find((i) => i.planDocId === p.planDocId && i.kind === "PLAN" && Number(i.planIndex) === Number(node.planIndex));
       return plan?.name ?? "\u0E19\u0E2D\u0E01\u0E41\u0E1C\u0E19";
     };
-    const MEETING = /อบรม|ประชุม|สัมมนา|ถ่ายทอดความรู้|เวที|ศึกษาดูงาน|Field Day|Workshop/i;
-    const meetingActs = ds.activities.filter((a) => ids.has(a.projectId) && MEETING.test(a.name));
+    const meetingActs = ds.activities.filter((a) => ids.has(a.projectId) && MEETING_RE.test(a.name));
     let mBudget = 0;
     let mRemaining = 0;
     for (const a of meetingActs) {
@@ -2656,7 +2925,15 @@ var KPP = (() => {
       },
       avgPhysicalProgress: projects.length ? Math.round(projects.reduce((s, p) => s + (Number(p.physicalProgress) || 0), 0) / projects.length * 100) / 100 : 0,
       byFundingSource: group((p) => p.fundingSourceId, (k) => sources.find((s) => s.id === k)?.name ?? "\u0E44\u0E21\u0E48\u0E23\u0E30\u0E1A\u0E38"),
-      byWorkgroup: group((p) => p.workgroupId, (k) => groups.find((g) => g.id === k)?.name ?? "\u0E44\u0E21\u0E48\u0E23\u0E30\u0E1A\u0E38"),
+      byWorkgroup: group((p) => p.workgroupId, (k) => groups.find((g) => g.id === k)?.name ?? "\u0E44\u0E21\u0E48\u0E23\u0E30\u0E1A\u0E38").map((g) => {
+        const rs = unitRows.filter((r2) => r2.workgroupId === g.key);
+        return { ...g, plan: summarizeRows(rs).plan, activities: new Set(rs.filter((r2) => r2.activityId).map((r2) => r2.activityId)).size, units: byUnitOf(rs) };
+      }),
+      byUnit: byUnitOf(unitRows),
+      activitiesWithoutUnits: (() => {
+        const withShares = new Set(ctx.env.db.list("ActivityUnits").filter((x) => !x.isDeleted).map((x) => x.activityId));
+        return ds.activities.filter((a) => ids.has(a.projectId) && !withShares.has(a.id)).length;
+      })(),
       byPlan: group(planKey, (k) => k),
       targets: {
         annualPct: Math.min(100, Math.max(0, Number(settings.annualTargetPct) || 98)),
@@ -3500,7 +3777,14 @@ var KPP = (() => {
     requireRole(ctx, "admin", "minisuper", "superadmin");
     const doc = findById(ctx, "PlanDocs", String(b.id), "\u0E41\u0E1C\u0E19\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13");
     const items = live(ctx.env.db.list("PlanItems")).filter((i) => i.planDocId === doc.id).sort((x, y) => x.seq - y.seq);
-    return { doc, items };
+    const actIds = new Set(items.filter((i) => i.activityId).map((i) => i.activityId));
+    const acts = live(ctx.env.db.list("Activities")).filter((a) => actIds.has(a.id));
+    const allocs = live(ctx.env.db.list("Allocations")).filter((x) => actIds.has(x.activityId));
+    const disbs = live(ctx.env.db.list("Disbursements")).filter((x) => actIds.has(x.activityId));
+    const shares = activityUnitsOf(ctx).filter((x) => actIds.has(x.activityId));
+    const activities = {};
+    for (const a of acts) activities[a.id] = activityState(ctx, a, allocs, disbs, shares);
+    return { doc, items, activities };
   }
   function projectCodeFor(doc, projectNode, wg) {
     return `P${projectNode.planIndex}-${projectNode.number || projectNode.seq}-${wg.code}`;
@@ -3526,9 +3810,24 @@ var KPP = (() => {
         continue;
       }
       if (item.workgroupId === wg.id) continue;
+      let carry = null;
       if (item.workgroupId) {
-        skipped.push({ id, reason: "\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19\u0E2D\u0E37\u0E48\u0E19\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E19\u0E35\u0E49\u0E41\u0E25\u0E49\u0E27" });
-        continue;
+        if (!b.reassign) {
+          skipped.push({ id, reason: "\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19\u0E2D\u0E37\u0E48\u0E19\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E19\u0E35\u0E49\u0E41\u0E25\u0E49\u0E27" });
+          continue;
+        }
+        if (!canAccessWorkgroup(u, item.workgroupId)) {
+          skipped.push({ id, reason: "\u0E22\u0E49\u0E32\u0E22\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E02\u0E2D\u0E07\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19\u0E2D\u0E37\u0E48\u0E19\u0E44\u0E14\u0E49\u0E40\u0E09\u0E1E\u0E32\u0E30\u0E1C\u0E39\u0E49\u0E14\u0E39\u0E41\u0E25\u0E23\u0E30\u0E1A\u0E1A" });
+          continue;
+        }
+        const oldAct = live(ctx.env.db.list("Activities")).find((a) => a.id === item.activityId);
+        carry = { shares: activityUnitsOf(ctx, item.activityId), planQuarters: oldAct?.planQuarters ?? "" };
+        const r2 = unassignPlanItems(ctx, { itemIds: [id] });
+        if (r2.skipped.length) {
+          skipped.push({ id, reason: r2.skipped[0].reason });
+          continue;
+        }
+        Object.assign(item, findById(ctx, "PlanItems", id, "\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23"));
       }
       const doc = findById(ctx, "PlanDocs", item.planDocId, "\u0E41\u0E1C\u0E19\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13");
       if (doc.status !== "ACTIVE") {
@@ -3571,6 +3870,22 @@ var KPP = (() => {
           source: `PLAN:${item.id}`
         });
       }
+      if (carry && (carry.shares.length || carry.planQuarters)) {
+        if (carry.shares.length) {
+          ctx.env.db.insert("ActivityUnits", carry.shares.map((s) => ({
+            ...newMeta(ctx),
+            projectId: project.id,
+            activityId: activity.id,
+            unitId: s.unitId,
+            budgetSatang: Number(s.budgetSatang),
+            targetQty: Number(s.targetQty)
+          })));
+        }
+        if (carry.planQuarters) {
+          const fresh = findById(ctx, "Activities", activity.id, "\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21");
+          ctx.env.db.update("Activities", fresh.id, { ...fresh, planQuarters: carry.planQuarters, version: fresh.version + 1, updatedAt: nowIso(ctx), updatedBy: u.sub });
+        }
+      }
       const next = { ...item, workgroupId: wg.id, projectId: project.id, activityId: activity.id, assignedAt: nowIso(ctx), assignedBy: u.sub, version: item.version + 1, updatedAt: nowIso(ctx), updatedBy: u.sub };
       ctx.env.db.update("PlanItems", item.id, next);
       Object.assign(item, next);
@@ -3607,6 +3922,7 @@ var KPP = (() => {
       }
       const act = live(ctx.env.db.list("Activities")).find((a) => a.id === item.activityId);
       if (act) ctx.env.db.update("Activities", act.id, { ...act, isDeleted: true, version: act.version + 1, updatedAt: at, updatedBy: u.sub });
+      for (const s of activityUnitsOf(ctx, item.activityId)) ctx.env.db.update("ActivityUnits", s.id, { ...s, isDeleted: true, version: s.version + 1, updatedAt: at, updatedBy: u.sub });
       const project = live(ctx.env.db.list("Projects")).find((p) => p.id === item.projectId);
       if (project) {
         const stillUsed = live(ctx.env.db.list("Activities")).some((a) => a.projectId === project.id) || live(ctx.env.db.list("Allocations")).some((a) => a.projectId === project.id) || live(ctx.env.db.list("Disbursements")).some((d) => d.projectId === project.id && d.status !== "VOID");
@@ -3621,6 +3937,17 @@ var KPP = (() => {
     }
     if (unassigned) bumpDataVersion(ctx);
     return { unassigned, skipped };
+  }
+
+  // src/core/services/reports.ts
+  function reportData(ctx, b) {
+    const u = requireRole(ctx, "admin", "minisuper", "superadmin");
+    const fy = Number(b.fiscalYear) || currentFiscalYear(ctx.env.now());
+    const ds = loadDataset(ctx);
+    const projects = ds.projects.filter((p) => Number(p.fiscalYear) === fy && canAccessWorkgroup(u, p.workgroupId));
+    const fyNow = currentFiscalYear(ctx.env.now());
+    const m = fy < fyNow ? 12 : fy > fyNow ? 0 : fiscalMonthIndex(today(ctx));
+    return { fiscalYear: fy, generatedAt: nowIso(ctx), monthIndex: m, rows: buildUnitRows(ctx, ds, projects, m) };
   }
 
   // src/core/router.ts
@@ -3668,6 +3995,9 @@ var KPP = (() => {
     "plans.get": r(getPlan, false, "admin"),
     "plans.assign": r(assignPlanItems, true, "admin"),
     "plans.unassign": r(unassignPlanItems, true, "admin"),
+    "activities.setUnits": r(setActivityUnits, true, "admin"),
+    "activities.setUnitsBulk": r(setActivityUnitsBulk, true, "admin"),
+    "reports.data": r(reportData, false, "admin"),
     "admin.requests": r(listRequests, false, "admin"),
     "admin.decideRequest": r(decideRequest, true, "admin"),
     "admin.users": r((c) => listUsers(c), false, "admin"),
@@ -3747,10 +4077,11 @@ var KPP = (() => {
       { code: "PROD", name: "\u0E01\u0E25\u0E38\u0E48\u0E21\u0E2A\u0E48\u0E07\u0E40\u0E2A\u0E23\u0E34\u0E21\u0E41\u0E25\u0E30\u0E1E\u0E31\u0E12\u0E19\u0E32\u0E01\u0E32\u0E23\u0E1C\u0E25\u0E34\u0E15" },
       { code: "FARMER", name: "\u0E01\u0E25\u0E38\u0E48\u0E21\u0E2A\u0E48\u0E07\u0E40\u0E2A\u0E23\u0E34\u0E21\u0E41\u0E25\u0E30\u0E1E\u0E31\u0E12\u0E19\u0E32\u0E40\u0E01\u0E29\u0E15\u0E23\u0E01\u0E23" },
       { code: "PROTECT", name: "\u0E01\u0E25\u0E38\u0E48\u0E21\u0E2D\u0E32\u0E23\u0E31\u0E01\u0E02\u0E32\u0E1E\u0E37\u0E0A" }
-    ] },
-    { code: "KPP-DISTRICT", name: "\u0E2A\u0E33\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19\u0E40\u0E01\u0E29\u0E15\u0E23\u0E2D\u0E33\u0E40\u0E20\u0E2D (\u0E08\u0E31\u0E07\u0E2B\u0E27\u0E31\u0E14\u0E01\u0E33\u0E41\u0E1E\u0E07\u0E40\u0E1E\u0E0A\u0E23)", groups: [
-      { code: "DIST", name: "\u0E2A\u0E33\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19\u0E40\u0E01\u0E29\u0E15\u0E23\u0E2D\u0E33\u0E40\u0E20\u0E2D" }
     ] }
+  ];
+  var SEED_UNITS = [
+    { code: "6200", name: "\u0E2A\u0E33\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19\u0E40\u0E01\u0E29\u0E15\u0E23\u0E08\u0E31\u0E07\u0E2B\u0E27\u0E31\u0E14\u0E01\u0E33\u0E41\u0E1E\u0E07\u0E40\u0E1E\u0E0A\u0E23", shortName: "\u0E2A\u0E19\u0E07.\u0E40\u0E01\u0E29\u0E15\u0E23\u0E08\u0E31\u0E07\u0E2B\u0E27\u0E31\u0E14", kind: "PROVINCE" },
+    ...["\u0E40\u0E21\u0E37\u0E2D\u0E07\u0E01\u0E33\u0E41\u0E1E\u0E07\u0E40\u0E1E\u0E0A\u0E23", "\u0E44\u0E17\u0E23\u0E07\u0E32\u0E21", "\u0E04\u0E25\u0E2D\u0E07\u0E25\u0E32\u0E19", "\u0E02\u0E32\u0E13\u0E38\u0E27\u0E23\u0E25\u0E31\u0E01\u0E29\u0E1A\u0E38\u0E23\u0E35", "\u0E04\u0E25\u0E2D\u0E07\u0E02\u0E25\u0E38\u0E07", "\u0E1E\u0E23\u0E32\u0E19\u0E01\u0E23\u0E30\u0E15\u0E48\u0E32\u0E22", "\u0E25\u0E32\u0E19\u0E01\u0E23\u0E30\u0E1A\u0E37\u0E2D", "\u0E17\u0E23\u0E32\u0E22\u0E17\u0E2D\u0E07\u0E27\u0E31\u0E12\u0E19\u0E32", "\u0E1B\u0E32\u0E07\u0E28\u0E34\u0E25\u0E32\u0E17\u0E2D\u0E07", "\u0E1A\u0E36\u0E07\u0E2A\u0E32\u0E21\u0E31\u0E04\u0E04\u0E35", "\u0E42\u0E01\u0E2A\u0E31\u0E21\u0E1E\u0E35\u0E19\u0E04\u0E23"].map((n, i) => ({ code: `62${String(i + 1).padStart(2, "0")}`, name: `\u0E2A\u0E33\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19\u0E40\u0E01\u0E29\u0E15\u0E23\u0E2D\u0E33\u0E40\u0E20\u0E2D${n}`, shortName: `\u0E2D.${n}`, kind: "DISTRICT" }))
   ];
   function seedMasterData(ctx) {
     const fs = live(ctx.env.db.list("FundingSources"));
@@ -3766,6 +4097,21 @@ var KPP = (() => {
       }
       const add = o.groups.filter((g) => !groups.some((x) => x.code === g.code)).map((g) => ({ ...newMeta(ctx), orgId: org.id, ...g }));
       if (add.length) ctx.env.db.insert("Workgroups", add);
+    }
+    const units = live(ctx.env.db.list("Units"));
+    const newUnits = SEED_UNITS.map((u, i) => ({ ...u, sortOrder: i })).filter((u) => !units.some((x) => x.code === u.code)).map((u) => ({ ...newMeta(ctx), ...u }));
+    if (newUnits.length) ctx.env.db.insert("Units", newUnits);
+    retireDistrictWorkgroup(ctx);
+  }
+  function retireDistrictWorkgroup(ctx) {
+    const dist = live(ctx.env.db.list("Workgroups")).find((g) => g.code === "DIST");
+    if (!dist) return;
+    const used = live(ctx.env.db.list("Projects")).some((p) => p.workgroupId === dist.id) || live(ctx.env.db.list("Users")).some((u) => u.workgroupId === dist.id || String(u.scopeWorkgroups ?? "").includes(dist.id)) || live(ctx.env.db.list("PlanItems")).some((i) => i.workgroupId === dist.id) || live(ctx.env.db.list("AccessRequests")).some((r2) => r2.status === "pending" && r2.workgroupId === dist.id);
+    if (used) return;
+    ctx.env.db.update("Workgroups", dist.id, { ...dist, isDeleted: true, version: dist.version + 1, updatedAt: nowIso(ctx), updatedBy: "system" });
+    const org = live(ctx.env.db.list("Organizations")).find((o) => o.id === dist.orgId && o.code === "KPP-DISTRICT");
+    if (org && !live(ctx.env.db.list("Workgroups")).some((g) => g.orgId === org.id && g.id !== dist.id)) {
+      ctx.env.db.update("Organizations", org.id, { ...org, isDeleted: true, version: org.version + 1, updatedAt: nowIso(ctx), updatedBy: "system" });
     }
   }
 

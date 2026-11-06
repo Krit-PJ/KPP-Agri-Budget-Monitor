@@ -8,6 +8,7 @@ import { ApiError, call, newKey } from '../../api/client';
 import {
   Async, auditLabel, Baht, bahtInputToSatang, BudgetStrip, Empty, ErrorBox, Pct, PlanVsActual, RiskBadges, Sheet, StatusBadge,
   useApi, useNames, useSubmit, useToast,
+  useLookups,
 } from '../../components/ui';
 import { monthsElapsed } from '../public/Home';
 import DisbursementForm from './DisbursementForm';
@@ -124,6 +125,7 @@ function OverviewTab({ d, reload }: { d: Detail; reload: () => void }) {
 }
 
 function ActivitiesTab({ d, reload }: { d: Detail; reload: () => void }) {
+  const l = useLookups();
   const [name, setName] = useState('');
   const [key, setKey] = useState(() => newKey('act'));
   const { busy, error, run } = useSubmit();
@@ -149,7 +151,13 @@ function ActivitiesTab({ d, reload }: { d: Detail; reload: () => void }) {
           <tbody>
             {d.activities.map((a) => (
               <tr key={a.id}>
-                <td className="primary">{a.name}<div className="xs muted">{a.planItemId ? `แผน: ${a.activityCode}` : a.activityCode}</div></td>
+                <td className="primary">
+                  {a.name}
+                  <div className="xs muted">
+                    {a.planItemId ? `แผน: ${a.activityCode}` : a.activityCode}
+                    {' · '}{a.units.length ? a.units.map((u) => l.units.find((x) => x.id === u.unitId)?.shortName).join(', ') : 'สนง.เกษตรจังหวัด'}
+                  </div>
+                </td>
                 <td data-label="เป้าหมาย" className="r">{a.targetQty ? `${a.targetQty.toLocaleString('th-TH')} ${a.unit}` : '–'}</td>
                 <td data-label="งบประมาณ" className="r"><Baht v={a.budget.currentBudget} /></td>
                 <td data-label="เบิกจ่าย" className="r"><Baht v={a.budget.disbursed} /></td>
@@ -238,6 +246,7 @@ function BudgetTab({ d, reload, user }: { d: Detail; reload: () => void; user: S
 }
 
 function DisbursementsTab({ d, reload, user }: { d: Detail; reload: () => void; user: SessionUser }) {
+  const l = useLookups();
   const [open, setOpen] = useState(false);
   const [voiding, setVoiding] = useState<Disbursement | null>(null);
   const { error, run } = useSubmit();
@@ -258,7 +267,7 @@ function DisbursementsTab({ d, reload, user }: { d: Detail; reload: () => void; 
           <tbody>
             {d.disbursements.map((x) => (
               <tr key={x.id} style={x.status === 'VOID' ? { opacity: 0.55 } : undefined}>
-                <td className="primary">{formatThaiDate(x.date)}</td>
+                <td className="primary">{formatThaiDate(x.date)}{x.unitId && <div className="xs muted">{l.units.find((u) => u.id === x.unitId)?.shortName}</div>}</td>
                 <td data-label="รายการ">
                   {x.description || '–'}
                   <div className="xs muted">

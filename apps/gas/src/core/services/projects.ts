@@ -6,6 +6,7 @@ import {
   type FundingSource, type ProgressReport, type Project, type ProjectDetail, type ProjectListItem, type Workgroup,
 } from '@kpp/domain';
 import { canAccessWorkgroup, requireRole, requireWorkgroup } from '../auth';
+import { activityUnitsOf, listUnits, provinceUnitId } from './units';
 import {
   actor, audit, bumpDataVersion, findById, findByIdempotency, getSettings, live, newMeta, nowIso, updateVersioned, type Ctx,
 } from '../context';
@@ -71,12 +72,17 @@ export function getProject(ctx: Ctx, b: { id: string }): ProjectDetail {
   const allocations = ctx.env.db.list<Allocation>('Allocations').filter((a) => a.projectId === p.id);
   const disbursements = ctx.env.db.list<Disbursement>('Disbursements').filter((d) => d.projectId === p.id);
   const budget = computeBudget(live(allocations), live(disbursements));
+  const shares = activityUnitsOf(ctx);
   return {
     project: p,
     budget,
     risks: riskFlags(p, budget, today(ctx)),
     activities: activities
-      .map((a) => ({ ...a, budget: computeBudget(live(allocations).filter((x) => x.activityId === a.id), live(disbursements).filter((x) => x.activityId === a.id)) }))
+      .map((a) => ({
+        ...a,
+        budget: computeBudget(live(allocations).filter((x) => x.activityId === a.id), live(disbursements).filter((x) => x.activityId === a.id)),
+        units: shares.filter((s) => s.activityId === a.id),
+      }))
       .sort((x, y) => x.activityCode.localeCompare(y.activityCode, 'th')),
     allocations: allocations.sort((x, y) => y.createdAt.localeCompare(x.createdAt)),
     disbursements: disbursements.sort((x, y) => (y.date || '').localeCompare(x.date || '') || y.createdAt.localeCompare(x.createdAt)),
@@ -239,6 +245,7 @@ export function createActivity(ctx: Ctx, b: { projectId: string; activityCode?: 
     ...newMeta(ctx), projectId: p.id, activityCode: code, name, startDate: validDate(b.startDate, 'วันเริ่มต้น'),
     endDate: validDate(b.endDate, 'วันสิ้นสุด'), status: 'PLANNED', progressPct: 0, idempotencyKey: String(b.idempotencyKey),
     planItemId: planLinkOf(b).planItemId ?? '', unit: cleanText(b.unit, 40), targetQty: Math.max(0, Number(b.targetQty) || 0),
+    planQuarters: '',
   };
   ctx.env.db.insert('Activities', [a as unknown as Record<string, unknown>]);
   audit(ctx, 'activity.create', 'Activity', a.id, { after: a, projectId: p.id });
@@ -266,6 +273,22 @@ export function updateActivity(ctx: Ctx, b: { id: string; version: number; patch
 }
 
 /* ------------------------------- allocations ------------------------------ */
+
+/**
+ * หน่วยดำเนินการของรายการเบิกจ่าย: ต้องเป็นหน่วยที่กิจกรรมแบ่งงบให้
+ * ไม่ระบุ: ถ้ากิจกรรมมีหน่วยเดียวใช้หน่วยนั้น ไม่เช่นนั้นว่าง (= สำนักงานเกษตรจังหวัด)
+ */
+function checkUnit(ctx: Ctx, activityId: string, unitId?: string): string {
+  const shares = activityId ? activityUnitsOf(ctx, activityId) : [];
+  const id = cleanText(unitId, 60);
+  if (!id) return shares.length === 1 ? shares[0].unitId : '';
+  const units = listUnits(ctx);
+  if (!units.some((u) => u.id === id)) throw new AppError('VALIDATION_FAILED', 'หน่วยดำเนินการไม่ถูกต้อง');
+  const pao = provinceUnitId(units);
+  if (shares.length && !shares.some((s) => s.unitId === id)) throw new AppError('VALIDATION_FAILED', 'หน่วยนี้ไม่ได้รับงบของกิจกรรมนี้');
+  if (!shares.length && id !== pao) throw new AppError('VALIDATION_FAILED', 'กิจกรรมนี้ยังไม่ได้แบ่งงบให้อำเภอ — กำหนดในหน้า "แผนและผู้รับผิดชอบ"');
+  return id === pao && !shares.length ? '' : id;
+}
 
 function checkActivity(ctx: Ctx, projectId: string, activityId?: string): string {
   if (!activityId) return '';
@@ -314,7 +337,7 @@ export function voidAllocation(ctx: Ctx, b: { id: string; reason: string }): { o
 /* ------------------------------ disbursements ----------------------------- */
 
 export function createDisbursement(ctx: Ctx, b: {
-  projectId: string; activityId?: string; status: Disbursement['status']; amountSatang: number; date: string;
+  projectId: string; activityId?: string; unitId?: string; status: Disbursement['status']; amountSatang: number; date: string;
   docNo?: string; description?: string; attachmentId?: string; idempotencyKey: string; overrideReason?: string; source?: string; replacesId?: string;
 }): Disbursement {
   const p = findById<Project>(ctx, 'Projects', String(b.projectId), 'โครงการ');
@@ -324,6 +347,7 @@ export function createDisbursement(ctx: Ctx, b: {
   if (!['COMMITTED', 'APPROVED', 'PAID'].includes(b.status)) throw new AppError('VALIDATION_FAILED', 'สถานะรายการไม่ถูกต้อง');
   const amount = validMoney(b.amountSatang, 'จำนวนเงิน');
   const activityId = checkActivity(ctx, p.id, b.activityId);
+  const unitId = checkUnit(ctx, activityId, b.unitId);
   const date = validDate(b.date, 'วันที่', true);
   if (date > today(ctx)) throw new AppError('VALIDATION_FAILED', 'วันที่ต้องไม่เป็นวันในอนาคต');
   if (b.attachmentId) {
@@ -344,6 +368,7 @@ export function createDisbursement(ctx: Ctx, b: {
     ...newMeta(ctx), projectId: p.id, activityId, status: b.status, amountSatang: amount, date,
     docNo: cleanText(b.docNo, 80), description: cleanText(b.description, 500), source: b.source ?? 'MANUAL',
     idempotencyKey: String(b.idempotencyKey), voidReason: '', replacesId: b.replacesId ?? '', attachmentId: b.attachmentId ?? '',
+    unitId,
   };
   ctx.env.db.insert('Disbursements', [row as unknown as Record<string, unknown>]);
   if (b.attachmentId) {
@@ -392,7 +417,7 @@ export function voidDisbursement(ctx: Ctx, b: { id: string; reason: string; repl
   let replacement: Disbursement | null = null;
   if (b.replacement) {
     replacement = createDisbursement(ctx, {
-      projectId: p.id, activityId: cur.activityId, ...b.replacement, attachmentId: cur.attachmentId || undefined,
+      projectId: p.id, activityId: cur.activityId, unitId: cur.unitId || undefined, ...b.replacement, attachmentId: cur.attachmentId || undefined,
       idempotencyKey: `replace:${cur.id}`, replacesId: cur.id, source: cur.source,
     });
   }

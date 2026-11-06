@@ -307,7 +307,7 @@ export function bahtInputToSatang(s: string): number | null {
 
 export const AUDIT_LABEL: Record<string, string> = {
   'project.create': 'เพิ่มโครงการ', 'project.update': 'แก้ไขโครงการ', 'project.delete': 'ลบโครงการ',
-  'activity.create': 'เพิ่มกิจกรรม', 'activity.update': 'แก้ไขกิจกรรม',
+  'activity.create': 'เพิ่มกิจกรรม', 'activity.update': 'แก้ไขกิจกรรม', 'activity.units': 'กำหนดหน่วยดำเนินการ',
   'allocation.create': 'บันทึกงบประมาณ', 'allocation.void': 'ยกเลิกรายการงบ',
   'disbursement.create': 'บันทึกการเบิกจ่าย', 'disbursement.status': 'เปลี่ยนสถานะการเบิกจ่าย', 'disbursement.void': 'ยกเลิกรายการเบิกจ่าย',
   'budget.override': 'อนุมัติเกินงบ', 'progress.create': 'รายงานผลการดำเนินงาน',

@@ -5,6 +5,7 @@ import Overview from './Overview';
 import ProjectsAdmin from './Projects';
 import ProjectDetail from './ProjectDetail';
 import ImportCenter from './ImportCenter';
+import Reports from './Reports';
 import Users from './Users';
 import System from './System';
 import Plans from './Plans';
@@ -30,11 +31,12 @@ export default function AdminLayout({ user }: { user: SessionUser }) {
           <div className="xs muted">{ROLE_LABEL[user.role]}</div>
           <div className="xs muted">{user.workgroupName}</div>
         </div>
-        <NavLink to="/admin" end>งานที่ต้องทำ</NavLink>
-        <NavLink to="/admin/plans">แผนงบประมาณ</NavLink>
-        <NavLink to="/admin/projects">โครงการและการเบิกจ่าย</NavLink>
-        <NavLink to="/admin/import">นำเข้าผลการเบิกจ่าย</NavLink>
-        {canManageUsers && <NavLink to="/admin/users">ผู้ใช้และสิทธิ์</NavLink>}
+        <NavLink to="/admin" end>หน้าหลัก</NavLink>
+        <NavLink to="/admin/plans">แผนและผู้รับผิดชอบ</NavLink>
+        <NavLink to="/admin/projects">บันทึกการเบิกจ่าย</NavLink>
+        <NavLink to="/admin/import">นำเข้าจากไฟล์</NavLink>
+        <NavLink to="/admin/reports">รายงาน</NavLink>
+        {canManageUsers && <NavLink to="/admin/users">ผู้ใช้งาน</NavLink>}
         {isSuper && <NavLink to="/admin/system">ตั้งค่าระบบ</NavLink>}
         <button className="btn btn-ghost btn-sm" style={{ marginTop: 'var(--s3)' }} onClick={() => void logout()}>ออกจากระบบ</button>
       </nav>
@@ -45,6 +47,7 @@ export default function AdminLayout({ user }: { user: SessionUser }) {
           <Route path="projects" element={<ProjectsAdmin user={user} />} />
           <Route path="projects/:id" element={<ProjectDetail user={user} />} />
           <Route path="import" element={<ImportCenter user={user} />} />
+          <Route path="reports" element={<Reports user={user} />} />
           {canManageUsers && <Route path="users" element={<Users user={user} />} />}
           {isSuper && <Route path="system" element={<System />} />}
           <Route path="*" element={<p>คุณไม่มีสิทธิ์เข้าถึงหน้านี้</p>} />

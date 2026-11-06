@@ -3,12 +3,13 @@
  * cache ด้วย dataVersion และบันทึก snapshot ลง REPORTING
  */
 import {
-  AppError, addSummaries, computeBudget, currentFiscalYear, monthlyCumulative, monthlyTargetPct, pct, riskFlags,
+  AppError, MEETING_RE, addSummaries, computeBudget, currentFiscalYear, fiscalMonthIndex, monthlyCumulative, monthlyTargetPct, pct, riskFlags,
   type Activity, type BudgetSummary, type FundingSource, type GroupTotal, type ImportJob, type Lookups, type Organization,
-  type PlanItem, type Project, type PublicProject, type PublicSummary, type Workgroup, DEFAULT_QUARTER_TARGETS,
+  type PlanItem, type Project, type PublicProject, type PublicSummary, type ReportRow, type Workgroup,
 } from '@kpp/domain';
 import { dataVersion, getSettings, live, nowIso, type Ctx } from '../context';
 import { budgetsByProject, loadDataset, today } from './projects';
+import { buildUnitRows, listUnits, planSeries, summarizeRows } from './units';
 
 function cached<T>(ctx: Ctx, key: string, build: () => T): T {
   const full = `pub:${dataVersion(ctx)}:${key}`;
@@ -33,6 +34,7 @@ export function lookups(ctx: Ctx): Lookups {
       organizations: live(ctx.env.db.list<Organization>('Organizations')).map(({ id, code, name }) => ({ id, code, name })),
       workgroups: live(ctx.env.db.list<Workgroup>('Workgroups')).map(({ id, orgId, code, name }) => ({ id, orgId, code, name })),
       fundingSources: live(ctx.env.db.list<FundingSource>('FundingSources')).map(({ id, code, name, shortName }) => ({ id, code, name, shortName })),
+      units: listUnits(ctx).map(({ id, code, name, shortName, kind }) => ({ id, code, name, shortName, kind })),
       fiscalYears: [...years].sort((a, b) => b - a),
       currentFiscalYear: fyNow,
     };
@@ -99,13 +101,23 @@ export function buildSummary(ctx: Ctx, fy: number, onlyPublished: boolean): Publ
   const risks = projects.map((p) => ({ projectId: p.id, name: p.name, flags: riskFlags(p, budgets.get(p.id)!, t) }))
     .filter((r) => r.flags.length > 0);
   const totals = addSummaries(projects.map((p) => budgets.get(p.id)!));
-  // แผนรายเดือน: ถ่วงน้ำหนักเป้าหมายของแต่ละโครงการด้วยงบประมาณ
-  const targetSatang = new Array<number>(12).fill(0);
-  for (const p of projects) {
-    const tp = monthlyTargetPct(p.quarterTargets || DEFAULT_QUARTER_TARGETS);
-    const cb = budgets.get(p.id)!.currentBudget;
-    tp.forEach((v, i) => (targetSatang[i] += (cb * v) / 100));
-  }
+  // แผนรายเดือน: แผนรายไตรมาสของกิจกรรม (ถ้ามี) หรือเป้าร้อยละของโครงการ
+  const targetSatang = planSeries(ds, projects);
+  // กิจกรรม × หน่วยดำเนินการ ณ เดือนปัจจุบัน — ใช้แยกกลุ่มงาน/หน่วย
+  const fyNow = currentFiscalYear(ctx.env.now());
+  const m = fy < fyNow ? 12 : fy > fyNow ? 0 : fiscalMonthIndex(t);
+  const unitRows = buildUnitRows(ctx, ds, projects, m);
+  const units = listUnits(ctx);
+  const unitName = (id: string) => units.find((u) => u.id === id)?.shortName ?? 'ไม่ระบุ';
+  const byUnitOf = (rows: ReportRow[]): GroupTotal[] => {
+    const mm = new Map<string, ReportRow[]>();
+    for (const r of rows) (mm.get(r.unitId) ?? mm.set(r.unitId, []).get(r.unitId)!).push(r);
+    return units.filter((u) => mm.has(u.id)).map((u) => {
+      const rs = mm.get(u.id)!;
+      const { plan, ...budget } = summarizeRows(rs);
+      return { key: u.id, label: unitName(u.id), budget, plan, projects: new Set(rs.map((r) => r.projectId)).size, activities: new Set(rs.map((r) => r.activityId)).size };
+    });
+  };
   const settings = getSettings(ctx);
   const inScopeDisb = ds.disbursements.filter((d) => ids.has(d.projectId));
   // แผนงาน: ชื่อจากแผนงบประมาณที่นำเข้า
@@ -117,8 +129,7 @@ export function buildSummary(ctx: Ctx, fy: number, onlyPublished: boolean): Publ
     return plan?.name ?? 'นอกแผน';
   };
   // อบรม/ประชุม/สัมมนา: ต้องดำเนินการให้เสร็จภายในไตรมาส 3 (มาตรการเร่งรัดฯ)
-  const MEETING = /อบรม|ประชุม|สัมมนา|ถ่ายทอดความรู้|เวที|ศึกษาดูงาน|Field Day|Workshop/i;
-  const meetingActs = ds.activities.filter((a) => ids.has(a.projectId) && MEETING.test(a.name));
+  const meetingActs = ds.activities.filter((a) => ids.has(a.projectId) && MEETING_RE.test(a.name));
   let mBudget = 0;
   let mRemaining = 0;
   for (const a of meetingActs) {
@@ -143,7 +154,15 @@ export function buildSummary(ctx: Ctx, fy: number, onlyPublished: boolean): Publ
     avgPhysicalProgress: projects.length
       ? Math.round((projects.reduce((s, p) => s + (Number(p.physicalProgress) || 0), 0) / projects.length) * 100) / 100 : 0,
     byFundingSource: group((p) => p.fundingSourceId, (k) => sources.find((s) => s.id === k)?.name ?? 'ไม่ระบุ'),
-    byWorkgroup: group((p) => p.workgroupId, (k) => groups.find((g) => g.id === k)?.name ?? 'ไม่ระบุ'),
+    byWorkgroup: group((p) => p.workgroupId, (k) => groups.find((g) => g.id === k)?.name ?? 'ไม่ระบุ').map((g) => {
+      const rs = unitRows.filter((r) => r.workgroupId === g.key);
+      return { ...g, plan: summarizeRows(rs).plan, activities: new Set(rs.filter((r) => r.activityId).map((r) => r.activityId)).size, units: byUnitOf(rs) };
+    }),
+    byUnit: byUnitOf(unitRows),
+    activitiesWithoutUnits: (() => {
+      const withShares = new Set(ctx.env.db.list<{ activityId: string; isDeleted: boolean }>('ActivityUnits').filter((x) => !x.isDeleted).map((x) => x.activityId));
+      return ds.activities.filter((a) => ids.has(a.projectId) && !withShares.has(a.id)).length;
+    })(),
     byPlan: group(planKey, (k) => k),
     targets: {
       annualPct: Math.min(100, Math.max(0, Number(settings.annualTargetPct) || 98)),

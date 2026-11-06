@@ -64,33 +64,79 @@ function KeyFacts({ d, fy, target, m }: { d: PublicSummary; fy: number; target: 
   );
 }
 
-type By = 'group' | 'plan' | 'fund';
-const BY_LABEL: Record<By, string> = { group: 'กลุ่มงาน', plan: 'แผนงาน', fund: 'แหล่งงบ' };
+type By = 'group' | 'unit' | 'plan' | 'fund';
+const BY_LABEL: Record<By, string> = { group: 'กลุ่มงาน', unit: 'หน่วยดำเนินการ', plan: 'แผนงาน', fund: 'แหล่งงบ' };
 
+/**
+ * ตารางผลการเบิกจ่าย: งบ / แผน ณ เดือนนี้ / เบิกจ่าย / ผูกพัน / คงเหลือ / ร้อยละคงเหลือ + แถบเทียบเป้า
+ * แถวกลุ่มงานกดเพื่อดูรายหน่วยดำเนินการ (สนง.เกษตรจังหวัด/อำเภอ)
+ */
 function Breakdown({ d, target }: { d: PublicSummary; target: number }) {
   const [by, setBy] = useState<By>('group');
-  const rows: GroupTotal[] = by === 'fund' ? d.byFundingSource : [...(by === 'group' ? d.byWorkgroup : d.byPlan)]
-    .sort((a, b) => (a.budget.spendingPct - target) - (b.budget.spendingPct - target));
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const planOf = (g: GroupTotal) => g.plan ?? Math.round((target / 100) * g.budget.currentBudget);
+  const gap = (g: GroupTotal) => g.budget.disbursed - planOf(g);
+  const src = by === 'group' ? d.byWorkgroup : by === 'unit' ? d.byUnit : by === 'plan' ? d.byPlan : d.byFundingSource;
+  const rows = by === 'unit' || by === 'fund' ? src : [...src].sort((a, b) => gap(a) / Math.max(1, a.budget.currentBudget) - gap(b) / Math.max(1, b.budget.currentBudget));
+  const tot = rows.reduce((a, g) => ({ b: a.b + g.budget.currentBudget, p: a.p + planOf(g), d: a.d + g.budget.disbursed, c: a.c + g.budget.committed, r: a.r + g.budget.remaining }), { b: 0, p: 0, d: 0, c: 0, r: 0 });
+  const row = (g: GroupTotal, sub = false, expandable = false) => {
+    const plan = planOf(g);
+    const isOpen = open.has(g.key);
+    const remPct = g.budget.currentBudget ? (g.budget.remaining / g.budget.currentBudget) * 100 : 0;
+    const tPct = g.budget.currentBudget ? (plan / g.budget.currentBudget) * 100 : 0;
+    return (
+      <tr key={(sub ? 'u:' : '') + g.key} className={sub ? 'bd-sub' : expandable ? 'bd-main' : ''}>
+        <td className="primary">
+          {expandable ? (
+            <button className="bd-toggle" aria-expanded={isOpen} onClick={() => setOpen((s0) => { const n = new Set(s0); if (n.has(g.key)) n.delete(g.key); else n.add(g.key); return n; })}>
+              <span aria-hidden="true">{isOpen ? '▾' : '▸'}</span> {g.label}
+            </button>
+          ) : <span>{g.label}</span>}
+          <span className="xs muted"> {g.activities ? `${g.activities} กิจกรรม` : `${g.projects} โครงการ`}</span>
+          <BulletBar b={g.budget} targetPct={tPct} />
+        </td>
+        <td data-label="งบประมาณ" className="r"><Baht v={g.budget.currentBudget} /></td>
+        <td data-label="แผน ณ เดือนนี้" className="r"><Baht v={plan} /></td>
+        <td data-label="เบิกจ่าย" className="r"><Baht v={g.budget.disbursed} /><div className={`xs ${g.budget.disbursed < plan ? 'bd-behind' : 'muted'}`}><Pct v={g.budget.spendingPct} /></div></td>
+        <td data-label="ผูกพัน" className="r"><Baht v={g.budget.committed} /></td>
+        <td data-label="คงเหลือ" className="r"><Baht v={g.budget.remaining} /></td>
+        <td data-label="% คงเหลือ" className="r"><Pct v={remPct} /></td>
+      </tr>
+    );
+  };
   return (
-    <section className="panel" aria-labelledby="breakdown">
+    <section className="panel section" aria-labelledby="breakdown">
       <div className="section-head" style={{ marginBottom: 'var(--s2)' }}>
-        <h2 id="breakdown">เบิกจ่ายแยกตาม{BY_LABEL[by]}</h2>
+        <h2 id="breakdown">ผลการเบิกจ่ายแยกตาม{BY_LABEL[by]}</h2>
         <div className="segmented" role="group" aria-label="แยกตาม">
-          {(['group', 'plan', 'fund'] as By[]).map((k) => <button key={k} aria-pressed={by === k} onClick={() => setBy(k)}>{BY_LABEL[k]}</button>)}
+          {(['group', 'unit', 'plan', 'fund'] as By[]).map((k) => <button key={k} aria-pressed={by === k} onClick={() => setBy(k)}>{BY_LABEL[k]}</button>)}
         </div>
       </div>
-      <p className="small muted">{by === 'fund' ? 'เรียงตามงบประมาณ' : 'เรียงจากที่ช้ากว่าแผนมากที่สุด'} ขีดตั้งคือเป้าตามแผน ณ เดือนนี้</p>
-      <ul className="row-list">
-        {rows.map((g) => (
-          <li key={g.key} className="fund-row">
-            <span>{g.label} <span className="muted small">({g.projects} โครงการ)</span></span>
-            <span className="num"><Pct v={g.budget.spendingPct} /></span>
-            <BulletBar b={g.budget} targetPct={target} />
-            <span className="small muted">เบิกจ่าย <Baht v={g.budget.disbursed} short /> จาก <Baht v={g.budget.currentBudget} short /> บาท</span>
-          </li>
-        ))}
-        {!rows.length && <li className="muted">ยังไม่มีโครงการในปีงบนี้</li>}
-      </ul>
+      <p className="small muted" style={{ marginTop: 0 }}>
+        {by === 'group' ? 'กดชื่อกลุ่มงานเพื่อดูรายอำเภอ ' : ''}{by === 'group' || by === 'plan' ? 'เรียงจากที่ช้ากว่าแผนมากที่สุด ' : ''}
+        ขีดตั้งบนแถบคือแผน ณ เดือนนี้{by === 'unit' && d.activitiesWithoutUnits ? ` — ${d.activitiesWithoutUnits} กิจกรรมยังไม่ได้แบ่งงบให้อำเภอ จึงนับเป็นของสนง.เกษตรจังหวัด` : ''}
+      </p>
+      {rows.length ? (
+        <div className="table-wrap">
+          <table className="data stack bd-table">
+            <thead><tr><th>{BY_LABEL[by]}</th><th className="r">งบประมาณ</th><th className="r">แผน ณ เดือนนี้</th><th className="r">เบิกจ่าย</th><th className="r">ผูกพัน</th><th className="r">คงเหลือ</th><th className="r">% คงเหลือ</th></tr></thead>
+            <tbody>
+              {rows.map((g) => [row(g, false, by === 'group' && !!g.units?.length), ...(by === 'group' && open.has(g.key) ? (g.units ?? []).map((u) => row(u, true)) : [])])}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>รวม</td>
+                <td data-label="งบประมาณ" className="r"><Baht v={tot.b} /></td>
+                <td data-label="แผน ณ เดือนนี้" className="r"><Baht v={tot.p} /></td>
+                <td data-label="เบิกจ่าย" className="r"><Baht v={tot.d} /><div className="xs muted"><Pct v={tot.b ? (tot.d / tot.b) * 100 : 0} /></div></td>
+                <td data-label="ผูกพัน" className="r"><Baht v={tot.c} /></td>
+                <td data-label="คงเหลือ" className="r"><Baht v={tot.r} /></td>
+                <td data-label="% คงเหลือ" className="r"><Pct v={tot.b ? (tot.r / tot.b) * 100 : 0} /></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      ) : <p className="muted">ยังไม่มีโครงการในปีงบนี้</p>}
     </section>
   );
 }
@@ -132,22 +178,20 @@ export default function Home() {
 
             <KeyFacts d={d} fy={fy} target={target} m={m} />
 
+            <Breakdown d={d} target={target} />
+
             <div className="grid grid-2 section">
-              <Breakdown d={d} target={target} />
               <section className="panel" aria-labelledby="plan">
                 <h2 id="plan">เบิกจ่ายสะสมเทียบแผน</h2>
                 <PlanVsActual cumulative={d.monthly.disbursedCumulative} targetPct={d.monthly.targetPct} budget={d.totals.currentBudget} upToMonth={m} annualPct={d.targets.annualPct} markMonth={8} />
               </section>
-            </div>
-
-            <section className="section" aria-labelledby="risk">
-              <div className="section-head">
-                <h2 id="risk">โครงการที่ต้องติดตาม</h2>
-                <Link to="/projects">ดูโครงการทั้งหมด</Link>
-              </div>
-              <div className="panel">
+              <section className="panel" aria-labelledby="risk">
+                <div className="section-head">
+                  <h2 id="risk">โครงการที่ต้องติดตาม</h2>
+                  <Link to="/projects">ดูทั้งหมด</Link>
+                </div>
                 {d.risks.length ? (
-                  <ul className="row-list grid-2-list">
+                  <ul className="row-list">
                     {d.risks.slice(0, 10).map((r) => (
                       <li key={r.projectId}>
                         <Link to={`/projects/${r.projectId}`}>{r.name}</Link>
@@ -156,8 +200,8 @@ export default function Home() {
                     ))}
                   </ul>
                 ) : <p className="muted" style={{ margin: 0 }}>ไม่มีโครงการที่ล่าช้าหรือเกินงบในขณะนี้</p>}
-              </div>
-            </section>
+              </section>
+            </div>
 
             <p className="small muted section">
               ข้อมูล ณ {formatThaiDateTime(d.generatedAt)}

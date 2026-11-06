@@ -21,9 +21,12 @@ export default function ProjectsAdmin({ user }: { user: SessionUser }) {
   return (
     <>
       <div className="section-head">
-        <h1 style={{ margin: 0 }}>โครงการและการเบิกจ่าย</h1>
+        <div>
+          <h1 style={{ margin: 0 }}>บันทึกการเบิกจ่าย</h1>
+          <p className="small muted" style={{ margin: 0 }}>โครงการ › กิจกรรม › หน่วยดำเนินการ — เปิดโครงการเพื่อบันทึกการเบิกจ่ายและผลการดำเนินงาน</p>
+        </div>
         <div className="btn-row">
-          <Link className="btn" to="/admin/plans">เลือกกิจกรรมจากแผนงบประมาณ</Link>
+          <Link className="btn btn-ghost" to="/admin/plans">แผนและผู้รับผิดชอบ</Link>
           <button className="btn btn-ghost" onClick={() => setOpen(true)}>เพิ่มโครงการนอกแผน</button>
         </div>
       </div>
@@ -53,7 +56,7 @@ export default function ProjectsAdmin({ user }: { user: SessionUser }) {
         ) : (
           <Empty title={`ยังไม่มีโครงการในปีงบ ${fy}`}>
             <p>เริ่มจากเลือกกิจกรรมที่กลุ่มงานรับผิดชอบในแผนงบประมาณ ระบบจะสร้างโครงการและงบให้อัตโนมัติ</p>
-            <div className="btn-row"><Link className="btn" to="/admin/plans">ไปที่แผนงบประมาณ</Link><button className="btn btn-ghost" onClick={() => setOpen(true)}>เพิ่มโครงการนอกแผน</button></div>
+            <div className="btn-row"><Link className="btn" to="/admin/plans">ไปที่แผนและผู้รับผิดชอบ</Link><button className="btn btn-ghost" onClick={() => setOpen(true)}>เพิ่มโครงการนอกแผน</button></div>
           </Empty>
         )}
       </Async>
