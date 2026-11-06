@@ -1,9 +1,18 @@
+# รวมการอัปเดต dependency เป็น PR เดียวต่อเดือน (ลดความรก) — อัปเดตด้านความปลอดภัยยังเปิด PR ทันทีตามปกติ
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
-    schedule: { interval: weekly }
-    open-pull-requests-limit: 5
+    schedule: { interval: monthly }
+    open-pull-requests-limit: 2
+    groups:
+      npm-all:
+        patterns: ['*']
+        update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: monthly }
+    open-pull-requests-limit: 1
+    groups:
+      actions-all:
+        patterns: ['*']
