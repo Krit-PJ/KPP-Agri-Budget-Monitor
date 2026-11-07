@@ -59,7 +59,8 @@ export function BreakdownTable({ rows, head, childrenOf, d, curQ, planFallback }
           <span className="xs muted"> {g.activities ? `${g.activities} กิจกรรม` : `${g.projects} โครงการ`}</span>
           <QuarterBar b={b} q={q} curQ={curQ} />
           <div className="qbar-cap">
-            {curQ > 0 && <>เป้าไตรมาส {curQ}: <b>{Math.round(q[curQ - 1] ?? 0)}%</b>{'  '}</>}คงเหลือ {pct1(remPct)}%
+            {curQ > 0 && <span>เป้าไตรมาส {curQ}: <b>{Math.round(q[curQ - 1] ?? 0)}%</b></span>}
+            <span>คงเหลือ {pct1(remPct)}%</span>
           </div>
         </td>
         <td data-label="งบประมาณ (บาท)" className="r"><Baht v={b.currentBudget} whole /></td>

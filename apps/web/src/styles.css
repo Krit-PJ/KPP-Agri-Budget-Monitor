@@ -519,7 +519,7 @@ input.is-edited { border-color: var(--straw); }
 .qbar-legend .key i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; }
 .qbar-legend .key i.tick { width: 4px; background: var(--forest-ink); }
 .qbar-legend b { color: var(--forest-ink); }
-.qbar-cap { font-size: var(--fs-xs); color: var(--ink-2); margin-top: 4px; }
+.qbar-cap { display: flex; flex-wrap: wrap; gap: 0 var(--s4); font-size: var(--fs-xs); font-weight: 400; color: var(--ink-2); margin-top: 4px; }
 .qtargets { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s3); }
 .qtargets span { border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: var(--fs-sm); color: var(--ink-2); background: var(--paper); }
 .qtargets span.is-now { border-color: var(--forest-ink); color: var(--forest-ink); font-weight: 700; }
@@ -527,4 +527,4 @@ input.is-edited { border-color: var(--straw); }
 .st-bad { color: var(--clay); font-weight: 600; white-space: nowrap; }
 .bd-table td.r, .bd-table th.r { font-size: var(--fs-md); }
 .bd-name { font-size: var(--fs-md); }
-@media (max-width: 640px) { .qbar-lg .qbar-tl { display: none; } .qbar-lg { margin-bottom: 0; } }
+@media (max-width: 640px) { .qbar-lg .qbar-tl { display: none; } .qbar-lg { margin-bottom: var(--s4); } }

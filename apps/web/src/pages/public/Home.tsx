@@ -46,7 +46,7 @@ function KeyFacts({ d, fy, target, m }: { d: PublicSummary; fy: number; target: 
         <span className="fact-l">เทียบแผนเดือนนี้ ({pct1(target)}%)</span>
         {m && target ? (
           <>
-            <span className="fact-v num">{gap >= 0 ? 'ทันแผน' : `ช้ากว่าแผน ${pct1(-gap)}%`}</span>
+            <span className="fact-v num">{gap >= 0 ? 'ทันแผน' : `ช้ากว่าแผน ${Math.round(-gap).toLocaleString('th-TH')} จุด`}</span>
             <span className="fact-n">{gap >= 0 ? `เบิกจ่ายแล้ว ${pct1(t.spendingPct)}%` : <>ต้องเบิกเพิ่ม <Baht v={needNow} short /> บาท จึงจะทันแผน</>}</span>
           </>
         ) : <span className="fact-n">ยังไม่ถึงช่วงเบิกจ่ายตามแผน</span>}
