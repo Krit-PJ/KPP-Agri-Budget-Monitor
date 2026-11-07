@@ -76,7 +76,7 @@ footer { max-width: var(--maxw); margin: 0 auto; padding: var(--s5) var(--s4); c
 .strip-figures { display: flex; gap: var(--s6); flex-wrap: wrap; align-items: baseline; margin-bottom: var(--s4); }
 .strip-big { font-family: var(--font-head); font-size: clamp(2.25rem, 6vw, 3.5rem); font-weight: 700; color: var(--forest-ink); line-height: 1; }
 .strip-big small { font-size: 0.45em; font-weight: 600; color: var(--ink-2); margin-left: var(--s2); }
-.strip { position: relative; height: 44px; border-radius: var(--r-sm); background: repeating-linear-gradient(135deg, #eef2ee 0 8px, #e6ece7 8px 16px); overflow: visible; display: flex; }
+.strip { position: relative; height: 44px; margin-top: 1.5rem; border-radius: var(--r-sm); background: repeating-linear-gradient(135deg, #eef2ee 0 8px, #e6ece7 8px 16px); overflow: visible; display: flex; }
 .strip-seg { height: 100%; }
 .strip-seg:first-child { border-radius: var(--r-sm) 0 0 var(--r-sm); }
 .seg-disbursed { background: var(--paddy); }
@@ -496,3 +496,35 @@ input.is-edited { border-color: var(--straw); }
   .exec-kpis .exec-pct { background: none; }
   .exec-detail-title { font-size: 15pt; }
 }
+.area-pao td { background: #f1f7f2; }
+.area-pao.is-bad td { background: #fbeeea; color: var(--clay); }
+
+/* ===== แถบ 3 ชั้น: เบิกจ่าย / ผูกพัน / คงเหลือ + ขีดเป้ารายไตรมาส ===== */
+.qbar { position: relative; }
+.qbar-track { display: flex; overflow: hidden; background: #e3e9e4; border: 1px solid #cfd8d1; }
+.qbar-sm .qbar-track { height: 12px; border-radius: 6px; }
+.qbar-lg .qbar-track { height: 40px; border-radius: var(--r-sm); }
+.qbar-d { background: var(--paddy); }
+.qbar-over { background: var(--clay); }
+.qbar-c { background: var(--commit); }
+.qbar-tick { position: absolute; top: -3px; height: calc(100% + 6px); width: 2px; margin-left: -1px; background: #7d8a80; }
+.qbar-tick.is-now { width: 4px; margin-left: -2px; background: var(--forest-ink); }
+.qbar-lg .qbar-tick { top: -6px; height: calc(100% + 12px); }
+.qbar-lg { margin-bottom: 1.6rem; }
+.qbar-tl { position: absolute; top: 100%; margin-top: 4px; transform: translateX(-50%); white-space: nowrap; font-size: var(--fs-xs); color: var(--ink-2); }
+.qbar-tl.at-end { transform: translateX(-100%); }
+.qbar-tl.at-start { transform: none; }
+.qbar-tick.is-now .qbar-tl { color: var(--forest-ink); font-weight: 700; }
+.qbar-legend { display: flex; gap: var(--s2) var(--s5); flex-wrap: wrap; font-size: var(--fs-sm); color: var(--ink-2); }
+.qbar-legend .key i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; }
+.qbar-legend .key i.tick { width: 4px; background: var(--forest-ink); }
+.qbar-legend b { color: var(--forest-ink); }
+.qbar-cap { font-size: var(--fs-xs); color: var(--ink-2); margin-top: 4px; }
+.qtargets { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s3); }
+.qtargets span { border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; font-size: var(--fs-sm); color: var(--ink-2); background: var(--paper); }
+.qtargets span.is-now { border-color: var(--forest-ink); color: var(--forest-ink); font-weight: 700; }
+.st-ok { color: var(--forest); font-weight: 600; white-space: nowrap; }
+.st-bad { color: var(--clay); font-weight: 600; white-space: nowrap; }
+.bd-table td.r, .bd-table th.r { font-size: var(--fs-md); }
+.bd-name { font-size: var(--fs-md); }
+@media (max-width: 640px) { .qbar-lg .qbar-tl { display: none; } .qbar-lg { margin-bottom: 0; } }

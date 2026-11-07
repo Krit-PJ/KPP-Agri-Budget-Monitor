@@ -276,6 +276,10 @@ function Progress({ label, done, total, hint }: { label: string; done: number; t
 type Mode = 'province' | 'all' | 'some';
 const toBaht = (s: number) => (s / 100).toFixed(2).replace(/\.00$/, '');
 
+/**
+ * แบบ "ทั้ง 11 อำเภอ" / "บางอำเภอ" มีแถวระดับจังหวัดเสมอ = ส่วนที่เหลือ (ยอดทั้งสิ้น − ผลรวมของอำเภอ)
+ * ผู้ใช้แก้เฉพาะตัวเลขของอำเภอ ส่วนจังหวัดคำนวณให้เอง จึงไม่ต้องคิดเลขให้ยอดรวมพอดี
+ */
 function AreaEditor({ item, st, onCancel, onDone }: { item: PlanItem; st: PlanActivityState; onCancel: () => void; onDone: () => void }) {
   const l = useLookups();
   const toast = useToast();
@@ -283,21 +287,25 @@ function AreaEditor({ item, st, onCancel, onDone }: { item: PlanItem; st: PlanAc
   const pao = l.units.find((u) => u.kind === 'PROVINCE')!;
   const districts = l.units.filter((u) => u.kind === 'DISTRICT');
   const saved = st.units.map((u) => u.unitId);
-  const savedDistricts = saved.filter((x) => districts.some((u) => u.id === x));
-  const [mode, setMode] = useState<Mode>(!saved.length || (saved.length === 1 && saved[0] === pao.id) ? 'province' : savedDistricts.length === districts.length && saved.length === districts.length ? 'all' : 'some');
-  const [some, setSome] = useState<string[]>(mode === 'some' ? saved : []);
-  const sel = mode === 'province' ? [pao.id] : mode === 'all' ? districts.map((u) => u.id) : l.units.filter((u) => some.includes(u.id)).map((u) => u.id);
+  const savedDistricts = districts.filter((u) => saved.includes(u.id)).map((u) => u.id);
+  const [mode, setMode] = useState<Mode>(!savedDistricts.length ? 'province' : savedDistricts.length === districts.length ? 'all' : 'some');
+  const [some, setSome] = useState<string[]>(savedDistricts.length < districts.length ? savedDistricts : []);
+  const sel = mode === 'province' ? [] : mode === 'all' ? districts.map((u) => u.id) : districts.filter((u) => some.includes(u.id)).map((u) => u.id);
   const total = Math.round(item.quantity || 0);
   const hasTarget = total > 0;
 
-  // ค่าในตาราง: ใช้ค่าที่บันทึกไว้ถ้าพื้นที่ชุดเดิม ไม่เช่นนั้นเป็น "ร่าง" แบ่งเท่ากัน
-  const draft = () => {
+  // ค่าในตาราง: ใช้ค่าที่บันทึกไว้ถ้าเป็นอำเภอชุดเดิม ไม่เช่นนั้นเป็น "ร่าง" แบ่งเท่ากันเฉพาะอำเภอ (จังหวัด = 0)
+  const equal = () => {
     const m = splitMoney(st.budget, sel.length);
     const qty = splitEqual(total, sel.length);
-    return Object.fromEntries(sel.map((id, k) => {
-      const old = st.units.find((u) => u.unitId === id);
-      const sameSet = sel.length === saved.length && sel.every((x) => saved.includes(x));
-      return [id, sameSet && old ? { q: String(old.targetQty || ''), b: toBaht(old.budgetSatang) } : { q: hasTarget ? String(qty[k]) : '', b: toBaht(m[k]) }];
+    return Object.fromEntries(sel.map((id, k) => [id, { q: hasTarget ? String(qty[k]) : '', b: toBaht(m[k]) }]));
+  };
+  const draft = () => {
+    const sameSet = sel.length > 0 && sel.length === savedDistricts.length && sel.every((x) => savedDistricts.includes(x));
+    if (!sameSet) return equal();
+    return Object.fromEntries(sel.map((id) => {
+      const old = st.units.find((u) => u.unitId === id)!;
+      return [id, { q: hasTarget ? String(old.targetQty || 0) : '', b: toBaht(old.budgetSatang) }];
     }));
   };
   const [vals, setVals] = useState<Record<string, { q: string; b: string }>>(draft);
@@ -308,74 +316,79 @@ function AreaEditor({ item, st, onCancel, onDone }: { item: PlanItem; st: PlanAc
     setAsking(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selKey]);
-  const reDraft = () => {
-    const m = splitMoney(st.budget, sel.length);
-    const qty = splitEqual(total, sel.length);
-    setVals(Object.fromEntries(sel.map((id, k) => [id, { q: hasTarget ? String(qty[k]) : '', b: toBaht(m[k]) }])));
-  };
 
   const rows = sel.map((id) => ({ id, unit: l.units.find((u) => u.id === id)!, q: Number(vals[id]?.q || 0), b: bahtInputToSatang(vals[id]?.b ?? '') }));
   const sumQ = rows.reduce((a, r) => a + r.q, 0);
   const sumB = rows.reduce((a, r) => a + (r.b ?? 0), 0);
   const badMoney = rows.some((r) => r.b === null);
-  const qOk = !hasTarget || sumQ === total;
-  const bOk = !badMoney && sumB === st.budget;
-  const ok = rows.length > 0 && qOk && bOk;
+  // ส่วนของจังหวัด = ส่วนที่เหลือ
+  const restQ = hasTarget ? total - sumQ : 0;
+  const restB = st.budget - sumB;
+  const qOk = restQ >= 0;
+  const bOk = !badMoney && restB >= 0;
+  const ok = (mode === 'province' || rows.length > 0) && qOk && bOk;
+  const shares = mode === 'province'
+    ? [{ unitId: pao.id, budgetSatang: st.budget, targetQty: total }]
+    : [...(restB > 0 || restQ > 0 ? [{ unitId: pao.id, budgetSatang: restB, targetQty: restQ }] : []), ...rows.map((r) => ({ unitId: r.id, budgetSatang: r.b ?? 0, targetQty: r.q }))];
 
   const save = () => void run(async () => {
-    await call('activities.setUnits', { activityId: st.activityId, units: rows.map((r) => ({ unitId: r.id, budgetSatang: r.b ?? 0, targetQty: r.q })) });
+    await call('activities.setUnits', { activityId: st.activityId, units: shares });
     toast('บันทึกพื้นที่ดำเนินการแล้ว');
     onDone();
   });
-  const diff = (v: number, t: number, unit: string, money = false) =>
-    v === t ? <span className="sum-ok">✓ ครบ</span> : <span className="sum-bad">{v < t ? 'ขาด' : 'เกิน'} {money ? formatBaht(Math.abs(t - v)) : Math.abs(t - v).toLocaleString('th-TH')} {unit}</span>;
+  const over = (v: number, unit: string, money = false) =>
+    v >= 0 ? <span className="sum-ok">✓ ครบ</span> : <span className="sum-bad">เกิน {money ? formatBaht(-v) : (-v).toLocaleString('th-TH')} {unit}</span>;
+  const qtyText = (v: number) => (hasTarget ? v.toLocaleString('th-TH') : '–');
 
   return (
     <div className="area-editor">
       {error && <ErrorBox error={error} />}
       <fieldset className="area-mode">
         <legend>พื้นที่ดำเนินการ</legend>
-        {([['province', 'ระดับจังหวัด (ไม่ลงอำเภอ)'], ['all', `ทั้ง ${districts.length} อำเภอ`], ['some', 'บางอำเภอ']] as Array<[Mode, string]>).map(([m, label]) => (
+        {([['province', 'ระดับจังหวัดอย่างเดียว'], ['all', `จังหวัด + ทั้ง ${districts.length} อำเภอ`], ['some', 'จังหวัด + บางอำเภอ']] as Array<[Mode, string]>).map(([m, label]) => (
           <label key={m} className="area-opt"><input type="radio" name={`mode-${item.id}`} checked={mode === m} onChange={() => setMode(m)} /> {label}</label>
         ))}
       </fieldset>
       {mode === 'some' && (
         <div className="unit-grid area-pick">
-          <label className="unit-opt"><input type="checkbox" checked={some.includes(pao.id)} onChange={(e) => setSome((s0) => (e.target.checked ? [...s0, pao.id] : s0.filter((x) => x !== pao.id)))} /> ระดับจังหวัด</label>
           {districts.map((u) => (
             <label key={u.id} className="unit-opt"><input type="checkbox" checked={some.includes(u.id)} onChange={(e) => setSome((s0) => (e.target.checked ? [...s0, u.id] : s0.filter((x) => x !== u.id)))} /> {areaName(u)}</label>
           ))}
         </div>
       )}
-      {rows.length > 0 && (
-        <table className="data area-table">
-          <thead><tr><th>พื้นที่</th><th className="r">เป้าหมาย{item.unit ? ` (${item.unit})` : ''}</th><th className="r">งบประมาณ (บาท)</th></tr></thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id}>
-                <td>{areaName(r.unit)}</td>
-                <td className="r">{hasTarget ? <input inputMode="numeric" value={vals[r.id]?.q ?? ''} onChange={(e) => setVals({ ...vals, [r.id]: { ...vals[r.id], q: e.target.value.replace(/[^\d]/g, '') } })} aria-label={`เป้าหมาย ${areaName(r.unit)}`} /> : <span className="muted">–</span>}</td>
-                <td className="r"><input inputMode="decimal" value={vals[r.id]?.b ?? ''} onChange={(e) => setVals({ ...vals, [r.id]: { ...vals[r.id], b: e.target.value } })} aria-label={`งบประมาณ ${areaName(r.unit)}`} className={r.b === null ? 'is-invalid' : ''} /></td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td>รวม</td>
-              <td className="r">{hasTarget ? <>{sumQ.toLocaleString('th-TH')} / {total.toLocaleString('th-TH')} {diff(sumQ, total, item.unit)}</> : '–'}</td>
-              <td className="r">{formatBaht(sumB)} / {formatBaht(st.budget)} {badMoney ? <span className="sum-bad">ตัวเลขไม่ถูกต้อง</span> : diff(sumB, st.budget, 'บาท', true)}</td>
+      <table className="data area-table">
+        <thead><tr><th>พื้นที่</th><th className="r">เป้าหมาย{item.unit ? ` (${item.unit})` : ''}</th><th className="r">งบประมาณ (บาท)</th></tr></thead>
+        <tbody>
+          <tr className={`area-pao ${mode !== 'province' && (!qOk || !bOk) ? 'is-bad' : ''}`}>
+            <td>ระดับจังหวัด{mode !== 'province' && <div className="xs muted">ส่วนที่เหลือ คำนวณให้อัตโนมัติ</div>}</td>
+            <td className="r num">{qtyText(mode === 'province' ? total : restQ)}</td>
+            <td className="r num">{badMoney && mode !== 'province' ? '–' : formatBaht(mode === 'province' ? st.budget : restB)}</td>
+          </tr>
+          {rows.map((r) => (
+            <tr key={r.id}>
+              <td>{areaName(r.unit)}</td>
+              <td className="r">{hasTarget ? <input inputMode="numeric" value={vals[r.id]?.q ?? ''} onChange={(e) => setVals({ ...vals, [r.id]: { ...vals[r.id], q: e.target.value.replace(/[^\d]/g, '') } })} aria-label={`เป้าหมาย ${areaName(r.unit)}`} /> : <span className="muted">–</span>}</td>
+              <td className="r"><input inputMode="decimal" value={vals[r.id]?.b ?? ''} onChange={(e) => setVals({ ...vals, [r.id]: { ...vals[r.id], b: e.target.value } })} aria-label={`งบประมาณ ${areaName(r.unit)}`} className={r.b === null ? 'is-invalid' : ''} /></td>
             </tr>
-          </tfoot>
-        </table>
-      )}
-      {!rows.length && <p className="small" style={{ color: 'var(--clay)' }}>เลือกอย่างน้อย 1 พื้นที่</p>}
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>รวม</td>
+            <td className="r">{hasTarget ? <>{total.toLocaleString('th-TH')} {mode === 'province' ? <span className="sum-ok">✓ ครบ</span> : over(restQ, item.unit)}</> : '–'}</td>
+            <td className="r">{formatBaht(st.budget)} {mode === 'province' ? <span className="sum-ok">✓ ครบ</span> : badMoney ? <span className="sum-bad">ตัวเลขไม่ถูกต้อง</span> : over(restB, 'บาท', true)}</td>
+          </tr>
+        </tfoot>
+      </table>
+      {mode === 'some' && !rows.length && <p className="small" style={{ color: 'var(--clay)' }}>ติ๊กเลือกอย่างน้อย 1 อำเภอ</p>}
       {st.hasDisbursement && <p className="xs muted">กิจกรรมนี้มีการเบิกจ่ายแล้ว: พื้นที่ที่เบิกแล้วเอาออกไม่ได้ และงบต้องไม่ต่ำกว่ายอดที่เบิก</p>}
       {asking ? (
         <div className="confirm-box" role="alertdialog" aria-label="ยืนยันการบันทึก">
           <p><strong>ยืนยันบันทึกพื้นที่ดำเนินการ</strong></p>
           <p className="small">
-            {areaSummary(sel, l.units, 11)}
-            {hasTarget && <> — เป้าหมายรวม {sumQ.toLocaleString('th-TH')} {item.unit}</>} งบรวม {formatBaht(sumB)} บาท
+            {areaSummary(shares.map((x) => x.unitId), l.units, 11)}
+            {hasTarget && <> — เป้าหมายรวม {total.toLocaleString('th-TH')} {item.unit}</>} งบรวม {formatBaht(st.budget)} บาท
+            {mode !== 'province' && restB > 0 && <> (ระดับจังหวัด {formatBaht(restB)} บาท)</>}
           </p>
           <div className="btn-row">
             <button className="btn" onClick={save} disabled={busy}>{busy ? 'กำลังบันทึก…' : 'ยืนยันและบันทึก'}</button>
@@ -385,9 +398,9 @@ function AreaEditor({ item, st, onCancel, onDone }: { item: PlanItem; st: PlanAc
       ) : (
         <div className="btn-row">
           <button className="btn" onClick={() => setAsking(true)} disabled={!ok}>บันทึก</button>
-          {rows.length > 1 && <button className="btn btn-ghost" onClick={reDraft}>แบ่งเท่ากันใหม่</button>}
+          {rows.length > 1 && <button className="btn btn-ghost" onClick={() => setVals(equal())}>แบ่งเท่ากันใหม่</button>}
           <button className="btn btn-ghost" onClick={onCancel}>ยกเลิก</button>
-          {!ok && rows.length > 0 && <span className="small" style={{ color: 'var(--clay)' }}>ผลรวมต้องเท่ายอดทั้งสิ้นก่อนบันทึก</span>}
+          {!ok && (mode === 'province' || rows.length > 0) && <span className="small" style={{ color: 'var(--clay)' }}>ยอดของอำเภอรวมกันเกินยอดทั้งสิ้น</span>}
         </div>
       )}
     </div>

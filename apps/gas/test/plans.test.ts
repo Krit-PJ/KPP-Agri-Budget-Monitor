@@ -239,6 +239,16 @@ describe('หน่วยดำเนินการ (ADR-006)', () => {
     const m = fiscalMonthIndex(todayBangkok(env.now()));
     expect(Math.abs(prod.plan - planToDate(item.amountSatang, `${item.amountSatang},0,0,0`, '', m))).toBeLessThanOrEqual(3);
     expect(sum.activitiesWithoutUnits).toBe(0);
+    // แผนสะสมรายไตรมาส: ไตรมาส 1 = เต็มงบ (ปัดเศษรายหน่วย ±1 สตางค์)
+    const pq = (prod as unknown as { planQ: number[] }).planQ;
+    expect(pq).toHaveLength(4);
+    for (const v of pq) expect(Math.abs(v - item.amountSatang)).toBeLessThanOrEqual(3);
+    // อำเภอ → กลุ่มงาน
+    const byUnit = (sum as unknown as { byUnit: Array<{ key: string; planQ: number[]; groups: Array<{ key: string; budget: { currentBudget: number } }> }> }).byUnit;
+    const u1 = byUnit.find((u) => u.key === ids[1])!;
+    expect(u1.groups.map((g) => g.key)).toEqual([wg('PROD')]);
+    expect(u1.groups[0].budget.currentBudget).toBe(share[1]);
+    expect(u1.planQ[0]).toBe(share[1]);
     // รายงาน: 1 แถวต่อ กิจกรรม × หน่วย
     const rep = ok<{ rows: Array<{ unitId: string; budget: number; disbursed: number }> }>('reports.data', { fiscalYear: 2570 }, superToken);
     expect(rep.rows.map((r) => r.unitId)).toEqual(ids);

@@ -111,15 +111,18 @@ export function buildSummary(ctx: Ctx, fy: number, onlyPublished: boolean): Publ
   const unitRows = buildUnitRows(ctx, ds, projects, m);
   const units = listUnits(ctx);
   const unitName = (id: string) => areaName(units.find((u) => u.id === id));
+  const total = (key: string, label: string, rs: ReportRow[]): GroupTotal => {
+    const { plan, planQ, ...budget } = summarizeRows(rs);
+    return { key, label, budget, plan, planQ, projects: new Set(rs.map((r) => r.projectId)).size, activities: new Set(rs.filter((r) => r.activityId).map((r) => r.activityId)).size };
+  };
   const byUnitOf = (rows: ReportRow[]): GroupTotal[] => {
     const mm = new Map<string, ReportRow[]>();
     for (const r of rows) (mm.get(r.unitId) ?? mm.set(r.unitId, []).get(r.unitId)!).push(r);
-    return units.filter((u) => mm.has(u.id)).map((u) => {
-      const rs = mm.get(u.id)!;
-      const { plan, ...budget } = summarizeRows(rs);
-      return { key: u.id, label: unitName(u.id), budget, plan, projects: new Set(rs.map((r) => r.projectId)).size, activities: new Set(rs.map((r) => r.activityId)).size };
-    });
+    return units.filter((u) => mm.has(u.id)).map((u) => total(u.id, unitName(u.id), mm.get(u.id)!));
   };
+  // อำเภอ → กลุ่มงาน (เรียงตามลำดับกลุ่มงานในระบบ)
+  const byGroupOf = (rows: ReportRow[]): GroupTotal[] =>
+    groups.filter((g) => rows.some((r) => r.workgroupId === g.id)).map((g) => total(g.id, g.name, rows.filter((r) => r.workgroupId === g.id)));
   const settings = getSettings(ctx);
   const inScopeDisb = ds.disbursements.filter((d) => ids.has(d.projectId));
   // แผนงาน: ชื่อจากแผนงบประมาณที่นำเข้า
@@ -158,9 +161,10 @@ export function buildSummary(ctx: Ctx, fy: number, onlyPublished: boolean): Publ
     byFundingSource: group((p) => p.fundingSourceId, (k) => sources.find((s) => s.id === k)?.name ?? 'ไม่ระบุ'),
     byWorkgroup: group((p) => p.workgroupId, (k) => groups.find((g) => g.id === k)?.name ?? 'ไม่ระบุ').map((g) => {
       const rs = unitRows.filter((r) => r.workgroupId === g.key);
-      return { ...g, plan: summarizeRows(rs).plan, activities: new Set(rs.filter((r) => r.activityId).map((r) => r.activityId)).size, units: byUnitOf(rs) };
+      const sum = summarizeRows(rs);
+      return { ...g, plan: sum.plan, planQ: sum.planQ, activities: new Set(rs.filter((r) => r.activityId).map((r) => r.activityId)).size, units: byUnitOf(rs) };
     }),
-    byUnit: byUnitOf(unitRows),
+    byUnit: byUnitOf(unitRows).map((u) => ({ ...u, groups: byGroupOf(unitRows.filter((r) => r.unitId === u.key)) })),
     activitiesWithoutUnits: (() => {
       const withShares = new Set(ctx.env.db.list<{ activityId: string; isDeleted: boolean }>('ActivityUnits').filter((x) => !x.isDeleted).map((x) => x.activityId));
       return ds.activities.filter((a) => ids.has(a.projectId) && !withShares.has(a.id)).length;

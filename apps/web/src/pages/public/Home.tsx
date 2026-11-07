@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fiscalMonthIndex, fiscalYearRange, formatThaiDate, formatThaiDateTime, RISK_LABEL, todayBangkok, type GroupTotal, type PublicSummary } from '@kpp/domain';
-import { Async, Baht, BudgetStrip, BulletBar, Pct, PlanVsActual, useApi, useLookups } from '../../components/ui';
+import { fiscalMonthIndex, fiscalYearRange, formatThaiDate, formatThaiDateTime, todayBangkok, type GroupTotal, type PublicSummary } from '@kpp/domain';
+import { Async, Baht, QuarterBar, useApi, useLookups } from '../../components/ui';
+import { BreakdownTable, quarterOf, totalQuarterPct } from './Breakdown';
 
 export function FiscalYearPicker({ value, onChange }: { value: number; onChange: (fy: number) => void }) {
   const l = useLookups();
@@ -64,154 +65,87 @@ function KeyFacts({ d, fy, target, m }: { d: PublicSummary; fy: number; target: 
   );
 }
 
-type By = 'group' | 'unit' | 'plan' | 'fund';
-const BY_LABEL: Record<By, string> = { group: 'กลุ่มงาน', unit: 'พื้นที่ดำเนินการ', plan: 'แผนงาน', fund: 'แหล่งงบ' };
-
-/**
- * ตารางผลการเบิกจ่าย: งบ / แผน ณ เดือนนี้ / เบิกจ่าย / ผูกพัน / คงเหลือ / ร้อยละคงเหลือ + แถบเทียบเป้า
- * แถวกลุ่มงานกดเพื่อดูรายพื้นที่ดำเนินการ (ระดับจังหวัด/อำเภอ)
- */
-function Breakdown({ d, target }: { d: PublicSummary; target: number }) {
-  const [by, setBy] = useState<By>('group');
-  const [open, setOpen] = useState<Set<string>>(new Set());
-  const planOf = (g: GroupTotal) => g.plan ?? Math.round((target / 100) * g.budget.currentBudget);
-  const gap = (g: GroupTotal) => g.budget.disbursed - planOf(g);
-  const src = by === 'group' ? d.byWorkgroup : by === 'unit' ? d.byUnit : by === 'plan' ? d.byPlan : d.byFundingSource;
-  const rows = by === 'unit' || by === 'fund' ? src : [...src].sort((a, b) => gap(a) / Math.max(1, a.budget.currentBudget) - gap(b) / Math.max(1, b.budget.currentBudget));
-  const tot = rows.reduce((a, g) => ({ b: a.b + g.budget.currentBudget, p: a.p + planOf(g), d: a.d + g.budget.disbursed, c: a.c + g.budget.committed, r: a.r + g.budget.remaining }), { b: 0, p: 0, d: 0, c: 0, r: 0 });
-  const row = (g: GroupTotal, sub = false, expandable = false) => {
-    const plan = planOf(g);
-    const isOpen = open.has(g.key);
-    const remPct = g.budget.currentBudget ? (g.budget.remaining / g.budget.currentBudget) * 100 : 0;
-    const tPct = g.budget.currentBudget ? (plan / g.budget.currentBudget) * 100 : 0;
-    return (
-      <tr key={(sub ? 'u:' : '') + g.key} className={sub ? 'bd-sub' : expandable ? 'bd-main' : ''}>
-        <td className="primary">
-          {expandable ? (
-            <button className="bd-toggle" aria-expanded={isOpen} onClick={() => setOpen((s0) => { const n = new Set(s0); if (n.has(g.key)) n.delete(g.key); else n.add(g.key); return n; })}>
-              <span aria-hidden="true">{isOpen ? '▾' : '▸'}</span> {g.label}
-            </button>
-          ) : <span>{g.label}</span>}
-          <span className="xs muted"> {g.activities ? `${g.activities} กิจกรรม` : `${g.projects} โครงการ`}</span>
-          <BulletBar b={g.budget} targetPct={tPct} />
-        </td>
-        <td data-label="งบประมาณ" className="r"><Baht v={g.budget.currentBudget} /></td>
-        <td data-label="แผน ณ เดือนนี้" className="r"><Baht v={plan} /></td>
-        <td data-label="เบิกจ่าย" className="r"><Baht v={g.budget.disbursed} /><div className={`xs ${g.budget.disbursed < plan ? 'bd-behind' : 'muted'}`}><Pct v={g.budget.spendingPct} /></div></td>
-        <td data-label="ผูกพัน" className="r"><Baht v={g.budget.committed} /></td>
-        <td data-label="คงเหลือ" className="r"><Baht v={g.budget.remaining} /></td>
-        <td data-label="% คงเหลือ" className="r"><Pct v={remPct} /></td>
-      </tr>
-    );
-  };
-  return (
-    <section className="panel section" aria-labelledby="breakdown">
-      <div className="section-head" style={{ marginBottom: 'var(--s2)' }}>
-        <h2 id="breakdown">ผลการเบิกจ่ายแยกตาม{BY_LABEL[by]}</h2>
-        <div className="segmented" role="group" aria-label="แยกตาม">
-          {(['group', 'unit', 'plan', 'fund'] as By[]).map((k) => <button key={k} aria-pressed={by === k} onClick={() => setBy(k)}>{BY_LABEL[k]}</button>)}
-        </div>
-      </div>
-      <p className="small muted" style={{ marginTop: 0 }}>
-        {by === 'group' ? 'กดชื่อกลุ่มงานเพื่อดูรายอำเภอ ' : ''}{by === 'group' || by === 'plan' ? 'เรียงจากที่ช้ากว่าแผนมากที่สุด ' : ''}
-        ขีดตั้งบนแถบคือแผน ณ เดือนนี้{by === 'unit' && d.activitiesWithoutUnits ? ` — ${d.activitiesWithoutUnits} กิจกรรมยังไม่ได้แบ่งงบให้อำเภอ จึงนับเป็นของสนง.เกษตรจังหวัด` : ''}
-      </p>
-      {rows.length ? (
-        <div className="table-wrap">
-          <table className="data stack bd-table">
-            <thead><tr><th>{BY_LABEL[by]}</th><th className="r">งบประมาณ</th><th className="r">แผน ณ เดือนนี้</th><th className="r">เบิกจ่าย</th><th className="r">ผูกพัน</th><th className="r">คงเหลือ</th><th className="r">% คงเหลือ</th></tr></thead>
-            <tbody>
-              {rows.map((g) => [row(g, false, by === 'group' && !!g.units?.length), ...(by === 'group' && open.has(g.key) ? (g.units ?? []).map((u) => row(u, true)) : [])])}
-            </tbody>
-            <tfoot>
-              <tr>
-                <td>รวม</td>
-                <td data-label="งบประมาณ" className="r"><Baht v={tot.b} /></td>
-                <td data-label="แผน ณ เดือนนี้" className="r"><Baht v={tot.p} /></td>
-                <td data-label="เบิกจ่าย" className="r"><Baht v={tot.d} /><div className="xs muted"><Pct v={tot.b ? (tot.d / tot.b) * 100 : 0} /></div></td>
-                <td data-label="ผูกพัน" className="r"><Baht v={tot.c} /></td>
-                <td data-label="คงเหลือ" className="r"><Baht v={tot.r} /></td>
-                <td data-label="% คงเหลือ" className="r"><Pct v={tot.b ? (tot.r / tot.b) * 100 : 0} /></td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      ) : <p className="muted">ยังไม่มีโครงการในปีงบนี้</p>}
-    </section>
-  );
+/** เรียงตามลำดับในระบบ (คงที่ทุกเดือน) — กลุ่มงานตามผังองค์กร, พื้นที่: จังหวัดแล้วอำเภอตามรหัส */
+function inOrder(rows: GroupTotal[], ids: string[]): GroupTotal[] {
+  const pos = (k: string) => { const i = ids.indexOf(k); return i < 0 ? ids.length : i; };
+  return [...rows].sort((a, b) => pos(a.key) - pos(b.key));
 }
 
+/** หน้าภาพรวมสำหรับผู้บริหาร: ตัวเลขหลัก + แถบ 3 ชั้น, เรื่องที่ต้องรู้, แยกตามกลุ่มงาน, แยกตามพื้นที่ */
 export default function Home() {
   const l = useLookups();
   const [fy, setFy] = useState(l.currentFiscalYear);
   const s = useApi('public.summary', { fiscalYear: fy }, [fy]);
   const m = monthsElapsed(fy);
+  const curQ = quarterOf(m);
+  const groupIds = l.workgroups.map((g) => g.id);
+  const unitIds = l.units.map((u) => u.id);
   return (
     <Async s={s} lines={8}>
       {(d) => {
         const target = m ? d.monthly.targetPct[m - 1] : 0;
-        const c = d.counts;
+        const t = d.totals;
+        const q = totalQuarterPct(d);
+        const remPct = t.currentBudget ? (t.remaining / t.currentBudget) * 100 : 0;
+        const acts = d.byWorkgroup.reduce((a, g) => a + (g.activities ?? 0), 0);
+        const confirmed = Math.max(0, acts - (d.activitiesWithoutUnits ?? 0));
         return (
           <>
             <section className="hero" aria-labelledby="hero-title">
               <div className="hero-head">
                 <div>
-                  <h1 id="hero-title">งบประมาณปี {fy} เบิกจ่ายไปแล้ว <span className="num">{pct1(d.totals.spendingPct)}%</span></h1>
+                  <h1 id="hero-title">งบประมาณปี {fy} เบิกจ่ายไปแล้ว <span className="num">{pct1(t.spendingPct)}%</span></h1>
                   <p className="hero-lede">
-                    {c.total} โครงการ งบหลังโอนเปลี่ยนแปลง <Baht v={d.totals.currentBudget} short /> บาท
-                    {m > 0 && target > 0 && (d.totals.spendingPct >= target
-                      ? ` เป็นไปตามแผนของเดือนนี้ (${target.toFixed(0)}%)`
-                      : ` ต่ำกว่าแผนของเดือนนี้ที่ ${target.toFixed(0)}%`)}
+                    งบประมาณทั้งสิ้น <Baht v={t.currentBudget} short /> บาท
+                    {m > 0 && target > 0 && (t.spendingPct >= target
+                      ? ` เป็นไปตามแผนสะสมของเดือนนี้ (${target.toFixed(0)}%)`
+                      : ` ต่ำกว่าแผนสะสมของเดือนนี้ที่ ${target.toFixed(0)}%`)}
                   </p>
                 </div>
                 <FiscalYearPicker value={fy} onChange={setFy} />
               </div>
               <div className="strip-wrap">
-                <BudgetStrip b={d.totals} targetPct={m ? target : undefined} label={`งบประมาณปี ${fy}`} />
+                <QuarterBar b={t} q={q} curQ={curQ} size="lg" />
+                <div className="qbar-legend">
+                  <span className="key"><i style={{ background: t.remaining < 0 ? 'var(--clay)' : 'var(--paddy)' }} />เบิกจ่ายแล้ว <b><Baht v={t.disbursed} short /></b> ({pct1(t.spendingPct)}%)</span>
+                  <span className="key"><i style={{ background: 'var(--commit)' }} />ผูกพัน <b><Baht v={t.committed} short /></b></span>
+                  <span className="key"><i style={{ background: '#e3e9e4', border: '1px solid #cfd8d1' }} />คงเหลือ <b><Baht v={t.remaining} short /></b> ({pct1(remPct)}%)</span>
+                  <span className="key"><i className="tick" />เป้าเบิกจ่ายสะสมรายไตรมาส</span>
+                </div>
+                <div className="qtargets" aria-label="เป้าเบิกจ่ายสะสมรายไตรมาส">
+                  {q.map((v, i) => <span key={i} className={curQ === i + 1 ? 'is-now' : ''}>ไตรมาส {i + 1}: {Math.round(v)}%{curQ === i + 1 ? ' (ไตรมาสนี้)' : ''}</span>)}
+                </div>
               </div>
-              <p className="small status-line">
-                กำลังดำเนินการ {c.inProgress} ยังไม่เริ่ม {c.planned} เสร็จสิ้น {c.completed} โครงการ
-                {c.delayed > 0 && <span style={{ color: 'var(--clay)' }}>, ล่าช้าหรือเบิกจ่ายต่ำกว่าแผน {c.delayed} โครงการ</span>}
-                {d.avgPhysicalProgress > 0 && `, ผลการดำเนินงานเฉลี่ย ${pct1(d.avgPhysicalProgress)}%`}
-              </p>
             </section>
 
             <KeyFacts d={d} fy={fy} target={target} m={m} />
 
-            <Breakdown d={d} target={target} />
+            <section className="panel section" aria-labelledby="by-group">
+              <h2 id="by-group">ผลการเบิกจ่ายแยกตามกลุ่มงาน</h2>
+              <p className="small muted" style={{ marginTop: 0 }}>กดชื่อกลุ่มงานเพื่อดูรายพื้นที่ดำเนินการ ขีดตั้งบนแถบคือเป้าสะสมสิ้นไตรมาส 1–4 (ขีดเข้ม = ไตรมาสนี้) และ &ldquo;เทียบแผน&rdquo; เทียบกับแผนสะสม ณ สิ้นเดือนนี้</p>
+              {d.byWorkgroup.length
+                ? <BreakdownTable rows={inOrder(d.byWorkgroup, groupIds)} head="กลุ่มงาน" childrenOf={(g) => inOrder(g.units ?? [], unitIds)} d={d} curQ={curQ} planFallback={target} />
+                : <p className="muted">ยังไม่มีโครงการในปีงบนี้</p>}
+            </section>
 
-            <div className="grid grid-2 section">
-              <section className="panel" aria-labelledby="plan">
-                <h2 id="plan">เบิกจ่ายสะสมเทียบแผน</h2>
-                <PlanVsActual cumulative={d.monthly.disbursedCumulative} targetPct={d.monthly.targetPct} budget={d.totals.currentBudget} upToMonth={m} annualPct={d.targets.annualPct} markMonth={8} />
-              </section>
-              <section className="panel" aria-labelledby="risk">
-                <div className="section-head">
-                  <h2 id="risk">โครงการที่ต้องติดตาม</h2>
-                  <Link to="/projects">ดูทั้งหมด</Link>
-                </div>
-                {d.risks.length ? (
-                  <ul className="row-list">
-                    {d.risks.slice(0, 10).map((r) => (
-                      <li key={r.projectId}>
-                        <Link to={`/projects/${r.projectId}`}>{r.name}</Link>
-                        <div className="small" style={{ color: 'var(--clay)' }}>{r.flags.map((f) => RISK_LABEL[f]).join(', ')}</div>
-                      </li>
-                    ))}
-                  </ul>
-                ) : <p className="muted" style={{ margin: 0 }}>ไม่มีโครงการที่ล่าช้าหรือเกินงบในขณะนี้</p>}
-              </section>
-            </div>
+            <section className="panel section" aria-labelledby="by-unit">
+              <h2 id="by-unit">ผลการเบิกจ่ายแยกตามพื้นที่ดำเนินการ</h2>
+              <p className="small muted" style={{ marginTop: 0 }}>
+                กดชื่อพื้นที่เพื่อดูว่ากลุ่มงานใดใช้งบในพื้นที่นั้น.{' '}
+                {acts > 0 && <>กำหนดพื้นที่แล้ว <b>{confirmed.toLocaleString('th-TH')}</b> จาก {acts.toLocaleString('th-TH')} กิจกรรม{confirmed < acts ? ' กิจกรรมที่ยังไม่กำหนดนับไว้ที่ระดับจังหวัด' : ''}</>}
+              </p>
+              {d.byUnit.length
+                ? <BreakdownTable rows={inOrder(d.byUnit, unitIds)} head="พื้นที่ดำเนินการ" childrenOf={(u) => inOrder(u.groups ?? [], groupIds)} d={d} curQ={curQ} planFallback={target} />
+                : <p className="muted">ยังไม่มีข้อมูล</p>}
+            </section>
 
             <p className="small muted section">
               ข้อมูล ณ {formatThaiDateTime(d.generatedAt)}
               {d.dataQuality.lastImportAt && <> นำเข้าข้อมูลล่าสุด {formatThaiDateTime(d.dataQuality.lastImportAt)}</>}.
-              {d.dataQuality.projectsWithoutBudget > 0 && <> มี {d.dataQuality.projectsWithoutBudget} โครงการที่ยังไม่บันทึกงบประมาณ.</>}
-              {' '}เป้าหมายอ้างอิงมาตรการเร่งรัดการเบิกจ่ายงบประมาณ พ.ศ. 2570 (มติ ครม. 29 ก.ย. 2569).
-              {' '}<Link to="/about">อ่านข้อจำกัดของข้อมูล</Link>
+              {' '}&ldquo;เบิกจ่ายแล้ว&rdquo; ไม่รวมยอดผูกพัน. เป้าหมายอ้างอิงมาตรการเร่งรัดการเบิกจ่ายงบประมาณ พ.ศ. 2570 (มติ ครม. 29 ก.ย. 2569).
+              {' '}<Link to="/projects">ดูกราฟและโครงการที่ต้องติดตาม</Link> · <Link to="/about">ข้อจำกัดของข้อมูล</Link>
             </p>
             {s.refreshing && <span className="sr-only" role="status">กำลังอัปเดตข้อมูล</span>}
-            <span className="sr-only">แหล่งงบในระบบ: {l.fundingSources.map((f) => f.name).join(', ')}</span>
           </>
         );
       }}

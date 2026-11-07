@@ -1892,7 +1892,7 @@ var KPP = (() => {
   }
 
   // src/core/schema.ts
-  var SCHEMA_VERSION = "2026.11.07-3";
+  var SCHEMA_VERSION = "2026.11.07-4";
   var META = [
     ["id", "string"],
     ["createdAt", "string"],
@@ -2289,6 +2289,7 @@ var KPP = (() => {
     const emit = (p, a, allocs, disbs) => {
       const total = computeBudget(allocs, []).currentBudget;
       const planTotal = planToDate(total, a?.planQuarters, p.quarterTargets, m);
+      const qTotals = [3, 6, 9, 12].map((mm) => planToDate(total, a?.planQuarters, p.quarterTargets, mm));
       const mine = a ? shares.filter((s) => s.activityId === a.id) : [];
       const budgetOf = new Map(mine.map((s) => [s.unitId, Number(s.budgetSatang)]));
       const qtyOf = new Map(mine.map((s) => [s.unitId, Number(s.targetQty)]));
@@ -2316,7 +2317,8 @@ var KPP = (() => {
           plan: total ? Math.round(planTotal * budget / total) : 0,
           committed: s.committed,
           disbursed: s.disbursed,
-          remaining: budget - s.disbursed
+          remaining: budget - s.disbursed,
+          planQ: qTotals.map((q) => total ? Math.round(q * budget / total) : 0)
         });
       }
     };
@@ -2333,7 +2335,11 @@ var KPP = (() => {
   }
   function summarizeRows(rows) {
     let budget = 0, committed = 0, disbursed = 0, plan = 0;
+    const planQ = [0, 0, 0, 0];
     for (const r2 of rows) {
+      r2.planQ?.forEach((v, i) => {
+        planQ[i] += v;
+      });
       budget += r2.budget;
       committed += r2.committed;
       disbursed += r2.disbursed;
@@ -2349,7 +2355,8 @@ var KPP = (() => {
       paid: 0,
       remaining: budget - disbursed,
       spendingPct: pct(disbursed, budget),
-      plan
+      plan,
+      planQ
     };
   }
   function planSeries(ds, projects) {
@@ -2905,15 +2912,16 @@ var KPP = (() => {
     const unitRows = buildUnitRows(ctx, ds, projects, m);
     const units = listUnits(ctx);
     const unitName = (id) => areaName(units.find((u) => u.id === id));
+    const total = (key, label, rs) => {
+      const { plan, planQ, ...budget } = summarizeRows(rs);
+      return { key, label, budget, plan, planQ, projects: new Set(rs.map((r2) => r2.projectId)).size, activities: new Set(rs.filter((r2) => r2.activityId).map((r2) => r2.activityId)).size };
+    };
     const byUnitOf = (rows) => {
       const mm = /* @__PURE__ */ new Map();
       for (const r2 of rows) (mm.get(r2.unitId) ?? mm.set(r2.unitId, []).get(r2.unitId)).push(r2);
-      return units.filter((u) => mm.has(u.id)).map((u) => {
-        const rs = mm.get(u.id);
-        const { plan, ...budget } = summarizeRows(rs);
-        return { key: u.id, label: unitName(u.id), budget, plan, projects: new Set(rs.map((r2) => r2.projectId)).size, activities: new Set(rs.map((r2) => r2.activityId)).size };
-      });
+      return units.filter((u) => mm.has(u.id)).map((u) => total(u.id, unitName(u.id), mm.get(u.id)));
     };
+    const byGroupOf = (rows) => groups.filter((g) => rows.some((r2) => r2.workgroupId === g.id)).map((g) => total(g.id, g.name, rows.filter((r2) => r2.workgroupId === g.id)));
     const settings = getSettings(ctx);
     const inScopeDisb = ds.disbursements.filter((d) => ids.has(d.projectId));
     const planItems = projects.some((p) => p.planDocId) ? live(ctx.env.db.list("PlanItems")) : [];
@@ -2949,9 +2957,10 @@ var KPP = (() => {
       byFundingSource: group((p) => p.fundingSourceId, (k) => sources.find((s) => s.id === k)?.name ?? "\u0E44\u0E21\u0E48\u0E23\u0E30\u0E1A\u0E38"),
       byWorkgroup: group((p) => p.workgroupId, (k) => groups.find((g) => g.id === k)?.name ?? "\u0E44\u0E21\u0E48\u0E23\u0E30\u0E1A\u0E38").map((g) => {
         const rs = unitRows.filter((r2) => r2.workgroupId === g.key);
-        return { ...g, plan: summarizeRows(rs).plan, activities: new Set(rs.filter((r2) => r2.activityId).map((r2) => r2.activityId)).size, units: byUnitOf(rs) };
+        const sum = summarizeRows(rs);
+        return { ...g, plan: sum.plan, planQ: sum.planQ, activities: new Set(rs.filter((r2) => r2.activityId).map((r2) => r2.activityId)).size, units: byUnitOf(rs) };
       }),
-      byUnit: byUnitOf(unitRows),
+      byUnit: byUnitOf(unitRows).map((u) => ({ ...u, groups: byGroupOf(unitRows.filter((r2) => r2.unitId === u.key)) })),
       activitiesWithoutUnits: (() => {
         const withShares = new Set(ctx.env.db.list("ActivityUnits").filter((x) => !x.isDeleted).map((x) => x.activityId));
         return ds.activities.filter((a) => ids.has(a.projectId) && !withShares.has(a.id)).length;

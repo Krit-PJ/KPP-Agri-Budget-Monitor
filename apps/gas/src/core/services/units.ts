@@ -176,6 +176,7 @@ export function buildUnitRows(ctx: Ctx, ds: Dataset, projects: Project[], m: num
   const emit = (p: Project, a: Activity | null, allocs: Allocation[], disbs: Disbursement[]) => {
     const total = computeBudget(allocs, []).currentBudget;
     const planTotal = planToDate(total, a?.planQuarters, p.quarterTargets, m);
+    const qTotals = [3, 6, 9, 12].map((mm) => planToDate(total, a?.planQuarters, p.quarterTargets, mm));
     const mine = a ? shares.filter((s) => s.activityId === a.id) : [];
     const budgetOf = new Map<string, number>(mine.map((s) => [s.unitId, Number(s.budgetSatang)]));
     const qtyOf = new Map<string, number>(mine.map((s) => [s.unitId, Number(s.targetQty)]));
@@ -191,6 +192,7 @@ export function buildUnitRows(ctx: Ctx, ds: Dataset, projects: Project[], m: num
         activityId: a?.id ?? '', activityCode: a?.activityCode ?? '', activityName: a?.name ?? 'งบระดับโครงการ', unit: a?.unit ?? '',
         targetQty: qtyOf.get(uid) ?? 0, unitId: uid, isMeeting: !!a && MEETING_RE.test(a.name),
         budget, plan: total ? Math.round((planTotal * budget) / total) : 0, committed: s.committed, disbursed: s.disbursed, remaining: budget - s.disbursed,
+        planQ: qTotals.map((q) => (total ? Math.round((q * budget) / total) : 0)),
       });
     }
   };
@@ -208,9 +210,11 @@ export function buildUnitRows(ctx: Ctx, ds: Dataset, projects: Project[], m: num
 }
 
 /** รวมแถวเป็น BudgetSummary (ไม่มีการโอนระดับหน่วย) */
-export function summarizeRows(rows: ReportRow[]): BudgetSummary & { plan: Satang } {
+export function summarizeRows(rows: ReportRow[]): BudgetSummary & { plan: Satang; planQ: Satang[] } {
   let budget = 0, committed = 0, disbursed = 0, plan = 0;
+  const planQ = [0, 0, 0, 0];
   for (const r of rows) {
+    r.planQ?.forEach((v, i) => { planQ[i] += v; });
     budget += r.budget;
     committed += r.committed;
     disbursed += r.disbursed;
@@ -218,7 +222,7 @@ export function summarizeRows(rows: ReportRow[]): BudgetSummary & { plan: Satang
   }
   return {
     originalBudget: budget, transferIn: 0, transferOut: 0, currentBudget: budget, committed, disbursed, paid: 0,
-    remaining: budget - disbursed, spendingPct: pct(disbursed, budget), plan,
+    remaining: budget - disbursed, spendingPct: pct(disbursed, budget), plan, planQ,
   };
 }
 

@@ -83,8 +83,8 @@ export const useToast = () => useContext(ToastCtx);
 
 /* -------------------------------- display -------------------------------- */
 
-export function Baht({ v, short }: { v: number; short?: boolean }) {
-  return <span className="num">{short ? formatBahtShort(v) : formatBaht(v)}</span>;
+export function Baht({ v, short, whole }: { v: number; short?: boolean; whole?: boolean }) {
+  return <span className="num">{short ? formatBahtShort(v) : whole ? Math.round(v / 100).toLocaleString('th-TH') : formatBaht(v)}</span>;
 }
 
 export function Pct({ v }: { v: number }) {
@@ -155,6 +155,45 @@ export function BulletBar({ b, targetPct }: { b: BudgetSummary; targetPct: numbe
         <div style={{ width: `${(Math.max(0, Math.min(b.committed, b.currentBudget - b.disbursed)) / total) * 100}%`, background: 'var(--commit)' }} />
       </div>
       {targetPct > 0 && <span className="bullet-tick" style={{ left: `${tick}%` }} />}
+    </div>
+  );
+}
+
+/**
+ * แถบ 3 ชั้นในแถบเดียว: เนื้อแถบ = เบิกจ่ายแล้ว → ผูกพัน → คงเหลือ (พื้นแถบ)
+ * ขีดตั้ง = เป้าการเบิกจ่ายสะสม ณ สิ้นไตรมาส 1–4 (ขีดของไตรมาสปัจจุบันเข้มและหนาที่สุด)
+ * q = ร้อยละสะสมของแต่ละไตรมาส, curQ = ไตรมาสปัจจุบัน (0 = ยังไม่เริ่มปีงบ)
+ */
+export function QuarterBar({ b, q, curQ, size = 'sm' }: { b: BudgetSummary; q: number[]; curQ: number; size?: 'sm' | 'lg' }) {
+  const total = Math.max(b.currentBudget, b.disbursed, 1);
+  const w = (v: number) => `${Math.max(0, (v / total) * 100)}%`;
+  const scale = b.currentBudget / total;
+  const committed = Math.max(0, Math.min(b.committed, b.currentBudget - b.disbursed));
+  const over = b.remaining < 0;
+  // ไตรมาสที่เป้าเท่ากัน (เช่น 100% ตั้งแต่ไตรมาส 2) รวมเป็นขีดเดียว
+  const ticks: Array<{ pct: number; qs: number[] }> = [];
+  q.forEach((p, i) => {
+    if (!(p > 0)) return;
+    const last = ticks[ticks.length - 1];
+    if (last && Math.abs(last.pct - p) < 2) last.qs.push(i + 1);
+    else ticks.push({ pct: p, qs: [i + 1] });
+  });
+  const name = (qs: number[]) => `ไตรมาส ${qs.length > 1 ? `${qs[0]}–${qs[qs.length - 1]}` : qs[0]}`;
+  const aria = `เบิกจ่ายแล้วร้อยละ ${b.spendingPct}${curQ && q[curQ - 1] !== undefined ? ` เป้าสะสมไตรมาส ${curQ} ร้อยละ ${Math.round(q[curQ - 1])}` : ''}`;
+  return (
+    <div className={`qbar qbar-${size}`} role="img" aria-label={aria}>
+      <div className="qbar-track">
+        <div className={over ? 'qbar-over' : 'qbar-d'} style={{ width: w(b.disbursed) }} />
+        <div className="qbar-c" style={{ width: w(committed) }} />
+      </div>
+      {ticks.map((t) => {
+        const left = Math.min(100, t.pct * scale);
+        return (
+          <span key={t.qs.join()} className={`qbar-tick ${t.qs.includes(curQ) ? 'is-now' : ''}`} style={{ left: `${left}%` }}>
+            {size === 'lg' && <span className={`qbar-tl ${left > 88 ? 'at-end' : left < 12 ? 'at-start' : ''}`}>{name(t.qs)}</span>}
+          </span>
+        );
+      })}
     </div>
   );
 }

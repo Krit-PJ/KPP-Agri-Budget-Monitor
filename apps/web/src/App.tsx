@@ -62,7 +62,7 @@ function Shell() {
           </Link>
           <nav className="nav" aria-label="เมนูหลัก">
             <NavLink to="/" end>ภาพรวม</NavLink>
-            <NavLink to="/projects">โครงการ</NavLink>
+            <NavLink to="/projects">ติดตามโครงการ</NavLink>
             <NavLink to="/about">เกี่ยวกับข้อมูล</NavLink>
             {user ? <NavLink to="/admin">จัดการข้อมูล</NavLink> : <NavLink to="/login">เข้าสู่ระบบเจ้าหน้าที่</NavLink>}
           </nav>

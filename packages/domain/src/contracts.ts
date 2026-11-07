@@ -46,6 +46,8 @@ export interface ReportRow {
   activityId: string; activityCode: string; activityName: string; unit: string; targetQty: number;
   unitId: string; isMeeting: boolean;
   budget: Satang; plan: Satang; committed: Satang; disbursed: Satang; remaining: Satang;
+  /** แผนการเบิกจ่ายสะสม ณ สิ้นไตรมาส 1–4 (สตางค์) */
+  planQ?: Satang[];
 }
 export interface ReportData { fiscalYear: number; generatedAt: string; monthIndex: number; rows: ReportRow[] }
 export interface AssignResult { assigned: number; skipped: Array<{ id: string; reason: string }> }
@@ -98,6 +100,10 @@ export interface GroupTotal {
   units?: GroupTotal[];
   /** จำนวนกิจกรรม */
   activities?: number;
+  /** แผนการเบิกจ่ายสะสม ณ สิ้นไตรมาส 1–4 (สตางค์) */
+  planQ?: Satang[];
+  /** แยกตามกลุ่มงาน (เฉพาะ byUnit) */
+  groups?: GroupTotal[];
 }
 
 export interface PublicSummary {
