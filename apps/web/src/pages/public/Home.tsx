@@ -87,6 +87,8 @@ export default function Home() {
         const t = d.totals;
         const q = totalQuarterPct(d);
         const remPct = t.currentBudget ? (t.remaining / t.currentBudget) * 100 : 0;
+        const gapPct = curQ ? Math.max(0, (q[curQ - 1] ?? 0) - t.spendingPct) : 0;
+        const gapBaht = Math.round((gapPct / 100) * t.currentBudget);
         const acts = d.byWorkgroup.reduce((a, g) => a + (g.activities ?? 0), 0);
         const confirmed = Math.max(0, acts - (d.activitiesWithoutUnits ?? 0));
         return (
@@ -110,7 +112,8 @@ export default function Home() {
                   <span className="key"><i style={{ background: t.remaining < 0 ? 'var(--clay)' : 'var(--paddy)' }} />เบิกจ่ายแล้ว <b><Baht v={t.disbursed} short /></b> ({pct1(t.spendingPct)}%)</span>
                   <span className="key"><i style={{ background: 'var(--commit)' }} />ผูกพัน <b><Baht v={t.committed} short /></b></span>
                   <span className="key"><i style={{ background: '#e3e9e4', border: '1px solid #cfd8d1' }} />คงเหลือ <b><Baht v={t.remaining} short /></b> ({pct1(remPct)}%)</span>
-                  <span className="key"><i className="tick" />เป้าเบิกจ่ายสะสมรายไตรมาส</span>
+                  {curQ > 0 && gapPct > 0 && <span className="key"><i className="gap" />ยังขาดจากเป้าไตรมาสนี้ <b>{pct1(gapPct)}%</b> (<Baht v={gapBaht} short /> บาท)</span>}
+                  <span className="key"><i className="tick" />เป้าสะสมสิ้นไตรมาสนี้ (เส้นประ = ไตรมาสอื่น)</span>
                 </div>
                 <div className="qtargets" aria-label="เป้าเบิกจ่ายสะสมรายไตรมาส">
                   {q.map((v, i) => <span key={i} className={curQ === i + 1 ? 'is-now' : ''}>ไตรมาส {i + 1}: {Math.round(v)}%{curQ === i + 1 ? ' (ไตรมาสนี้)' : ''}</span>)}
@@ -122,7 +125,7 @@ export default function Home() {
 
             <section className="panel section" aria-labelledby="by-group">
               <h2 id="by-group">ผลการเบิกจ่ายแยกตามกลุ่มงาน</h2>
-              <p className="small muted" style={{ marginTop: 0 }}>กดชื่อกลุ่มงานเพื่อดูรายพื้นที่ดำเนินการ ขีดตั้งบนแถบคือเป้าสะสมสิ้นไตรมาส 1–4 (ขีดเข้ม = ไตรมาสนี้) และ &ldquo;เทียบแผน&rdquo; เทียบกับแผนสะสม ณ สิ้นเดือนนี้</p>
+              <p className="small muted" style={{ marginTop: 0 }}>กดชื่อกลุ่มงานเพื่อดูรายพื้นที่ดำเนินการ บนแถบ: เส้นเข้ม = เป้าสิ้นไตรมาสนี้ ลายเหลือง = ส่วนที่ยังขาด ส่วน &ldquo;เทียบแผน&rdquo; เทียบกับแผนสะสม ณ สิ้นเดือนนี้</p>
               {d.byWorkgroup.length
                 ? <BreakdownTable rows={inOrder(d.byWorkgroup, groupIds)} head="กลุ่มงาน" childrenOf={(g) => inOrder(g.units ?? [], unitIds)} d={d} curQ={curQ} planFallback={target} />
                 : <p className="muted">ยังไม่มีโครงการในปีงบนี้</p>}
@@ -143,7 +146,7 @@ export default function Home() {
               ข้อมูล ณ {formatThaiDateTime(d.generatedAt)}
               {d.dataQuality.lastImportAt && <> นำเข้าข้อมูลล่าสุด {formatThaiDateTime(d.dataQuality.lastImportAt)}</>}.
               {' '}&ldquo;เบิกจ่ายแล้ว&rdquo; ไม่รวมยอดผูกพัน. เป้าหมายอ้างอิงมาตรการเร่งรัดการเบิกจ่ายงบประมาณ พ.ศ. 2570 (มติ ครม. 29 ก.ย. 2569).
-              {' '}<Link to="/projects">ดูกราฟและโครงการที่ต้องติดตาม</Link> · <Link to="/about">ข้อจำกัดของข้อมูล</Link>
+              {' '}<Link to="/projects">ดูกราฟและโครงการที่ต้องติดตาม</Link>
             </p>
             {s.refreshing && <span className="sr-only" role="status">กำลังอัปเดตข้อมูล</span>}
           </>

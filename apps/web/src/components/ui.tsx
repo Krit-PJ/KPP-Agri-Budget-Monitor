@@ -160,40 +160,42 @@ export function BulletBar({ b, targetPct }: { b: BudgetSummary; targetPct: numbe
 }
 
 /**
- * แถบ 3 ชั้นในแถบเดียว: เนื้อแถบ = เบิกจ่ายแล้ว → ผูกพัน → คงเหลือ (พื้นแถบ)
- * ขีดตั้ง = เป้าการเบิกจ่ายสะสม ณ สิ้นไตรมาส 1–4 (ขีดของไตรมาสปัจจุบันเข้มและหนาที่สุด)
+ * แถบเบิกจ่าย: เขียว = เบิกจ่ายแล้ว, เขียวอ่อน = ผูกพัน, ลายเหลือง = ยังขาดจากเป้าไตรมาสนี้, เทา = คงเหลือ
+ * เส้นเข้มทึบ = เป้าสะสมสิ้นไตรมาสนี้ (มีป้ายในแถบใหญ่), เส้นประจาง = เป้าไตรมาสอื่น
  * q = ร้อยละสะสมของแต่ละไตรมาส, curQ = ไตรมาสปัจจุบัน (0 = ยังไม่เริ่มปีงบ)
  */
 export function QuarterBar({ b, q, curQ, size = 'sm' }: { b: BudgetSummary; q: number[]; curQ: number; size?: 'sm' | 'lg' }) {
   const total = Math.max(b.currentBudget, b.disbursed, 1);
-  const w = (v: number) => `${Math.max(0, (v / total) * 100)}%`;
   const scale = b.currentBudget / total;
-  const committed = Math.max(0, Math.min(b.committed, b.currentBudget - b.disbursed));
+  const at = (v: number) => Math.max(0, Math.min(100, v));
+  const dW = at((b.disbursed / total) * 100);
+  const cW = at((Math.max(0, Math.min(b.committed, b.currentBudget - b.disbursed)) / total) * 100);
   const over = b.remaining < 0;
-  // ไตรมาสที่เป้าเท่ากัน (เช่น 100% ตั้งแต่ไตรมาส 2) รวมเป็นขีดเดียว
-  const ticks: Array<{ pct: number; qs: number[] }> = [];
-  q.forEach((p, i) => {
-    if (!(p > 0)) return;
-    const last = ticks[ticks.length - 1];
-    if (last && Math.abs(last.pct - p) < 2) last.qs.push(i + 1);
-    else ticks.push({ pct: p, qs: [i + 1] });
-  });
-  const name = (qs: number[]) => `ไตรมาส ${qs.length > 1 ? `${qs[0]}–${qs[qs.length - 1]}` : qs[0]}`;
-  const aria = `เบิกจ่ายแล้วร้อยละ ${b.spendingPct}${curQ && q[curQ - 1] !== undefined ? ` เป้าสะสมไตรมาส ${curQ} ร้อยละ ${Math.round(q[curQ - 1])}` : ''}`;
+  const target = curQ ? at((q[curQ - 1] ?? 0) * scale) : 0;
+  const gap = Math.max(0, target - dW);
+  // เส้นประของไตรมาสอื่น (ไม่ซ้ำตำแหน่งกับเป้าไตรมาสนี้)
+  const others = q.map((p, i) => ({ i: i + 1, x: at(p * scale) }))
+    .filter((t, k, arr) => t.i !== curQ && t.x > 0 && t.x < 100 && Math.abs(t.x - target) > 1 && arr.findIndex((u) => Math.abs(u.x - t.x) < 1) === k);
+  const aria = `เบิกจ่ายแล้วร้อยละ ${b.spendingPct}${curQ ? ` เป้าสะสมไตรมาส ${curQ} ร้อยละ ${Math.round(q[curQ - 1] ?? 0)}` : ''}`;
   return (
     <div className={`qbar qbar-${size}`} role="img" aria-label={aria}>
+      {size === 'lg' && curQ > 0 && target > 0 && (
+        <span className={`qbar-pill ${target > 85 ? 'at-end' : target < 15 ? 'at-start' : ''}`} style={{ left: `${target}%` }}>เป้าไตรมาส {curQ}: {Math.round(q[curQ - 1] ?? 0)}%</span>
+      )}
       <div className="qbar-track">
-        <div className={over ? 'qbar-over' : 'qbar-d'} style={{ width: w(b.disbursed) }} />
-        <div className="qbar-c" style={{ width: w(committed) }} />
+        {gap > 0 && <div className="qbar-gap" style={{ left: `${dW}%`, width: `${gap}%` }} />}
+        <div className={over ? 'qbar-over' : 'qbar-d'} style={{ width: `${dW}%` }} />
+        <div className="qbar-c" style={{ left: `${dW}%`, width: `${cW}%` }} />
+        {others.map((t) => <span key={t.i} className="qbar-dash" style={{ left: `${t.x}%` }} />)}
+        {target > 0 && <span className="qbar-now" style={{ left: `${target}%` }} />}
       </div>
-      {ticks.map((t) => {
-        const left = Math.min(100, t.pct * scale);
-        return (
-          <span key={t.qs.join()} className={`qbar-tick ${t.qs.includes(curQ) ? 'is-now' : ''}`} style={{ left: `${left}%` }}>
-            {size === 'lg' && <span className={`qbar-tl ${left > 88 ? 'at-end' : left < 12 ? 'at-start' : ''}`}>{name(t.qs)}</span>}
-          </span>
-        );
-      })}
+      {size === 'lg' && (
+        <div className="qbar-scale" aria-hidden="true">
+          {q.map((p, i) => (
+            <span key={i} className={curQ === i + 1 ? 'is-now' : ''} style={{ left: `${at(p * scale)}%` }}>ไตรมาส {i + 1}</span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

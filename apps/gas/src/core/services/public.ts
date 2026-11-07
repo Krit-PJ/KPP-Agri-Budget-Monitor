@@ -3,11 +3,11 @@
  * cache ด้วย dataVersion และบันทึก snapshot ลง REPORTING
  */
 import {
-  AppError, MEETING_RE, addSummaries, areaName, computeBudget, currentFiscalYear, fiscalMonthIndex, monthlyCumulative, monthlyTargetPct, pct, riskFlags,
+  AppError, MEETING_RE, addSummaries, areaName, computeBudget, currentFiscalYear, fiscalMonthIndex, monthlyCumulative, pct, riskFlags,
   type Activity, type BudgetSummary, type FundingSource, type GroupTotal, type ImportJob, type Lookups, type Organization,
-  type PlanItem, type Project, type PublicProject, type PublicSummary, type ReportRow, type Workgroup,
+  type PlanItem, type Project, type PublicProject, type PublicSummary, type ReportData, type ReportRow, type VisitCount, type Workgroup,
 } from '@kpp/domain';
-import { dataVersion, getSettings, live, nowIso, type Ctx } from '../context';
+import { curveFor, dataVersion, getSettings, live, nowIso, spendTargetFor, type Ctx } from '../context';
 import { budgetsByProject, loadDataset, today } from './projects';
 import { buildUnitRows, listUnits, planSeries, summarizeRows } from './units';
 import { SCHEMA_VERSION } from '../schema';
@@ -43,11 +43,11 @@ export function lookups(ctx: Ctx): Lookups {
   });
 }
 
-function toPublic(p: Project, budget: BudgetSummary, t: string): PublicProject {
+function toPublic(p: Project, budget: BudgetSummary, t: string, curve?: number[]): PublicProject {
   return {
     id: p.id, fiscalYear: Number(p.fiscalYear), fundingSourceId: p.fundingSourceId, projectCode: p.projectCode, name: p.name,
     workgroupId: p.workgroupId, startDate: p.startDate, endDate: p.endDate, status: p.status,
-    physicalProgress: Number(p.physicalProgress) || 0, description: p.description, budget, risks: riskFlags(p, budget, t),
+    physicalProgress: Number(p.physicalProgress) || 0, description: p.description, budget, risks: riskFlags(p, budget, t, curve),
   };
 }
 
@@ -63,7 +63,7 @@ export function publicProjects(ctx: Ctx, b: { fiscalYear?: number }): PublicProj
     const budgets = budgetsByProject(ds);
     const t = today(ctx);
     return ds.projects.filter((p) => p.published && Number(p.fiscalYear) === fy)
-      .map((p) => toPublic(p, budgets.get(p.id)!, t))
+      .map((p) => toPublic(p, budgets.get(p.id)!, t, curveFor(ctx, fy)))
       .sort((a, b2) => a.projectCode.localeCompare(b2.projectCode, 'th'));
   });
 }
@@ -74,7 +74,8 @@ export function publicProject(ctx: Ctx, b: { id: string }): PublicProject {
   if (!p) throw new AppError('NOT_FOUND', 'ไม่พบโครงการ หรือยังไม่เผยแพร่');
   const allocs = ds.allocations.filter((a) => a.projectId === p.id);
   const disbs = ds.disbursements.filter((d) => d.projectId === p.id);
-  const out = toPublic(p, computeBudget(allocs, disbs), today(ctx));
+  const curve = curveFor(ctx, Number(p.fiscalYear));
+  const out = toPublic(p, computeBudget(allocs, disbs), today(ctx), curve);
   out.activities = ds.activities.filter((a: Activity) => a.projectId === p.id)
     .sort((x, y) => x.activityCode.localeCompare(y.activityCode, 'th'))
     .map((a) => ({
@@ -82,7 +83,7 @@ export function publicProject(ctx: Ctx, b: { id: string }): PublicProject {
       startDate: a.startDate, endDate: a.endDate,
       budget: computeBudget(allocs.filter((x) => x.activityId === a.id), disbs.filter((x) => x.activityId === a.id)),
     }));
-  out.monthly = { disbursedCumulative: monthlyCumulative(disbs, p.fiscalYear), targetPct: monthlyTargetPct(p.quarterTargets) };
+  out.monthly = { disbursedCumulative: monthlyCumulative(disbs, p.fiscalYear), targetPct: curve };
   return out;
 }
 
@@ -100,11 +101,12 @@ export function buildSummary(ctx: Ctx, fy: number, onlyPublished: boolean): Publ
     return [...m.entries()].map(([key, ps]) => ({ key, label: labelOf(key), projects: ps.length, budget: addSummaries(ps.map((p) => budgets.get(p.id)!)) }))
       .sort((a, b) => b.budget.currentBudget - a.budget.currentBudget);
   };
-  const risks = projects.map((p) => ({ projectId: p.id, name: p.name, flags: riskFlags(p, budgets.get(p.id)!, t) }))
+  const curve = curveFor(ctx, fy);
+  const risks = projects.map((p) => ({ projectId: p.id, name: p.name, flags: riskFlags(p, budgets.get(p.id)!, t, curve) }))
     .filter((r) => r.flags.length > 0);
   const totals = addSummaries(projects.map((p) => budgets.get(p.id)!));
   // แผนรายเดือน: แผนรายไตรมาสของกิจกรรม (ถ้ามี) หรือเป้าร้อยละของโครงการ
-  const targetSatang = planSeries(ds, projects);
+  const targetSatang = planSeries(ctx, ds, projects);
   // กิจกรรม × หน่วยดำเนินการ ณ เดือนปัจจุบัน — ใช้แยกกลุ่มงาน/หน่วย
   const fyNow = currentFiscalYear(ctx.env.now());
   const m = fy < fyNow ? 12 : fy > fyNow ? 0 : fiscalMonthIndex(t);
@@ -173,6 +175,7 @@ export function buildSummary(ctx: Ctx, fy: number, onlyPublished: boolean): Publ
     targets: {
       annualPct: Math.min(100, Math.max(0, Number(settings.annualTargetPct) || 98)),
       meetingDeadline: `${fy - 543}-06-30`,
+      spend: spendTargetFor(ctx, fy),
     },
     meetings: { activities: meetingActs.filter((a) => a.status !== 'CANCELLED').length, remaining: mRemaining, budget: mBudget },
     monthly: {
@@ -191,6 +194,45 @@ export function buildSummary(ctx: Ctx, fy: number, onlyPublished: boolean): Publ
 export function publicSummary(ctx: Ctx, b: { fiscalYear?: number }): PublicSummary {
   const fy = fyOf(ctx, b.fiscalYear);
   return cached(ctx, `summary:${fy}`, () => buildSummary(ctx, fy, true));
+}
+
+/** รายงานสำหรับผู้บริหาร (สาธารณะ): เฉพาะโครงการที่เผยแพร่ ไม่มีชื่อบุคคล/เบอร์โทร */
+export function publicReport(ctx: Ctx, b: { fiscalYear?: number }): ReportData {
+  const fy = fyOf(ctx, b.fiscalYear);
+  return cached(ctx, `report:${fy}`, () => {
+    const ds = loadDataset(ctx);
+    const projects = ds.projects.filter((p) => p.published && Number(p.fiscalYear) === fy);
+    const fyNow = currentFiscalYear(ctx.env.now());
+    const m = fy < fyNow ? 12 : fy > fyNow ? 0 : fiscalMonthIndex(today(ctx));
+    return { fiscalYear: fy, generatedAt: nowIso(ctx), monthIndex: m, rows: buildUnitRows(ctx, ds, projects, m) };
+  });
+}
+
+/**
+ * ตัวนับผู้เข้าชม: นับ 1 ครั้งต่อการเปิดเว็บ (หน้าเว็บส่ง count = true ครั้งเดียวต่อแท็บ)
+ * เก็บใน Script Properties (ไม่เขียนชีต) ไม่เก็บข้อมูลใดของผู้เข้าชม; ระบบไม่ว่างภายใน 3 วินาที = ข้ามการนับครั้งนั้น
+ */
+export function visitHit(ctx: Ctx, b: { count?: boolean }): VisitCount {
+  const props = ctx.env.props;
+  const day = today(ctx);
+  const read = (): VisitCount => {
+    const [d, n] = (props.get('visits:day') || '').split('|');
+    return { today: d === day ? Number(n) || 0 : 0, total: Number(props.get('visits:total')) || 0, since: props.get('visits:since') || day };
+  };
+  if (!b.count) return read();
+  try {
+    return ctx.env.lock.withLock(() => {
+      const v = read();
+      v.today += 1;
+      v.total += 1;
+      props.set('visits:day', `${day}|${v.today}`);
+      props.set('visits:total', String(v.total));
+      if (!props.get('visits:since')) props.set('visits:since', day);
+      return v;
+    }, 3000);
+  } catch {
+    return read();
+  }
 }
 
 /** บันทึก snapshot ลงไฟล์ REPORTING (เรียกจาก trigger หรือ Super Admin) */

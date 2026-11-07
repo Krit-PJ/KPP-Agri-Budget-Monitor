@@ -1,5 +1,5 @@
 /** บริบทต่อ request + เครื่องมือร่วม (audit, version, settings) */
-import { AppError, type Meta, type SessionUser } from '@kpp/domain';
+import { AppError, parseSpendTarget, targetCurve, type Meta, type SessionUser, type SpendTarget } from '@kpp/domain';
 import type { Env } from './env';
 import type { TableName } from './schema';
 
@@ -104,6 +104,15 @@ export function getSettings(ctx: Ctx): Record<string, string> {
   const out = { ...DEFAULT_SETTINGS };
   for (const r of ctx.env.db.list<{ key: string; value: string }>('Settings')) out[r.key] = String(r.value ?? '');
   return out;
+}
+
+/** เป้าการเบิกจ่ายของปีงบ (ตั้งค่าใน Settings คีย์ spendTarget:<ปี>; ไม่ตั้ง = เป้ารายไตรมาสเริ่มต้น) */
+export function spendTargetFor(ctx: Ctx, fy: number): SpendTarget {
+  const s = getSettings(ctx);
+  return parseSpendTarget(s[`spendTarget:${fy}`], s.defaultQuarterTargets);
+}
+export function curveFor(ctx: Ctx, fy: number): number[] {
+  return targetCurve(spendTargetFor(ctx, fy));
 }
 
 export function setSetting(ctx: Ctx, key: string, value: string): void {

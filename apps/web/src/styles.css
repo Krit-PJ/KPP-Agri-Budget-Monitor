@@ -58,6 +58,8 @@ a:hover { color: var(--forest-2); }
 .brand { display: flex; gap: var(--s3); align-items: center; color: inherit; text-decoration: none; margin-right: auto; }
 .brand:hover { color: #fff; }
 .brand-mark { width: 36px; height: 36px; flex: none; }
+.brand-logos { display: flex; gap: 6px; flex: none; }
+.brand-logos img { width: 44px; height: 44px; border-radius: 50%; background: #fff; padding: 2px; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35); }
 .brand-name { font-family: var(--font-head); font-weight: 600; font-size: var(--fs-md); line-height: 1.2; }
 .brand-sub { font-size: var(--fs-xs); opacity: 0.8; }
 .nav { display: flex; gap: var(--s1); flex-wrap: wrap; }
@@ -66,6 +68,17 @@ a:hover { color: var(--forest-2); }
 .demo-band { background: var(--straw); color: var(--ink); font-size: var(--fs-sm); text-align: center; padding: var(--s1) var(--s4); }
 main { max-width: var(--maxw); margin: 0 auto; padding: var(--s5) var(--s4) var(--s8); }
 footer { max-width: var(--maxw); margin: 0 auto; padding: var(--s5) var(--s4); color: var(--ink-3); font-size: var(--fs-sm); border-top: 1px solid var(--line); }
+.site-foot { display: flex; flex-wrap: wrap; gap: var(--s3) var(--s6); justify-content: space-between; align-items: flex-end; }
+.site-foot p { margin: 2px 0; }
+.foot-org { color: var(--ink-2); font-weight: 600; }
+.foot-note { font-size: var(--fs-xs); }
+.foot-count { background: var(--paper); border: 1px solid var(--line); border-radius: 999px; padding: 4px 14px; color: var(--ink-2); white-space: nowrap; }
+.foot-count b { color: var(--forest-ink); }
+.foot-since { font-size: var(--fs-xs); color: var(--ink-3); }
+@media (max-width: 640px) {
+  .brand-logos img { width: 36px; height: 36px; }
+  .foot-count { white-space: normal; border-radius: var(--r-md); }
+}
 
 /* ===== Hero: the budget strip is the memorable element ===== */
 .hero { padding: var(--s6) 0 var(--s5); }
@@ -360,6 +373,8 @@ input.is-edited { border-color: var(--straw); }
 /* ===== รายงาน: หน้าจอ + พิมพ์ A4 แนวนอน ===== */
 .report { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--s5); }
 .report-head { text-align: center; margin-bottom: var(--s4); }
+.report-logos { display: flex; justify-content: center; gap: 12px; margin-bottom: var(--s2); }
+.report-logos img { width: 64px; height: 64px; }
 .report-scroll { overflow-x: auto; }
 .report-table { min-width: 720px; }
 .admin-shell > * { min-width: 0; }
@@ -499,25 +514,33 @@ input.is-edited { border-color: var(--straw); }
 .area-pao td { background: #f1f7f2; }
 .area-pao.is-bad td { background: #fbeeea; color: var(--clay); }
 
-/* ===== แถบ 3 ชั้น: เบิกจ่าย / ผูกพัน / คงเหลือ + ขีดเป้ารายไตรมาส ===== */
+/* ===== แถบเบิกจ่าย: เขียว/เขียวอ่อน/ลายเหลือง (ยังขาด)/เทา + เส้นเป้าไตรมาส ===== */
 .qbar { position: relative; }
-.qbar-track { display: flex; overflow: hidden; background: #e3e9e4; border: 1px solid #cfd8d1; }
+.qbar-track { position: relative; overflow: hidden; background: #e6ece7; }
+.qbar-track > div { position: absolute; top: 0; bottom: 0; left: 0; }
 .qbar-sm .qbar-track { height: 12px; border-radius: 6px; }
-.qbar-lg .qbar-track { height: 40px; border-radius: var(--r-sm); }
+.qbar-lg { padding-top: 30px; }
+.qbar-lg .qbar-track { height: 40px; border-radius: 10px; }
 .qbar-d { background: var(--paddy); }
 .qbar-over { background: var(--clay); }
 .qbar-c { background: var(--commit); }
-.qbar-tick { position: absolute; top: -3px; height: calc(100% + 6px); width: 2px; margin-left: -1px; background: #7d8a80; }
-.qbar-tick.is-now { width: 4px; margin-left: -2px; background: var(--forest-ink); }
-.qbar-lg .qbar-tick { top: -6px; height: calc(100% + 12px); }
-.qbar-lg { margin-bottom: 1.6rem; }
-.qbar-tl { position: absolute; top: 100%; margin-top: 4px; transform: translateX(-50%); white-space: nowrap; font-size: var(--fs-xs); color: var(--ink-2); }
-.qbar-tl.at-end { transform: translateX(-100%); }
-.qbar-tl.at-start { transform: none; }
-.qbar-tick.is-now .qbar-tl { color: var(--forest-ink); font-weight: 700; }
+.qbar-gap { background: repeating-linear-gradient(135deg, #f2cf7a 0 6px, #fbecc6 6px 12px); }
+.qbar-dash { position: absolute; top: 3px; bottom: 3px; width: 0; border-left: 2px dashed rgba(22, 58, 43, 0.28); }
+.qbar-sm .qbar-dash { top: 1px; bottom: 1px; border-left-width: 1px; }
+.qbar-now { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1.5px; background: var(--forest-ink); }
+.qbar-pill { position: absolute; top: 0; transform: translateX(-50%); background: var(--forest-ink); color: #fff; font-size: var(--fs-xs); font-weight: 600; line-height: 1; padding: 6px 10px; border-radius: 6px; white-space: nowrap; }
+.qbar-pill::after { content: ''; position: absolute; left: 50%; bottom: -5px; margin-left: -5px; border: 5px solid transparent; border-bottom: 0; border-top-color: var(--forest-ink); }
+.qbar-pill.at-end { transform: translateX(-100%); }
+.qbar-pill.at-end::after { left: auto; right: 4px; }
+.qbar-pill.at-start { transform: none; }
+.qbar-pill.at-start::after { left: 4px; margin-left: 0; }
+.qbar-scale { position: relative; height: 1.4rem; margin-bottom: var(--s2); }
+.qbar-scale span { position: absolute; top: 4px; transform: translateX(-100%); padding-right: 4px; font-size: var(--fs-xs); color: var(--ink-3); white-space: nowrap; }
+.qbar-scale span.is-now { color: var(--forest-ink); font-weight: 700; }
 .qbar-legend { display: flex; gap: var(--s2) var(--s5); flex-wrap: wrap; font-size: var(--fs-sm); color: var(--ink-2); }
 .qbar-legend .key i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; }
 .qbar-legend .key i.tick { width: 4px; background: var(--forest-ink); }
+.qbar-legend .key i.gap { background: repeating-linear-gradient(135deg, #f2cf7a 0 4px, #fbecc6 4px 8px); }
 .qbar-legend b { color: var(--forest-ink); }
 .qbar-cap { display: flex; flex-wrap: wrap; gap: 0 var(--s4); font-size: var(--fs-xs); font-weight: 400; color: var(--ink-2); margin-top: 4px; }
 .qtargets { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s3); }
@@ -527,4 +550,34 @@ input.is-edited { border-color: var(--straw); }
 .st-bad { color: var(--clay); font-weight: 600; white-space: nowrap; }
 .bd-table td.r, .bd-table th.r { font-size: var(--fs-md); }
 .bd-name { font-size: var(--fs-md); }
-@media (max-width: 640px) { .qbar-lg .qbar-tl { display: none; } .qbar-lg { margin-bottom: var(--s4); } }
+@media (max-width: 640px) { .qbar-scale span:not(.is-now) { display: none; } }
+
+/* ===== เป้าการเบิกจ่าย ===== */
+.target-q { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.input-suffix { display: flex; align-items: center; gap: 6px; }
+.input-suffix input { flex: 1; min-width: 0; text-align: right; }
+.input-suffix em { font-style: normal; color: var(--ink-2); }
+.target-preview { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 4px; margin: var(--s4) 0 var(--s2); }
+.tp-col { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: var(--fs-xs); color: var(--ink-2); }
+.tp-bar { position: relative; width: 100%; max-width: 28px; height: 90px; background: #eef2ee; border-radius: 4px; overflow: hidden; }
+.tp-bar i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--commit); }
+.tp-col.is-q .tp-bar i { background: var(--paddy); }
+.tp-col.is-now .tp-m, .tp-col.is-now .tp-v { color: var(--forest-ink); font-weight: 700; }
+.tp-col.is-now .tp-bar { box-shadow: 0 0 0 2px var(--forest-ink); }
+@media (max-width: 640px) { .tp-v { font-size: 10px; } }
+
+/* ===== แผนฯ: แถบค้นหาติดด้านบน, เดือนที่ต้องเบิกครบ, กลับขึ้นบนสุด ===== */
+.pb-sticky { position: sticky; top: 0; z-index: 20; background: var(--mist); padding: var(--s3) 0 var(--s2); margin-bottom: var(--s2); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: var(--s2); }
+.pb-sticky-row { display: flex; gap: var(--s3); align-items: center; flex-wrap: wrap; }
+.pb-search { flex: 1 1 260px; margin: 0; }
+.pb-jump { flex: 0 1 280px; margin: 0; }
+.pb-count { white-space: nowrap; }
+.ob-project { scroll-margin-top: 9rem; }
+.due-select { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--ink-2); margin-top: 4px; }
+.due-select select { width: auto; min-height: 30px; padding: 2px 6px; font-size: var(--fs-xs); }
+.back-top { position: fixed; right: 16px; bottom: 16px; z-index: 30; box-shadow: var(--shadow); }
+@media (max-width: 640px) {
+  .pb-sticky .segmented { overflow-x: auto; flex-wrap: nowrap; }
+  .pb-jump { display: none; }
+  .back-top { bottom: 72px; }
+}

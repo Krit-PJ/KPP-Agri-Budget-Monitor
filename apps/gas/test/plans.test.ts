@@ -319,3 +319,68 @@ describe('หน่วยดำเนินการ (ADR-006)', () => {
     expect(blocked.skipped[0].reason).toContain('มีรายการเบิกจ่ายแล้ว');
   });
 });
+
+describe('เป้าการเบิกจ่าย ตัวนับผู้เข้าชม และรายงานสาธารณะ', () => {
+  function assigned(name: string, group = 'PROD') {
+    const { detail } = importPlan();
+    const lf = detail.items.find((i) => i.isLeaf && i.name.includes(name))!;
+    ok<AssignResult>('plans.assign', { itemIds: [lf.id], workgroupId: wg(group) }, superToken);
+    const d = ok<PlanDetail>('plans.get', { id: detail.doc.id }, superToken);
+    return d.items.find((i) => i.id === lf.id)!;
+  }
+  type Sum = { monthly: { targetPct: number[] }; targets: { spend: { mode: string } }; byWorkgroup: Array<{ key: string; plan: number; planQ: number[] }> };
+
+  it('fiscal-year target drives the monthly curve, and only Mini Super / Super Admin can change it', () => {
+    const t0 = ok<{ curve: number[] }>('targets.get', { fiscalYear: 2570 }, superToken);
+    expect([t0.curve[2], t0.curve[11]]).toEqual([30, 100]);
+    const staff = adminFor('0811111111', 'PROD');
+    expect(call('targets.save', { fiscalYear: 2570, target: { mode: 'deadline', month: 11, pct: 100, quarters: [] } }, staff).error?.code).toBe('FORBIDDEN_SCOPE');
+    expect(call('targets.save', { fiscalYear: 2570, target: { mode: 'quarter', quarters: [40, 30, 80, 100], month: 12, pct: 100 } }, superToken).error?.message).toContain('ต้องไม่น้อยกว่า');
+    const saved = ok<{ curve: number[] }>('targets.save', { fiscalYear: 2570, target: { mode: 'deadline', month: 11, pct: 100, quarters: [] } }, superToken);
+    expect(saved.curve[10]).toBe(100); // สิ้น ส.ค.
+    expect(saved.curve[0]).toBeCloseTo(9.09, 1);
+    assigned('Smart Group');
+    const sum = ok<Sum>('public.summary', { fiscalYear: 2570 });
+    expect(sum.targets.spend.mode).toBe('deadline');
+    expect(sum.monthly.targetPct[10]).toBe(100);
+  });
+
+  it('an activity due month overrides the yearly target; training activities default to June', () => {
+    const item = assigned('Smart Group');
+    const before = ok<Sum>('public.summary', { fiscalYear: 2570 }).byWorkgroup.find((g) => g.key === wg('PROD'))!;
+    // ปีนี้: พ.ย. = เดือนที่ 2; กิจกรรมนี้เป็นการอบรม/ประชุม → ต้องครบภายใน มิ.ย. (เดือนที่ 9) → 2/9
+    expect(item.name).toMatch(/อบรม|ประชุม|สัมมนา|ถ่ายทอดความรู้|เวที|ศึกษาดูงาน|Workshop|Field Day/i);
+    expect(Math.abs(before.plan - (item.amountSatang * 2) / 9)).toBeLessThanOrEqual(item.amountSatang / 10_000 + 1);
+    // เลือก "ตามเป้าของปี" (-1) → 20%
+    ok('activities.setDue', { activityId: item.activityId, dueMonth: -1 }, superToken);
+    expect(ok<Sum>('public.summary', { fiscalYear: 2570 }).byWorkgroup.find((g) => g.key === wg('PROD'))!.plan).toBe(Math.round(item.amountSatang * 0.2));
+    // ต้องเบิกครบภายใน ธ.ค. (เดือนที่ 3) → 2/3
+    const st = ok<{ dueMonth: number }>('activities.setDue', { activityId: item.activityId, dueMonth: 3 }, superToken);
+    expect(st.dueMonth).toBe(3);
+    const after = ok<Sum>('public.summary', { fiscalYear: 2570 }).byWorkgroup.find((g) => g.key === wg('PROD'))!;
+    expect(Math.abs(after.plan - (item.amountSatang * 2) / 3)).toBeLessThanOrEqual(item.amountSatang / 10_000 + 1);
+    expect(after.planQ[0]).toBe(item.amountSatang);
+    expect(call('activities.setDue', { activityId: item.activityId, dueMonth: 13 }, superToken).ok).toBe(false);
+    const other = adminFor('0822222222', 'FARMER');
+    expect(call('activities.setDue', { activityId: item.activityId, dueMonth: 6 }, other).error?.code).toBe('FORBIDDEN_SCOPE');
+  });
+
+  it('public report has only published projects and needs no login', () => {
+    assigned('Smart Group');
+    const rep = ok<{ rows: Array<{ projectId: string }> }>('public.report', { fiscalYear: 2570 });
+    expect(rep.rows.length).toBeGreaterThan(0);
+    const list = ok<ProjectListItem[]>('projects.list', { fiscalYear: 2570 }, superToken);
+    const p = list.find((x) => x.id === rep.rows[0].projectId)!;
+    ok('projects.update', { id: p.id, version: p.version, patch: { published: false } }, superToken);
+    expect(ok<{ rows: Array<{ projectId: string }> }>('public.report', { fiscalYear: 2570 }).rows.some((r) => r.projectId === p.id)).toBe(false);
+  });
+
+  it('counts visits once per call with count = true and keeps today/total', () => {
+    expect(ok<{ today: number; total: number }>('public.hit', {})).toMatchObject({ today: 0, total: 0 });
+    ok('public.hit', { count: true });
+    const v = ok<{ today: number; total: number; since: string }>('public.hit', { count: true });
+    expect(v).toMatchObject({ today: 2, total: 2 });
+    expect(v.since).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(ok<{ total: number }>('public.hit', {}).total).toBe(2);
+  });
+});

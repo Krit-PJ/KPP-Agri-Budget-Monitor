@@ -2,15 +2,15 @@
  * หน่วยดำเนินการ (ADR-006): สำนักงานเกษตรจังหวัด + สำนักงานเกษตรอำเภอ 11 อำเภอ
  * - กิจกรรมแบ่งงบ/เป้าให้หน่วยได้ (ActivityUnits) ผลรวมงบต้องเท่างบกิจกรรม
  * - งบที่ไม่ได้แบ่ง และรายการเบิกจ่ายที่ไม่ระบุหน่วย นับเป็นของสำนักงานเกษตรจังหวัด
- * - แผนการเบิกจ่าย ณ เดือนใด ๆ: แผนรายไตรมาสของกิจกรรม (ถ้ามี) ไม่เช่นนั้นใช้เป้าร้อยละของโครงการ
+ * - แผนการเบิกจ่าย ณ เดือนใด ๆ: เดือนที่ต้องเบิกครบของกิจกรรม > แผนรายไตรมาสของกิจกรรม > อบรม/ประชุม (มิ.ย.) > เป้าของปีงบ
  */
 import {
-  AppError, MEETING_RE, areaName, computeBudget, pct, planToDate, splitEqual, splitMoney,
+  AppError, MEETING_RE, areaName, computeBudget, effectiveDueMonth, parsePlanQuarters, pct, planAt, planToDate, splitEqual, splitMoney,
   type Activity, type ActivityUnit, type Allocation, type BudgetSummary, type Disbursement, type PlanActivityState,
   type Project, type ReportRow, type Satang, type Unit, type UnitShareInput,
 } from '@kpp/domain';
 import { requireWorkgroup } from '../auth';
-import { audit, bumpDataVersion, findById, live, newMeta, nowIso, type Ctx } from '../context';
+import { audit, bumpDataVersion, curveFor, findById, live, newMeta, nowIso, type Ctx } from '../context';
 import type { Dataset } from './projects';
 
 export function listUnits(ctx: Ctx): Unit[] {
@@ -35,7 +35,32 @@ export function activityState(ctx: Ctx, a: Activity, allocs?: Allocation[], disb
     activityId: a.id, projectId: a.projectId, budget: b.currentBudget, disbursed: b.disbursed, committed: b.committed,
     planQuarters: a.planQuarters ?? '', units: (shares ?? activityUnitsOf(ctx)).filter((x) => x.activityId === a.id),
     hasDisbursement: di.some((d) => d.status !== 'VOID' && !d.isDeleted),
+    dueMonth: Number(a.dueMonth) || 0,
   };
+}
+
+/** แผนการเบิกจ่ายสะสม ณ สิ้นเดือน m ของกิจกรรม (null = งบระดับโครงการ ใช้เป้าของปี) */
+export function activityPlan(budget: Satang, a: Pick<Activity, 'name' | 'planQuarters' | 'dueMonth'> | null, curve: number[], m: number): Satang {
+  const d = Number(a?.dueMonth) || 0;
+  if (d >= 1 && d <= 12) return planAt(budget, curve, d, m);
+  if (a && parsePlanQuarters(a.planQuarters)) return planToDate(budget, a.planQuarters, '', m);
+  return planAt(budget, curve, a ? effectiveDueMonth(a) : 0, m);
+}
+
+/** กำหนดเดือนที่กิจกรรมต้องเบิกครบ 100%: 1–12, 0 = ค่าเริ่มต้น (อบรม/ประชุม = มิ.ย.), -1 = ตามเป้าของปี */
+export function setActivityDue(ctx: Ctx, b: { activityId: string; dueMonth: number }): PlanActivityState {
+  const a = findById<Activity>(ctx, 'Activities', String(b.activityId), 'กิจกรรม');
+  const p = findById<Project>(ctx, 'Projects', a.projectId, 'โครงการ');
+  const actor = requireWorkgroup(ctx, p.workgroupId).sub;
+  const d = Number(b.dueMonth);
+  if (!Number.isInteger(d) || d < -1 || d > 12) throw new AppError('VALIDATION_FAILED', 'เดือนที่ต้องเบิกครบไม่ถูกต้อง');
+  const before = Number(a.dueMonth) || 0;
+  if (before !== d) {
+    ctx.env.db.update('Activities', a.id, { ...a, dueMonth: d, version: a.version + 1, updatedAt: nowIso(ctx), updatedBy: actor });
+    audit(ctx, 'activity.due', 'Activity', a.id, { before: { dueMonth: before }, after: { dueMonth: d }, projectId: p.id });
+    bumpDataVersion(ctx);
+  }
+  return activityState(ctx, { ...a, dueMonth: d });
 }
 
 /**
@@ -172,11 +197,14 @@ export function buildUnitRows(ctx: Ctx, ds: Dataset, projects: Project[], m: num
   for (const x of ds.allocations) if (ids.has(x.projectId)) (allocBy.get(key(x.projectId, x.activityId)) ?? allocBy.set(key(x.projectId, x.activityId), []).get(key(x.projectId, x.activityId))!).push(x);
   for (const x of ds.disbursements) if (ids.has(x.projectId)) (disbBy.get(key(x.projectId, x.activityId)) ?? disbBy.set(key(x.projectId, x.activityId), []).get(key(x.projectId, x.activityId))!).push(x);
 
+  const curves = new Map<number, number[]>();
+  const curveOf = (fy: number) => curves.get(fy) ?? curves.set(fy, curveFor(ctx, fy)).get(fy)!;
   const rows: ReportRow[] = [];
   const emit = (p: Project, a: Activity | null, allocs: Allocation[], disbs: Disbursement[]) => {
     const total = computeBudget(allocs, []).currentBudget;
-    const planTotal = planToDate(total, a?.planQuarters, p.quarterTargets, m);
-    const qTotals = [3, 6, 9, 12].map((mm) => planToDate(total, a?.planQuarters, p.quarterTargets, mm));
+    const curve = curveOf(Number(p.fiscalYear));
+    const planTotal = activityPlan(total, a, curve, m);
+    const qTotals = [3, 6, 9, 12].map((mm) => activityPlan(total, a, curve, mm));
     const mine = a ? shares.filter((s) => s.activityId === a.id) : [];
     const budgetOf = new Map<string, number>(mine.map((s) => [s.unitId, Number(s.budgetSatang)]));
     const qtyOf = new Map<string, number>(mine.map((s) => [s.unitId, Number(s.targetQty)]));
@@ -226,20 +254,22 @@ export function summarizeRows(rows: ReportRow[]): BudgetSummary & { plan: Satang
   };
 }
 
-/** แผนการเบิกจ่ายสะสมรายเดือน (สตางค์) 12 เดือน ของชุดโครงการ — ใช้แผนรายไตรมาสของกิจกรรมเมื่อมี */
-export function planSeries(ds: Dataset, projects: Project[]): Satang[] {
+/** แผนการเบิกจ่ายสะสมรายเดือน (สตางค์) 12 เดือน ของชุดโครงการ — ใช้กติกาเดียวกับ activityPlan */
+export function planSeries(ctx: Ctx, ds: Dataset, projects: Project[]): Satang[] {
   const out = new Array<number>(12).fill(0);
   const ids = new Set(projects.map((p) => p.id));
   const byProject = new Map(projects.map((p) => [p.id, p]));
   const budgetOf = new Map<string, Allocation[]>();
   for (const x of ds.allocations) if (ids.has(x.projectId)) (budgetOf.get(x.activityId || `P:${x.projectId}`) ?? budgetOf.set(x.activityId || `P:${x.projectId}`, []).get(x.activityId || `P:${x.projectId}`)!).push(x);
-  const add = (budget: number, planQuarters: string, qt: string) => {
-    for (let m = 1; m <= 12; m++) out[m - 1] += planToDate(budget, planQuarters, qt, m);
+  const curves = new Map<number, number[]>();
+  const curveOf = (fy: number) => curves.get(fy) ?? curves.set(fy, curveFor(ctx, fy)).get(fy)!;
+  const add = (budget: number, a: Activity | null, curve: number[]) => {
+    for (let m = 1; m <= 12; m++) out[m - 1] += activityPlan(budget, a, curve, m);
   };
   for (const a of ds.activities) {
     const p = byProject.get(a.projectId);
-    if (p) add(computeBudget(budgetOf.get(a.id) ?? [], []).currentBudget, a.planQuarters ?? '', p.quarterTargets);
+    if (p) add(computeBudget(budgetOf.get(a.id) ?? [], []).currentBudget, a, curveOf(Number(p.fiscalYear)));
   }
-  for (const p of projects) add(computeBudget(budgetOf.get(`P:${p.id}`) ?? [], []).currentBudget, '', p.quarterTargets);
+  for (const p of projects) add(computeBudget(budgetOf.get(`P:${p.id}`) ?? [], []).currentBudget, null, curveOf(Number(p.fiscalYear)));
   return out;
 }

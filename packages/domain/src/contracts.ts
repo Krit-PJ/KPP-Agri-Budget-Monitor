@@ -2,7 +2,7 @@
  * สัญญา API (action-based RPC บน Apps Script) — ใช้ร่วมกันระหว่างหน้าเว็บกับ backend
  * รายละเอียด: docs/api/ACTIONS.md
  */
-import type { BudgetSummary, RiskFlag } from './budget';
+import type { BudgetSummary, RiskFlag, SpendTarget } from './budget';
 import type {
   AccessRequest, Activity, ActivityUnit, Allocation, Attachment, AuditLog, Disbursement, FundingSource, ImportJob, ImportKind,
   LoginAttempt, Organization, Project, ProgressReport, ProjectStatus, Role, Unit, User, Workgroup,
@@ -37,7 +37,7 @@ export interface PlanCommitRequest {
 }
 export type PlanDocSummary = PlanDoc & { assignedCount: number; assignedSatang: number; groups: Array<{ workgroupId: string; count: number; satang: number }> };
 /** สถานะกิจกรรมที่สร้างจากแผน — ใช้ในหน้า "แผนและผู้รับผิดชอบ" */
-export interface PlanActivityState { activityId: string; projectId: string; budget: Satang; disbursed: Satang; committed: Satang; planQuarters: string; units: ActivityUnit[]; hasDisbursement: boolean }
+export interface PlanActivityState { activityId: string; projectId: string; budget: Satang; disbursed: Satang; committed: Satang; planQuarters: string; units: ActivityUnit[]; hasDisbursement: boolean; dueMonth: number }
 export interface PlanDetail { doc: PlanDoc; items: PlanItem[]; activities: Record<string, PlanActivityState> }
 export interface UnitShareInput { unitId: string; budgetSatang: Satang; targetQty?: number }
 /** แถวข้อมูลรายงาน: 1 แถว = กิจกรรม × หน่วยดำเนินการ */
@@ -50,6 +50,7 @@ export interface ReportRow {
   planQ?: Satang[];
 }
 export interface ReportData { fiscalYear: number; generatedAt: string; monthIndex: number; rows: ReportRow[] }
+export interface VisitCount { today: number; total: number; since: string }
 export interface AssignResult { assigned: number; skipped: Array<{ id: string; reason: string }> }
 
 export const API_VERSION = '1.0.0';
@@ -127,7 +128,7 @@ export interface PublicSummary {
    * annualPct = เป้าเบิกจ่ายทั้งปี (รายจ่ายประจำ ≥ 98% ตามมติ ครม. 29 ก.ย. 2569)
    * meetingDeadline = วันสุดท้ายของไตรมาส 3 ที่ค่าใช้จ่ายฝึกอบรม/ประชุม/สัมมนาต้องดำเนินการให้เสร็จ
    */
-  targets: { annualPct: number; meetingDeadline: string };
+  targets: { annualPct: number; meetingDeadline: string; spend?: SpendTarget };
   /** กิจกรรมประเภทอบรม/ประชุม/สัมมนา/เวที ที่ยังมีงบเหลือ (ต้องเสร็จภายในไตรมาส 3) */
   meetings: { activities: number; remaining: number; budget: number };
   risks: Array<{ projectId: string; name: string; flags: RiskFlag[] }>;
@@ -187,6 +188,10 @@ export interface Actions {
   'public.summary': [{ fiscalYear?: number }, PublicSummary];
   'public.projects': [{ fiscalYear?: number }, PublicProject[]];
   'public.project': [{ id: string }, PublicProject];
+  /** รายงานสำหรับผู้บริหาร (เฉพาะโครงการที่เผยแพร่) — พิมพ์ได้โดยไม่ต้องเข้าสู่ระบบ */
+  'public.report': [{ fiscalYear?: number }, ReportData];
+  /** ตัวนับผู้เข้าชม: count = true นับเพิ่ม 1 (ครั้งแรกของการเปิดเว็บ) */
+  'public.hit': [{ count?: boolean }, VisitCount];
   // auth
   'auth.requestAccess': [{ phone: string; fullName: string; position: string; workgroupId: string; affiliation: string; note?: string }, { requestId: string }];
   'auth.login': [{ phone: string; device?: string }, { token: string; user: SessionUser }];
@@ -230,6 +235,11 @@ export interface Actions {
   /** กำหนดหน่วยให้หลายกิจกรรมพร้อมกัน: แบ่งงบเท่ากัน (เศษสตางค์ไปหน่วยแรก) */
   'activities.setUnitsBulk': [{ activityIds: string[]; unitIds: string[] }, { updated: number; skipped: Array<{ id: string; reason: string }> }];
   'reports.data': [{ fiscalYear: number }, ReportData];
+  /** เป้าการเบิกจ่ายของปีงบประมาณ */
+  'targets.get': [{ fiscalYear: number }, { fiscalYear: number; target: SpendTarget; curve: number[] }];
+  'targets.save': [{ fiscalYear: number; target: SpendTarget }, { fiscalYear: number; target: SpendTarget; curve: number[] }];
+  /** กำหนดเดือนที่กิจกรรมต้องเบิกครบ (1–12), 0 = ค่าเริ่มต้น, -1 = ตามเป้าของปี */
+  'activities.setDue': [{ activityId: string; dueMonth: number }, PlanActivityState];
   'plans.unassign': [{ itemIds: string[] }, { unassigned: number; skipped: Array<{ id: string; reason: string }> }];
   // super admin
   'admin.requests': [{ status?: string }, AccessRequest[]];
@@ -255,13 +265,13 @@ export type ActionRequest<A extends ActionName> = Actions[A][0];
 export type ActionResponse<A extends ActionName> = Actions[A][1];
 
 export const PUBLIC_ACTIONS: ReadonlySet<ActionName> = new Set<ActionName>([
-  'public.lookups', 'public.summary', 'public.projects', 'public.project',
+  'public.lookups', 'public.summary', 'public.projects', 'public.project', 'public.report', 'public.hit',
   'auth.requestAccess', 'auth.login', 'auth.loginSuper', 'batch',
 ]);
 
 /** action ที่อ่านอย่างเดียว — หน้าเว็บ cache ผลและรวมเป็น batch ได้ */
 export const READ_ACTIONS: ReadonlySet<ActionName> = new Set<ActionName>([
-  'public.lookups', 'public.summary', 'public.projects', 'public.project', 'auth.me',
+  'public.lookups', 'public.summary', 'public.projects', 'public.project', 'public.report', 'auth.me', 'targets.get',
   'admin.overview', 'projects.list', 'projects.get', 'imports.get', 'imports.list', 'plans.check', 'plans.list', 'plans.get', 'reports.data',
   'admin.requests', 'admin.users', 'admin.loginReport', 'admin.audit', 'admin.health',
 ]);

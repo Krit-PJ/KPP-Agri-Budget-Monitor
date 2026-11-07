@@ -13,6 +13,7 @@ import * as projectsSvc from './services/projects';
 import * as publicSvc from './services/public';
 import * as plansSvc from './services/plans';
 import * as reportsSvc from './services/reports';
+import * as targetsSvc from './services/targets';
 import * as unitsSvc from './services/units';
 
 type Handler = (ctx: Ctx, body: Record<string, unknown>) => unknown;
@@ -27,6 +28,9 @@ export const ROUTES: Record<Exclude<ActionName, 'batch'>, Route> = {
   'public.summary': r(publicSvc.publicSummary, false, 'public'),
   'public.projects': r(publicSvc.publicProjects, false, 'public'),
   'public.project': r(publicSvc.publicProject, false, 'public'),
+  'public.report': r(publicSvc.publicReport, false, 'public'),
+  // นับผู้เข้าชม: ใช้ lock สั้น ๆ ภายใน service เอง (ไม่ใช้ lock 25 วินาทีของ action เขียนข้อมูล)
+  'public.hit': r(publicSvc.visitHit, false, 'public'),
   'auth.requestAccess': r(requestAccess, true, 'auth'),
   'auth.login': r(loginAdmin, true, 'auth'),
   'auth.loginSuper': r(loginSuper, true, 'auth'),
@@ -65,6 +69,9 @@ export const ROUTES: Record<Exclude<ActionName, 'batch'>, Route> = {
   'activities.setUnits': r(unitsSvc.setActivityUnits, true, 'admin'),
   'activities.setUnitsBulk': r(unitsSvc.setActivityUnitsBulk, true, 'admin'),
   'reports.data': r(reportsSvc.reportData, false, 'admin'),
+  'targets.get': r(targetsSvc.getTargets, false, 'admin'),
+  'targets.save': r(targetsSvc.saveTargets, true, 'admin'),
+  'activities.setDue': r(unitsSvc.setActivityDue, true, 'admin'),
   'admin.requests': r(adminSvc.listRequests, false, 'admin'),
   'admin.decideRequest': r(adminSvc.decideRequest, true, 'admin'),
   'admin.users': r((c) => adminSvc.listUsers(c), false, 'admin'),

@@ -117,9 +117,9 @@ var KPP = (() => {
       const left = w.slice(0, millionIdx);
       const right = w.slice(millionIdx + 4);
       const l = left === "" ? 1 : thaiWordsToInt(left);
-      const r2 = right === "" ? 0 : thaiWordsToInt(right);
-      if (l === null || r2 === null) return null;
-      return l * 1e6 + r2;
+      const r3 = right === "" ? 0 : thaiWordsToInt(right);
+      if (l === null || r3 === null) return null;
+      return l * 1e6 + r3;
     }
     let total = 0;
     let pending = null;
@@ -265,7 +265,7 @@ var KPP = (() => {
     return v.length > 1 && v[0] === "'" && DANGEROUS_LEAD.test(v.slice(1)) ? v.slice(1) : v;
   }
   function toCsv(rows) {
-    const line = (r2) => r2.map((c) => {
+    const line = (r3) => r3.map((c) => {
       const s = String(escapeCell(c ?? "") ?? "");
       return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     }).join(",");
@@ -303,7 +303,7 @@ var KPP = (() => {
       row.push(field);
       rows.push(row);
     }
-    return rows.filter((r2) => r2.some((c) => c.trim() !== ""));
+    return rows.filter((r3) => r3.some((c) => c.trim() !== ""));
   }
   function detectDelimiter(text) {
     const sample = text.split(/\r?\n/).slice(0, 10).join("\n");
@@ -445,6 +445,57 @@ var KPP = (() => {
     }
     return Math.round(budget * monthlyTargetPct(quarterTargets)[month - 1] / 100);
   }
+  function parseSpendTarget(json2, fallbackQuarters = DEFAULT_QUARTER_TARGETS) {
+    const base = { mode: "quarter", quarters: [...parseQuarterTargets(fallbackQuarters)], month: 12, pct: 100 };
+    if (!json2) return base;
+    try {
+      const t2 = JSON.parse(json2);
+      const out = {
+        mode: t2.mode === "deadline" ? "deadline" : "quarter",
+        quarters: Array.isArray(t2.quarters) ? t2.quarters.map(Number) : base.quarters,
+        month: Number(t2.month) || 12,
+        pct: Number(t2.pct) || 100
+      };
+      return validateSpendTarget(out) ? base : out;
+    } catch {
+      return base;
+    }
+  }
+  function validateSpendTarget(t2) {
+    if (t2.mode === "quarter") {
+      const q = t2.quarters;
+      if (!Array.isArray(q) || q.length !== 4 || q.some((v) => !Number.isFinite(v) || v < 0 || v > 100)) return "\u0E40\u0E1B\u0E49\u0E32\u0E23\u0E32\u0E22\u0E44\u0E15\u0E23\u0E21\u0E32\u0E2A\u0E15\u0E49\u0E2D\u0E07\u0E21\u0E35 4 \u0E04\u0E48\u0E32 \u0E04\u0E48\u0E32\u0E25\u0E30 0\u2013100";
+      for (let i = 1; i < 4; i++) if (q[i] < q[i - 1]) return `\u0E40\u0E1B\u0E49\u0E32\u0E44\u0E15\u0E23\u0E21\u0E32\u0E2A ${i + 1} \u0E15\u0E49\u0E2D\u0E07\u0E44\u0E21\u0E48\u0E19\u0E49\u0E2D\u0E22\u0E01\u0E27\u0E48\u0E32\u0E44\u0E15\u0E23\u0E21\u0E32\u0E2A ${i} (\u0E40\u0E1B\u0E47\u0E19\u0E23\u0E49\u0E2D\u0E22\u0E25\u0E30\u0E2A\u0E30\u0E2A\u0E21)`;
+      return null;
+    }
+    if (!Number.isInteger(t2.month) || t2.month < 1 || t2.month > 12) return "\u0E40\u0E14\u0E37\u0E2D\u0E19\u0E17\u0E35\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E40\u0E1A\u0E34\u0E01\u0E43\u0E2B\u0E49\u0E04\u0E23\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07";
+    if (!Number.isFinite(t2.pct) || t2.pct <= 0 || t2.pct > 100) return "\u0E23\u0E49\u0E2D\u0E22\u0E25\u0E30\u0E17\u0E35\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E40\u0E1A\u0E34\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E2D\u0E22\u0E39\u0E48\u0E23\u0E30\u0E2B\u0E27\u0E48\u0E32\u0E07 1\u2013100";
+    return null;
+  }
+  var r2 = (v) => Math.round(v * 100) / 100;
+  function targetCurve(t2) {
+    if (t2.mode === "quarter") return monthlyTargetPct(t2.quarters.join(","));
+    const out = [];
+    for (let m = 1; m <= 12; m++) {
+      out.push(r2(m <= t2.month ? t2.pct * m / t2.month : t2.pct + (100 - t2.pct) * (m - t2.month) / (12 - t2.month)));
+    }
+    return out;
+  }
+  function dueCurve(dueMonth) {
+    return Array.from({ length: 12 }, (_, i) => r2(Math.min(1, (i + 1) / dueMonth) * 100));
+  }
+  function effectiveDueMonth(a) {
+    const d = Number(a.dueMonth) || 0;
+    if (d >= 1 && d <= 12) return d;
+    if (d < 0) return 0;
+    return MEETING_RE.test(a.name) ? MEETING_DUE_MONTH : 0;
+  }
+  var MEETING_DUE_MONTH = 9;
+  function planAt(budget, curve, dueMonth, m) {
+    if (m <= 0 || budget <= 0) return 0;
+    const c = dueMonth > 0 ? dueCurve(dueMonth) : curve;
+    return Math.round(budget * (c[Math.min(12, m) - 1] ?? 0) / 100);
+  }
   function splitEqual(total, n, step = 1) {
     if (n <= 0) return [];
     const unit = step > 1 && total % step === 0 ? step : 1;
@@ -454,14 +505,14 @@ var KPP = (() => {
     return Array.from({ length: n }, (_, i) => (base + (i < rest ? 1 : 0)) * unit);
   }
   var splitMoney = (total, n) => splitEqual(total, n, 100);
-  function riskFlags(project, summary, today2 = todayBangkok()) {
+  function riskFlags(project, summary, today2 = todayBangkok(), curve) {
     const flags = [];
     if (summary.remaining < 0) flags.push("OVER_BUDGET");
     const active = project.status !== "COMPLETED" && project.status !== "CANCELLED";
     if (active && project.endDate && project.endDate < today2) flags.push("OVERDUE");
     const { start, end } = fiscalYearRange(project.fiscalYear);
     if (active && today2 >= start && today2 <= end && summary.currentBudget > 0) {
-      const target = monthlyTargetPct(project.quarterTargets)[fiscalMonthIndex(today2) - 1];
+      const target = (curve ?? monthlyTargetPct(project.quarterTargets))[fiscalMonthIndex(today2) - 1];
       if (summary.spendingPct + 10 < target) flags.push("BEHIND_SPENDING");
     }
     if (active && project.startDate && project.startDate <= today2) {
@@ -600,14 +651,14 @@ var KPP = (() => {
     let best = { headerRow: 0, headerSpan: 1, headers: [], mapping: {}, kind: null };
     let bestScore = 0;
     const limit = Math.min(rows.length, 15);
-    for (let r2 = 0; r2 < limit; r2++) {
-      const single = rows[r2].map((c) => cleanText(c, 120));
+    for (let r3 = 0; r3 < limit; r3++) {
+      const single = rows[r3].map((c) => cleanText(c, 120));
       const variants = [{ headers: single, span: 1 }];
-      if (r2 + 1 < rows.length) {
+      if (r3 + 1 < rows.length) {
         let carry = "";
         const combined = single.map((h, i) => {
           if (h) carry = h;
-          const sub = cleanText(rows[r2 + 1][i], 120);
+          const sub = cleanText(rows[r3 + 1][i], 120);
           if (!sub) return h;
           return autoMap([sub]).score >= 100 ? sub : `${h || carry} ${sub}`.trim();
         });
@@ -619,7 +670,7 @@ var KPP = (() => {
         const total = fields * 1e3 + score - (v.span - 1) * 50;
         if (fields >= 2 && total > bestScore) {
           bestScore = total;
-          best = { headerRow: r2, headerSpan: v.span, headers: v.headers, mapping, kind: detectKind(mapping) };
+          best = { headerRow: r3, headerSpan: v.span, headers: v.headers, mapping, kind: detectKind(mapping) };
         }
       }
     }
@@ -779,20 +830,20 @@ var KPP = (() => {
     const existingDisbKeys = new Set(
       ctx.disbursements.filter((d) => !d.isDeleted && d.status !== "VOID").map((d) => `${d.projectId}|${normalizeKey(d.docNo)}|${d.date}|${d.amountSatang}`)
     );
-    for (const r2 of parsed) {
-      const messages = [...r2.issues];
-      let hardError = r2.issues.length > 0;
+    for (const r3 of parsed) {
+      const messages = [...r3.issues];
+      let hardError = r3.issues.length > 0;
       let warn = false;
       const plan = { allocations: [], disbursements: [] };
       const effect = { budgetDelta: 0, disbursedDelta: 0, committedDelta: 0 };
-      const label = [r2.projectCode, r2.projectName, r2.activityName].filter(Boolean).join(" \xB7 ") || `\u0E41\u0E16\u0E27 ${r2.rowNo}`;
-      const fy = r2.fiscalYear ?? ctx.fiscalYear;
+      const label = [r3.projectCode, r3.projectName, r3.activityName].filter(Boolean).join(" \xB7 ") || `\u0E41\u0E16\u0E27 ${r3.rowNo}`;
+      const fy = r3.fiscalYear ?? ctx.fiscalYear;
       let fundingSourceId = ctx.fundingSourceId;
-      if (r2.fundingSource) {
-        const fs = matchFundingSource(r2.fundingSource, ctx.fundingSources);
+      if (r3.fundingSource) {
+        const fs = matchFundingSource(r3.fundingSource, ctx.fundingSources);
         if (fs) fundingSourceId = fs.id;
         else {
-          messages.push(`\u0E44\u0E21\u0E48\u0E23\u0E39\u0E49\u0E08\u0E31\u0E01\u0E41\u0E2B\u0E25\u0E48\u0E07\u0E07\u0E1A "${r2.fundingSource}"`);
+          messages.push(`\u0E44\u0E21\u0E48\u0E23\u0E39\u0E49\u0E08\u0E31\u0E01\u0E41\u0E2B\u0E25\u0E48\u0E07\u0E07\u0E1A "${r3.fundingSource}"`);
           hardError = true;
         }
       }
@@ -800,39 +851,39 @@ var KPP = (() => {
         messages.push("\u0E44\u0E21\u0E48\u0E23\u0E30\u0E1A\u0E38\u0E41\u0E2B\u0E25\u0E48\u0E07\u0E07\u0E1A \u2014 \u0E40\u0E25\u0E37\u0E2D\u0E01\u0E41\u0E2B\u0E25\u0E48\u0E07\u0E07\u0E1A\u0E02\u0E2D\u0E07\u0E44\u0E1F\u0E25\u0E4C");
         hardError = true;
       }
-      if (!r2.projectCode && !r2.projectName) {
+      if (!r3.projectCode && !r3.projectName) {
         messages.push("\u0E44\u0E21\u0E48\u0E21\u0E35\u0E23\u0E2B\u0E31\u0E2A\u0E2B\u0E23\u0E37\u0E2D\u0E0A\u0E37\u0E48\u0E2D\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23");
-        result.push({ rowNo: r2.rowNo, status: "ERROR", messages, label, plan, effect });
+        result.push({ rowNo: r3.rowNo, status: "ERROR", messages, label, plan, effect });
         continue;
       }
       const sameScope = liveProjects.filter((p) => p.fiscalYear === fy && p.fundingSourceId === fundingSourceId);
-      let project = r2.projectCode ? sameScope.find((p) => normalizeKey(p.projectCode) === normalizeKey(r2.projectCode)) : void 0;
-      if (!project && r2.projectName) {
-        const byName = sameScope.filter((p) => normalizeKey(p.name) === normalizeKey(r2.projectName));
-        if (byName.length === 1 && (!r2.projectCode || byName[0].projectCode.startsWith("AUTO-"))) project = byName[0];
+      let project = r3.projectCode ? sameScope.find((p) => normalizeKey(p.projectCode) === normalizeKey(r3.projectCode)) : void 0;
+      if (!project && r3.projectName) {
+        const byName = sameScope.filter((p) => normalizeKey(p.name) === normalizeKey(r3.projectName));
+        if (byName.length === 1 && (!r3.projectCode || byName[0].projectCode.startsWith("AUTO-"))) project = byName[0];
       }
-      const projectCode = r2.projectCode || (project?.projectCode ?? autoProjectCode(fy, r2.projectName));
+      const projectCode = r3.projectCode || (project?.projectCode ?? autoProjectCode(fy, r3.projectName));
       const newKey = `${fy}|${fundingSourceId}|${normalizeKey(projectCode)}`;
       let projectRef = project?.id ?? "";
       let workgroupId = project?.workgroupId ?? "";
-      if (r2.workgroup) {
-        const wg = matchWorkgroup(r2.workgroup, ctx.workgroups);
+      if (r3.workgroup) {
+        const wg = matchWorkgroup(r3.workgroup, ctx.workgroups);
         if (wg) {
           if (project && project.workgroupId !== wg.id) {
             messages.push(`\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19\u0E43\u0E19\u0E44\u0E1F\u0E25\u0E4C (${wg.name}) \u0E15\u0E48\u0E32\u0E07\u0E08\u0E32\u0E01\u0E43\u0E19\u0E23\u0E30\u0E1A\u0E1A \u2014 \u0E43\u0E0A\u0E49\u0E04\u0E48\u0E32\u0E43\u0E19\u0E23\u0E30\u0E1A\u0E1A`);
             warn = true;
           } else workgroupId = wg.id;
         } else if (!project) {
-          messages.push(`\u0E44\u0E21\u0E48\u0E23\u0E39\u0E49\u0E08\u0E31\u0E01\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19 "${r2.workgroup}"`);
+          messages.push(`\u0E44\u0E21\u0E48\u0E23\u0E39\u0E49\u0E08\u0E31\u0E01\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19 "${r3.workgroup}"`);
           hardError = true;
         }
       }
       if (!workgroupId && ctx.defaultWorkgroupId) workgroupId = ctx.defaultWorkgroupId;
       if (!project) {
         if (ctx.kind === "DISBURSEMENT_LIST") {
-          messages.push(`\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23 "${r2.projectCode || r2.projectName}" \u0E43\u0E19\u0E1B\u0E35\u0E07\u0E1A ${fy}`);
+          messages.push(`\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23 "${r3.projectCode || r3.projectName}" \u0E43\u0E19\u0E1B\u0E35\u0E07\u0E1A ${fy}`);
           hardError = true;
-        } else if (!r2.projectName && !newProjects.has(newKey)) {
+        } else if (!r3.projectName && !newProjects.has(newKey)) {
           messages.push("\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23\u0E43\u0E2B\u0E21\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E21\u0E35\u0E0A\u0E37\u0E48\u0E2D\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23");
           hardError = true;
         } else {
@@ -840,7 +891,7 @@ var KPP = (() => {
             messages.push("\u0E44\u0E21\u0E48\u0E23\u0E30\u0E1A\u0E38\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19\u0E02\u0E2D\u0E07\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23\u0E43\u0E2B\u0E21\u0E48");
             hardError = true;
           }
-          if (!r2.projectCode) {
+          if (!r3.projectCode) {
             messages.push(`\u0E44\u0E21\u0E48\u0E21\u0E35\u0E23\u0E2B\u0E31\u0E2A\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23 \u2014 \u0E23\u0E30\u0E1A\u0E1A\u0E15\u0E31\u0E49\u0E07\u0E23\u0E2B\u0E31\u0E2A ${projectCode}`);
             warn = true;
           }
@@ -851,12 +902,12 @@ var KPP = (() => {
               fiscalYear: fy,
               fundingSourceId,
               projectCode,
-              name: r2.projectName,
+              name: r3.projectName,
               workgroupId,
-              ownerName: r2.ownerName,
-              startDate: r2.startDate ?? "",
-              endDate: r2.endDate ?? "",
-              status: parseProjectStatus(r2.status) ?? "IN_PROGRESS"
+              ownerName: r3.ownerName,
+              startDate: r3.startDate ?? "",
+              endDate: r3.endDate ?? "",
+              status: parseProjectStatus(r3.status) ?? "IN_PROGRESS"
             };
             newProjects.set(newKey, p);
             plan.createProject = p;
@@ -865,10 +916,10 @@ var KPP = (() => {
         }
       } else if (ctx.kind === "BUDGET_SUMMARY") {
         const patch = {};
-        if (r2.ownerName && r2.ownerName !== project.ownerName) patch.ownerName = r2.ownerName;
-        if (r2.startDate && r2.startDate !== project.startDate) patch.startDate = r2.startDate;
-        if (r2.endDate && r2.endDate !== project.endDate) patch.endDate = r2.endDate;
-        const st = parseProjectStatus(r2.status);
+        if (r3.ownerName && r3.ownerName !== project.ownerName) patch.ownerName = r3.ownerName;
+        if (r3.startDate && r3.startDate !== project.startDate) patch.startDate = r3.startDate;
+        if (r3.endDate && r3.endDate !== project.endDate) patch.endDate = r3.endDate;
+        const st = parseProjectStatus(r3.status);
         if (st && st !== project.status) patch.status = st;
         if (Object.keys(patch).length) plan.updateProject = { projectId: project.id, patch };
       }
@@ -877,19 +928,19 @@ var KPP = (() => {
         hardError = true;
       }
       let activityRef = "";
-      if (r2.activityCode || r2.activityName) {
+      if (r3.activityCode || r3.activityName) {
         const acts = project ? liveActivities.filter((a) => a.projectId === project.id) : [];
-        const act = acts.find((a) => r2.activityCode && normalizeKey(a.activityCode) === normalizeKey(r2.activityCode) || !r2.activityCode && normalizeKey(a.name) === normalizeKey(r2.activityName));
+        const act = acts.find((a) => r3.activityCode && normalizeKey(a.activityCode) === normalizeKey(r3.activityCode) || !r3.activityCode && normalizeKey(a.name) === normalizeKey(r3.activityName));
         if (act) activityRef = act.id;
         else if (ctx.kind === "DISBURSEMENT_LIST") {
-          messages.push(`\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21 "${r2.activityCode || r2.activityName}" \u2014 \u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E17\u0E35\u0E48\u0E23\u0E30\u0E14\u0E31\u0E1A\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23`);
+          messages.push(`\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21 "${r3.activityCode || r3.activityName}" \u2014 \u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E17\u0E35\u0E48\u0E23\u0E30\u0E14\u0E31\u0E1A\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23`);
           warn = true;
-        } else if (r2.activityName) {
-          const code = r2.activityCode || String(acts.length + [...newActivities.values()].filter((a) => a.projectRef === projectRef).length + 1).padStart(2, "0");
+        } else if (r3.activityName) {
+          const code = r3.activityCode || String(acts.length + [...newActivities.values()].filter((a) => a.projectRef === projectRef).length + 1).padStart(2, "0");
           const aKey = `${projectRef}|${normalizeKey(code)}`;
           activityRef = `new:${aKey}`;
           if (!newActivities.has(aKey)) {
-            const a = { ref: activityRef, projectRef, activityCode: code, name: r2.activityName };
+            const a = { ref: activityRef, projectRef, activityCode: code, name: r3.activityName };
             newActivities.set(aKey, a);
             plan.createActivity = a;
           }
@@ -906,7 +957,7 @@ var KPP = (() => {
       if (!hardError && projectRef) {
         const cur = existingSummary(projectRef, activityRef || "*");
         if (ctx.kind === "BUDGET_SUMMARY") {
-          const mny = { ...r2.money };
+          const mny = { ...r3.money };
           if (mny.transferOut !== void 0) mny.transferOut = Math.abs(mny.transferOut);
           if (mny.transferIn !== void 0 && mny.transferIn < 0) {
             messages.push("\u0E42\u0E2D\u0E19\u0E40\u0E1E\u0E34\u0E48\u0E21\u0E40\u0E1B\u0E47\u0E19\u0E04\u0E48\u0E32\u0E15\u0E34\u0E14\u0E25\u0E1A \u2014 \u0E16\u0E49\u0E32\u0E40\u0E1B\u0E47\u0E19\u0E01\u0E32\u0E23\u0E42\u0E2D\u0E19\u0E25\u0E14\u0E43\u0E2B\u0E49\u0E43\u0E2A\u0E48\u0E43\u0E19\u0E04\u0E2D\u0E25\u0E31\u0E21\u0E19\u0E4C\u0E42\u0E2D\u0E19\u0E25\u0E14");
@@ -984,7 +1035,7 @@ var KPP = (() => {
             hardError = true;
           }
         } else {
-          const amount = r2.money.amount;
+          const amount = r3.money.amount;
           if (amount === void 0 || amount === 0) {
             messages.push("\u0E44\u0E21\u0E48\u0E21\u0E35\u0E08\u0E33\u0E19\u0E27\u0E19\u0E40\u0E07\u0E34\u0E19");
             hardError = true;
@@ -992,16 +1043,16 @@ var KPP = (() => {
             messages.push("\u0E08\u0E33\u0E19\u0E27\u0E19\u0E40\u0E07\u0E34\u0E19\u0E15\u0E34\u0E14\u0E25\u0E1A \u2014 \u0E43\u0E0A\u0E49\u0E01\u0E32\u0E23\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E41\u0E17\u0E19");
             hardError = true;
           }
-          if (!r2.date) {
+          if (!r3.date) {
             messages.push("\u0E44\u0E21\u0E48\u0E21\u0E35\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48");
             hardError = true;
           }
-          const status2 = parseDisbStatus(r2.status) ?? "APPROVED";
+          const status2 = parseDisbStatus(r3.status) ?? "APPROVED";
           if (status2 === "VOID") {
             messages.push("\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E2A\u0E16\u0E32\u0E19\u0E30\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01 \u2014 \u0E02\u0E49\u0E32\u0E21");
             warn = true;
           } else if (!hardError && amount) {
-            const dupKey = `${projectRef}|${normalizeKey(r2.docNo)}|${r2.date}|${amount}`;
+            const dupKey = `${projectRef}|${normalizeKey(r3.docNo)}|${r3.date}|${amount}`;
             if (existingDisbKeys.has(dupKey)) {
               messages.push("\u0E21\u0E35\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E19\u0E35\u0E49\u0E43\u0E19\u0E23\u0E30\u0E1A\u0E1A\u0E41\u0E25\u0E49\u0E27 \u2014 \u0E02\u0E49\u0E32\u0E21");
               warn = true;
@@ -1017,9 +1068,9 @@ var KPP = (() => {
                   activityRef,
                   status: status2,
                   amountSatang: amount,
-                  date: r2.date,
-                  docNo: r2.docNo,
-                  description: r2.description,
+                  date: r3.date,
+                  docNo: r3.docNo,
+                  description: r3.description,
                   adjust: false
                 });
                 effect.disbursedDelta = disbursedAdd;
@@ -1046,20 +1097,20 @@ var KPP = (() => {
         }
       }
       const status = hardError ? "ERROR" : warn ? "WARNING" : "VALID";
-      result.push({ rowNo: r2.rowNo, status, messages, label, plan, effect });
+      result.push({ rowNo: r3.rowNo, status, messages, label, plan, effect });
     }
     return result;
   }
   function summarizeStaged(rows) {
     let valid = 0, warning = 0, error = 0, budgetDelta = 0, disbursedDelta = 0, newProjects = 0;
-    for (const r2 of rows) {
-      if (r2.status === "VALID") valid++;
-      else if (r2.status === "WARNING") warning++;
+    for (const r3 of rows) {
+      if (r3.status === "VALID") valid++;
+      else if (r3.status === "WARNING") warning++;
       else error++;
-      if (r2.status !== "ERROR") {
-        budgetDelta += r2.effect.budgetDelta;
-        disbursedDelta += r2.effect.disbursedDelta;
-        if (r2.plan.createProject) newProjects++;
+      if (r3.status !== "ERROR") {
+        budgetDelta += r3.effect.budgetDelta;
+        disbursedDelta += r3.effect.disbursedDelta;
+        if (r3.plan.createProject) newProjects++;
       }
     }
     return { total: rows.length, valid, warning, error, budgetDelta, disbursedDelta, newProjects };
@@ -1144,6 +1195,8 @@ var KPP = (() => {
     "public.summary",
     "public.projects",
     "public.project",
+    "public.report",
+    "public.hit",
     "auth.requestAccess",
     "auth.login",
     "auth.loginSuper",
@@ -1154,7 +1207,9 @@ var KPP = (() => {
     "public.summary",
     "public.projects",
     "public.project",
+    "public.report",
     "auth.me",
+    "targets.get",
     "admin.overview",
     "projects.list",
     "projects.get",
@@ -1241,23 +1296,23 @@ var KPP = (() => {
     let totalRowNo = 0;
     let planIndex = 0;
     let prevRank = 10;
-    for (const r2 of rows) {
-      const text = cleanText(r2.text, 1e3);
+    for (const r3 of rows) {
+      const text = cleanText(r3.text, 1e3);
       if (!text) continue;
       const c = classifyPlanLine(text);
-      const money = parseMoney(r2.amount);
-      if (!money.ok) issues.push({ rowNo: r2.rowNo, level: "ERROR", message: `\u0E2D\u0E48\u0E32\u0E19\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49: "${cleanText(r2.amount, 30)}"` });
+      const money = parseMoney(r3.amount);
+      if (!money.ok) issues.push({ rowNo: r3.rowNo, level: "ERROR", message: `\u0E2D\u0E48\u0E32\u0E19\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49: "${cleanText(r3.amount, 30)}"` });
       const amount = money.ok && !money.empty ? money.satang : null;
       if (c.kind === "TOTAL") {
         declaredTotal = amount;
-        totalRowNo = r2.rowNo;
+        totalRowNo = r3.rowNo;
         continue;
       }
       let rank = c.rank;
       if (rank === -1) rank = prevRank + 0.5;
       if (rank === -2) {
         rank = Math.max(10, (stack.at(-1)?.rank ?? 9) + 0.5);
-        issues.push({ rowNo: r2.rowNo, level: "INFO", message: "\u0E41\u0E16\u0E27\u0E19\u0E35\u0E49\u0E44\u0E21\u0E48\u0E21\u0E35\u0E40\u0E25\u0E02\u0E25\u0E33\u0E14\u0E31\u0E1A \u0E23\u0E30\u0E1A\u0E1A\u0E08\u0E31\u0E14\u0E40\u0E1B\u0E47\u0E19\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E22\u0E48\u0E2D\u0E22\u0E02\u0E2D\u0E07\u0E41\u0E16\u0E27\u0E01\u0E48\u0E2D\u0E19\u0E2B\u0E19\u0E49\u0E32" });
+        issues.push({ rowNo: r3.rowNo, level: "INFO", message: "\u0E41\u0E16\u0E27\u0E19\u0E35\u0E49\u0E44\u0E21\u0E48\u0E21\u0E35\u0E40\u0E25\u0E02\u0E25\u0E33\u0E14\u0E31\u0E1A \u0E23\u0E30\u0E1A\u0E1A\u0E08\u0E31\u0E14\u0E40\u0E1B\u0E47\u0E19\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E22\u0E48\u0E2D\u0E22\u0E02\u0E2D\u0E07\u0E41\u0E16\u0E27\u0E01\u0E48\u0E2D\u0E19\u0E2B\u0E19\u0E49\u0E32" });
       }
       while (stack.length && stack[stack.length - 1].rank >= rank) stack.pop();
       if (c.kind === "PLAN") {
@@ -1265,20 +1320,20 @@ var KPP = (() => {
         stack.length = 0;
       }
       const parent = stack.at(-1)?.node;
-      const qty = parseQty(r2.qty);
-      if (r2.qty && qty === null) {
-        const digits = thaiDigitsToArabic(r2.qty).replace(/[^\d.]/g, "");
-        issues.push({ rowNo: r2.rowNo, level: "WARNING", message: `\u0E1B\u0E23\u0E34\u0E21\u0E32\u0E13\u0E07\u0E32\u0E19\u0E44\u0E21\u0E48\u0E43\u0E0A\u0E48\u0E15\u0E31\u0E27\u0E40\u0E25\u0E02: "${r2.qty}"`, field: "qty", ...digits ? { suggest: digits, fix: `\u0E43\u0E0A\u0E49 ${digits}` } : {} });
+      const qty = parseQty(r3.qty);
+      if (r3.qty && qty === null) {
+        const digits = thaiDigitsToArabic(r3.qty).replace(/[^\d.]/g, "");
+        issues.push({ rowNo: r3.rowNo, level: "WARNING", message: `\u0E1B\u0E23\u0E34\u0E21\u0E32\u0E13\u0E07\u0E32\u0E19\u0E44\u0E21\u0E48\u0E43\u0E0A\u0E48\u0E15\u0E31\u0E27\u0E40\u0E25\u0E02: "${r3.qty}"`, field: "qty", ...digits ? { suggest: digits, fix: `\u0E43\u0E0A\u0E49 ${digits}` } : {} });
       }
       const node = {
         seq: nodes.length + 1,
-        rowNo: r2.rowNo,
+        rowNo: r3.rowNo,
         parentSeq: parent?.seq ?? 0,
         depth: stack.length,
         kind: c.kind,
         number: c.number,
         name: c.name,
-        unit: cleanText(r2.unit, 40),
+        unit: cleanText(r3.unit, 40),
         quantity: qty,
         amountSatang: amount,
         isLeaf: true,
@@ -1409,23 +1464,23 @@ var KPP = (() => {
   var SUBHEADER = /ปริมาณ|งบประมาณ|ครั้งที่|งวดที่|บาท|จำนวน|หน่วย/;
   var PLAN_TABLE_HEADER = ["\u0E41\u0E1C\u0E19\u0E07\u0E32\u0E19 - \u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23 - \u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21 - \u0E27\u0E34\u0E18\u0E35\u0E01\u0E32\u0E23\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E07\u0E32\u0E19", "\u0E2B\u0E19\u0E48\u0E27\u0E22\u0E19\u0E31\u0E1A", "\u0E1B\u0E23\u0E34\u0E21\u0E32\u0E13\u0E07\u0E32\u0E19", "\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13 (\u0E1A\u0E32\u0E17)"];
   function locate(table) {
-    for (let r2 = 0; r2 < Math.min(table.length, 25); r2++) {
-      const cells = (table[r2] ?? []).map((c) => cleanText(c, 200));
+    for (let r3 = 0; r3 < Math.min(table.length, 25); r3++) {
+      const cells = (table[r3] ?? []).map((c) => cleanText(c, 200));
       const name = cells.findIndex((c) => NAME_HDR.test(c));
       const unit = cells.findIndex((c) => UNIT_HDR.test(c));
       const amountIdx = cells.map((c, i) => AMOUNT_HDR.test(c) && i !== name ? i : -1).filter((i) => i >= 0).pop() ?? -1;
       if (name < 0 || unit < 0 && amountIdx < 0) continue;
       const qty = cells.findIndex((c, i) => QTY_HDR.test(c) && i !== name && i !== amountIdx);
       const cols = { name, unit: unit >= 0 ? unit : name + 1, qty: qty >= 0 ? qty : unit >= 0 ? unit + 1 : name + 2, amount: amountIdx >= 0 ? amountIdx : name + 3 };
-      let headerRow = r2;
-      for (let k = 1; k <= 3 && r2 + k < table.length; k++) {
-        const sub = (table[r2 + k] ?? []).map((c) => cleanText(c, 200));
+      let headerRow = r3;
+      for (let k = 1; k <= 3 && r3 + k < table.length; k++) {
+        const sub = (table[r3 + k] ?? []).map((c) => cleanText(c, 200));
         if (sub[cols.name] || !sub.some((c) => SUBHEADER.test(c))) break;
         const q = sub.findIndex((c, i) => i !== cols.name && QTY_HDR.test(c));
         const a = sub.map((c, i) => i !== cols.name && AMOUNT_HDR.test(c) && !QTY_HDR.test(c) ? i : -1).filter((i) => i >= 0).pop() ?? -1;
         if (q >= 0) cols.qty = q;
         if (a >= 0) cols.amount = a;
-        headerRow = r2 + k;
+        headerRow = r3 + k;
       }
       return { headerRow, cols };
     }
@@ -1436,7 +1491,7 @@ var KPP = (() => {
     return cleanText(v, 1e3);
   }
   function detectPlanMeta(table, headerRow = locate(table).headerRow) {
-    const lines = table.slice(0, Math.max(0, headerRow) + 1).map((r2) => (r2 ?? []).map((c) => cleanText(thaiDigitsToArabic(String(c ?? "")), 300)).filter(Boolean).join(" ")).filter(Boolean);
+    const lines = table.slice(0, Math.max(0, headerRow) + 1).map((r3) => (r3 ?? []).map((c) => cleanText(thaiDigitsToArabic(String(c ?? "")), 300)).filter(Boolean).join(" ")).filter(Boolean);
     const all = lines.join("\n");
     const meta = {};
     const fy = all.match(/ปี(?:งบประมาณ)?\s*(?:พ\.\s*ศ\.)?\s*(25\d\d)/);
@@ -1459,8 +1514,8 @@ var KPP = (() => {
   function normalizePlanTable(table) {
     const { headerRow, cols } = locate(table);
     const out = [[...PLAN_TABLE_HEADER]];
-    for (let r2 = headerRow + 1; r2 < table.length; r2++) {
-      const line = table[r2] ?? [];
+    for (let r3 = headerRow + 1; r3 < table.length; r3++) {
+      const line = table[r3] ?? [];
       const text = cleanText(line[cols.name], 1e3);
       if (!text) continue;
       if (/^(หมายเหตุ|ที่มา)/.test(text)) break;
@@ -1471,12 +1526,12 @@ var KPP = (() => {
   function parsePlanTable(table) {
     const { headerRow, cols } = locate(table);
     const rows = [];
-    for (let r2 = headerRow + 1; r2 < table.length; r2++) {
-      const line = table[r2] ?? [];
+    for (let r3 = headerRow + 1; r3 < table.length; r3++) {
+      const line = table[r3] ?? [];
       const text = cleanText(line[cols.name], 1e3);
       if (!text) continue;
       if (/^(หมายเหตุ|ที่มา)/.test(text)) break;
-      rows.push({ rowNo: r2 + 1, text, unit: cleanText(line[cols.unit]), qty: cellText(line[cols.qty]), amount: line[cols.amount] ?? "" });
+      rows.push({ rowNo: r3 + 1, text, unit: cleanText(line[cols.unit]), qty: cellText(line[cols.qty]), amount: line[cols.amount] ?? "" });
     }
     return { ...buildPlan(rows), headerRow };
   }
@@ -1484,11 +1539,11 @@ var KPP = (() => {
     const fields = ["name", "unit", "qty", "amount"];
     const out = [];
     const n = Math.max(before.length, after.length);
-    for (let r2 = 1; r2 < n; r2++) {
+    for (let r3 = 1; r3 < n; r3++) {
       for (const f of fields) {
-        const a = cleanText(before[r2]?.[PLAN_FIELD_COL[f]] ?? "", 1e3);
-        const b = cleanText(after[r2]?.[PLAN_FIELD_COL[f]] ?? "", 1e3);
-        if (a !== b) out.push({ rowNo: r2 + 1, field: f, before: a, after: b });
+        const a = cleanText(before[r3]?.[PLAN_FIELD_COL[f]] ?? "", 1e3);
+        const b = cleanText(after[r3]?.[PLAN_FIELD_COL[f]] ?? "", 1e3);
+        if (a !== b) out.push({ rowNo: r3 + 1, field: f, before: a, after: b });
       }
     }
     return out;
@@ -1570,10 +1625,10 @@ var KPP = (() => {
     return { id: ctx.env.uuid(), createdAt: at, createdBy: by, updatedAt: at, updatedBy: by, version: 1, isDeleted: false };
   }
   function live(rows) {
-    return rows.filter((r2) => !r2.isDeleted);
+    return rows.filter((r3) => !r3.isDeleted);
   }
   function findById(ctx, table, id, label = "\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25") {
-    const row = ctx.env.db.list(table).find((r2) => r2.id === id && !r2.isDeleted);
+    const row = ctx.env.db.list(table).find((r3) => r3.id === id && !r3.isDeleted);
     if (!row) throw new AppError("NOT_FOUND", `\u0E44\u0E21\u0E48\u0E1E\u0E1A${label}`);
     return row;
   }
@@ -1587,7 +1642,7 @@ var KPP = (() => {
   }
   function findByIdempotency(ctx, table, key) {
     if (!key) throw new AppError("VALIDATION_FAILED", "\u0E15\u0E49\u0E2D\u0E07\u0E21\u0E35 idempotencyKey");
-    return ctx.env.db.list(table).find((r2) => r2.idempotencyKey === key) ?? null;
+    return ctx.env.db.list(table).find((r3) => r3.idempotencyKey === key) ?? null;
   }
   var PII_KEYS = /* @__PURE__ */ new Set(["phone", "phoneHash", "knownDevices", "ocrText", "password", "token"]);
   function redact(obj) {
@@ -1636,12 +1691,19 @@ var KPP = (() => {
   };
   function getSettings(ctx) {
     const out = { ...DEFAULT_SETTINGS };
-    for (const r2 of ctx.env.db.list("Settings")) out[r2.key] = String(r2.value ?? "");
+    for (const r3 of ctx.env.db.list("Settings")) out[r3.key] = String(r3.value ?? "");
     return out;
+  }
+  function spendTargetFor(ctx, fy) {
+    const s = getSettings(ctx);
+    return parseSpendTarget(s[`spendTarget:${fy}`], s.defaultQuarterTargets);
+  }
+  function curveFor(ctx, fy) {
+    return targetCurve(spendTargetFor(ctx, fy));
   }
   function setSetting(ctx, key, value) {
     const rows = ctx.env.db.list("Settings");
-    const existing = rows.find((r2) => r2.key === key);
+    const existing = rows.find((r3) => r3.key === key);
     const by = ctx.user?.sub ?? "SYSTEM";
     if (existing) ctx.env.db.update("Settings", key, { key, value, updatedAt: nowIso(ctx), updatedBy: by });
     else ctx.env.db.insert("Settings", [{ key, value, updatedAt: nowIso(ctx), updatedBy: by }]);
@@ -1853,7 +1915,7 @@ var KPP = (() => {
       throw new AppError("VALIDATION_FAILED", "\u0E2B\u0E21\u0E32\u0E22\u0E40\u0E25\u0E02\u0E19\u0E35\u0E49\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E41\u0E25\u0E49\u0E27 \u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A\u0E44\u0E14\u0E49\u0E17\u0E31\u0E19\u0E17\u0E35");
     }
     const reqs = ctx.env.db.list("AccessRequests");
-    if (reqs.some((r2) => r2.status === "pending" && normalizePhone(r2.phone) === phone)) {
+    if (reqs.some((r3) => r3.status === "pending" && normalizePhone(r3.phone) === phone)) {
       throw new AppError("VALIDATION_FAILED", "\u0E21\u0E35\u0E04\u0E33\u0E02\u0E2D\u0E02\u0E2D\u0E07\u0E2B\u0E21\u0E32\u0E22\u0E40\u0E25\u0E02\u0E19\u0E35\u0E49\u0E23\u0E2D\u0E01\u0E32\u0E23\u0E2D\u0E19\u0E38\u0E21\u0E31\u0E15\u0E34\u0E2D\u0E22\u0E39\u0E48\u0E41\u0E25\u0E49\u0E27");
     }
     const meta = newMeta(ctx);
@@ -1892,7 +1954,7 @@ var KPP = (() => {
   }
 
   // src/core/schema.ts
-  var SCHEMA_VERSION = "2026.11.07-4";
+  var SCHEMA_VERSION = "2026.11.07-5";
   var META = [
     ["id", "string"],
     ["createdAt", "string"],
@@ -1981,7 +2043,8 @@ var KPP = (() => {
       ["planItemId", "string"],
       ["unit", "string"],
       ["targetQty", "number"],
-      ["planQuarters", "string"]
+      ["planQuarters", "string"],
+      ["dueMonth", "number"]
     ]),
     Allocations: t("CORE", [
       ["projectId", "string"],
@@ -2169,8 +2232,29 @@ var KPP = (() => {
       committed: b.committed,
       planQuarters: a.planQuarters ?? "",
       units: (shares ?? activityUnitsOf(ctx)).filter((x) => x.activityId === a.id),
-      hasDisbursement: di.some((d) => d.status !== "VOID" && !d.isDeleted)
+      hasDisbursement: di.some((d) => d.status !== "VOID" && !d.isDeleted),
+      dueMonth: Number(a.dueMonth) || 0
     };
+  }
+  function activityPlan(budget, a, curve, m) {
+    const d = Number(a?.dueMonth) || 0;
+    if (d >= 1 && d <= 12) return planAt(budget, curve, d, m);
+    if (a && parsePlanQuarters(a.planQuarters)) return planToDate(budget, a.planQuarters, "", m);
+    return planAt(budget, curve, a ? effectiveDueMonth(a) : 0, m);
+  }
+  function setActivityDue(ctx, b) {
+    const a = findById(ctx, "Activities", String(b.activityId), "\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21");
+    const p = findById(ctx, "Projects", a.projectId, "\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23");
+    const actor2 = requireWorkgroup(ctx, p.workgroupId).sub;
+    const d = Number(b.dueMonth);
+    if (!Number.isInteger(d) || d < -1 || d > 12) throw new AppError("VALIDATION_FAILED", "\u0E40\u0E14\u0E37\u0E2D\u0E19\u0E17\u0E35\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E40\u0E1A\u0E34\u0E01\u0E04\u0E23\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07");
+    const before = Number(a.dueMonth) || 0;
+    if (before !== d) {
+      ctx.env.db.update("Activities", a.id, { ...a, dueMonth: d, version: a.version + 1, updatedAt: nowIso(ctx), updatedBy: actor2 });
+      audit(ctx, "activity.due", "Activity", a.id, { before: { dueMonth: before }, after: { dueMonth: d }, projectId: p.id });
+      bumpDataVersion(ctx);
+    }
+    return activityState(ctx, { ...a, dueMonth: d });
   }
   function setActivityUnits(ctx, b) {
     const a = findById(ctx, "Activities", String(b.activityId), "\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21");
@@ -2285,11 +2369,14 @@ var KPP = (() => {
     const key = (projectId, activityId) => `${projectId}|${activityId}`;
     for (const x of ds.allocations) if (ids.has(x.projectId)) (allocBy.get(key(x.projectId, x.activityId)) ?? allocBy.set(key(x.projectId, x.activityId), []).get(key(x.projectId, x.activityId))).push(x);
     for (const x of ds.disbursements) if (ids.has(x.projectId)) (disbBy.get(key(x.projectId, x.activityId)) ?? disbBy.set(key(x.projectId, x.activityId), []).get(key(x.projectId, x.activityId))).push(x);
+    const curves = /* @__PURE__ */ new Map();
+    const curveOf = (fy) => curves.get(fy) ?? curves.set(fy, curveFor(ctx, fy)).get(fy);
     const rows = [];
     const emit = (p, a, allocs, disbs) => {
       const total = computeBudget(allocs, []).currentBudget;
-      const planTotal = planToDate(total, a?.planQuarters, p.quarterTargets, m);
-      const qTotals = [3, 6, 9, 12].map((mm) => planToDate(total, a?.planQuarters, p.quarterTargets, mm));
+      const curve = curveOf(Number(p.fiscalYear));
+      const planTotal = activityPlan(total, a, curve, m);
+      const qTotals = [3, 6, 9, 12].map((mm) => activityPlan(total, a, curve, mm));
       const mine = a ? shares.filter((s) => s.activityId === a.id) : [];
       const budgetOf = new Map(mine.map((s) => [s.unitId, Number(s.budgetSatang)]));
       const qtyOf = new Map(mine.map((s) => [s.unitId, Number(s.targetQty)]));
@@ -2336,14 +2423,14 @@ var KPP = (() => {
   function summarizeRows(rows) {
     let budget = 0, committed = 0, disbursed = 0, plan = 0;
     const planQ = [0, 0, 0, 0];
-    for (const r2 of rows) {
-      r2.planQ?.forEach((v, i) => {
+    for (const r3 of rows) {
+      r3.planQ?.forEach((v, i) => {
         planQ[i] += v;
       });
-      budget += r2.budget;
-      committed += r2.committed;
-      disbursed += r2.disbursed;
-      plan += r2.plan;
+      budget += r3.budget;
+      committed += r3.committed;
+      disbursed += r3.disbursed;
+      plan += r3.plan;
     }
     return {
       originalBudget: budget,
@@ -2359,20 +2446,22 @@ var KPP = (() => {
       planQ
     };
   }
-  function planSeries(ds, projects) {
+  function planSeries(ctx, ds, projects) {
     const out = new Array(12).fill(0);
     const ids = new Set(projects.map((p) => p.id));
     const byProject = new Map(projects.map((p) => [p.id, p]));
     const budgetOf = /* @__PURE__ */ new Map();
     for (const x of ds.allocations) if (ids.has(x.projectId)) (budgetOf.get(x.activityId || `P:${x.projectId}`) ?? budgetOf.set(x.activityId || `P:${x.projectId}`, []).get(x.activityId || `P:${x.projectId}`)).push(x);
-    const add = (budget, planQuarters, qt) => {
-      for (let m = 1; m <= 12; m++) out[m - 1] += planToDate(budget, planQuarters, qt, m);
+    const curves = /* @__PURE__ */ new Map();
+    const curveOf = (fy) => curves.get(fy) ?? curves.set(fy, curveFor(ctx, fy)).get(fy);
+    const add = (budget, a, curve) => {
+      for (let m = 1; m <= 12; m++) out[m - 1] += activityPlan(budget, a, curve, m);
     };
     for (const a of ds.activities) {
       const p = byProject.get(a.projectId);
-      if (p) add(computeBudget(budgetOf.get(a.id) ?? [], []).currentBudget, a.planQuarters ?? "", p.quarterTargets);
+      if (p) add(computeBudget(budgetOf.get(a.id) ?? [], []).currentBudget, a, curveOf(Number(p.fiscalYear)));
     }
-    for (const p of projects) add(computeBudget(budgetOf.get(`P:${p.id}`) ?? [], []).currentBudget, "", p.quarterTargets);
+    for (const p of projects) add(computeBudget(budgetOf.get(`P:${p.id}`) ?? [], []).currentBudget, null, curveOf(Number(p.fiscalYear)));
     return out;
   }
 
@@ -2410,7 +2499,7 @@ var KPP = (() => {
     const t2 = today(ctx);
     return ds.projects.filter((p) => (!fy || Number(p.fiscalYear) === fy) && canAccessWorkgroup(u, p.workgroupId)).map((p) => {
       const budget = budgets.get(p.id);
-      return { ...p, budget, risks: riskFlags(p, budget, t2) };
+      return { ...p, budget, risks: riskFlags(p, budget, t2, curveFor(ctx, Number(p.fiscalYear))) };
     }).sort((x, y) => y.fiscalYear - x.fiscalYear || x.projectCode.localeCompare(y.projectCode, "th"));
   }
   function getProject(ctx, b) {
@@ -2421,10 +2510,11 @@ var KPP = (() => {
     const disbursements = ctx.env.db.list("Disbursements").filter((d) => d.projectId === p.id);
     const budget = computeBudget(live(allocations), live(disbursements));
     const shares = activityUnitsOf(ctx);
+    const curve = curveFor(ctx, Number(p.fiscalYear));
     return {
       project: p,
       budget,
-      risks: riskFlags(p, budget, today(ctx)),
+      risks: riskFlags(p, budget, today(ctx), curve),
       activities: activities.map((a) => ({
         ...a,
         budget: computeBudget(live(allocations).filter((x) => x.activityId === a.id), live(disbursements).filter((x) => x.activityId === a.id)),
@@ -2432,10 +2522,10 @@ var KPP = (() => {
       })).sort((x, y) => x.activityCode.localeCompare(y.activityCode, "th")),
       allocations: allocations.sort((x, y) => y.createdAt.localeCompare(x.createdAt)),
       disbursements: disbursements.sort((x, y) => (y.date || "").localeCompare(x.date || "") || y.createdAt.localeCompare(x.createdAt)),
-      progress: live(ctx.env.db.list("ProgressReports")).filter((r2) => r2.projectId === p.id).sort((x, y) => y.reportDate.localeCompare(x.reportDate)),
+      progress: live(ctx.env.db.list("ProgressReports")).filter((r3) => r3.projectId === p.id).sort((x, y) => y.reportDate.localeCompare(x.reportDate)),
       attachments: live(ctx.env.db.list("Attachments")).filter((f) => f.projectId === p.id).map(({ ocrText: _omit, ...rest }) => rest),
       audit: ctx.env.db.list("AuditLogs").filter((l) => l.projectId === p.id || l.entityId === p.id).sort((x, y) => y.at.localeCompare(x.at)).slice(0, 100),
-      monthly: { disbursedCumulative: monthlyCumulative(live(disbursements), p.fiscalYear), targetPct: monthlyTargetPct(p.quarterTargets) }
+      monthly: { disbursedCumulative: monthlyCumulative(live(disbursements), p.fiscalYear), targetPct: curve }
     };
   }
   function validDate(v, label, required = false) {
@@ -2841,7 +2931,7 @@ var KPP = (() => {
       };
     });
   }
-  function toPublic(p, budget, t2) {
+  function toPublic(p, budget, t2, curve) {
     return {
       id: p.id,
       fiscalYear: Number(p.fiscalYear),
@@ -2855,7 +2945,7 @@ var KPP = (() => {
       physicalProgress: Number(p.physicalProgress) || 0,
       description: p.description,
       budget,
-      risks: riskFlags(p, budget, t2)
+      risks: riskFlags(p, budget, t2, curve)
     };
   }
   function fyOf(ctx, v) {
@@ -2868,7 +2958,7 @@ var KPP = (() => {
       const ds = loadDataset(ctx);
       const budgets = budgetsByProject(ds);
       const t2 = today(ctx);
-      return ds.projects.filter((p) => p.published && Number(p.fiscalYear) === fy).map((p) => toPublic(p, budgets.get(p.id), t2)).sort((a, b2) => a.projectCode.localeCompare(b2.projectCode, "th"));
+      return ds.projects.filter((p) => p.published && Number(p.fiscalYear) === fy).map((p) => toPublic(p, budgets.get(p.id), t2, curveFor(ctx, fy))).sort((a, b2) => a.projectCode.localeCompare(b2.projectCode, "th"));
     });
   }
   function publicProject(ctx, b) {
@@ -2877,7 +2967,8 @@ var KPP = (() => {
     if (!p) throw new AppError("NOT_FOUND", "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23 \u0E2B\u0E23\u0E37\u0E2D\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E40\u0E1C\u0E22\u0E41\u0E1E\u0E23\u0E48");
     const allocs = ds.allocations.filter((a) => a.projectId === p.id);
     const disbs = ds.disbursements.filter((d) => d.projectId === p.id);
-    const out = toPublic(p, computeBudget(allocs, disbs), today(ctx));
+    const curve = curveFor(ctx, Number(p.fiscalYear));
+    const out = toPublic(p, computeBudget(allocs, disbs), today(ctx), curve);
     out.activities = ds.activities.filter((a) => a.projectId === p.id).sort((x, y) => x.activityCode.localeCompare(y.activityCode, "th")).map((a) => ({
       id: a.id,
       activityCode: a.activityCode,
@@ -2888,7 +2979,7 @@ var KPP = (() => {
       endDate: a.endDate,
       budget: computeBudget(allocs.filter((x) => x.activityId === a.id), disbs.filter((x) => x.activityId === a.id))
     }));
-    out.monthly = { disbursedCumulative: monthlyCumulative(disbs, p.fiscalYear), targetPct: monthlyTargetPct(p.quarterTargets) };
+    out.monthly = { disbursedCumulative: monthlyCumulative(disbs, p.fiscalYear), targetPct: curve };
     return out;
   }
   function buildSummary(ctx, fy, onlyPublished) {
@@ -2904,9 +2995,10 @@ var KPP = (() => {
       for (const p of projects) (m2.get(keyOf(p)) ?? m2.set(keyOf(p), []).get(keyOf(p))).push(p);
       return [...m2.entries()].map(([key, ps]) => ({ key, label: labelOf(key), projects: ps.length, budget: addSummaries(ps.map((p) => budgets.get(p.id))) })).sort((a, b) => b.budget.currentBudget - a.budget.currentBudget);
     };
-    const risks = projects.map((p) => ({ projectId: p.id, name: p.name, flags: riskFlags(p, budgets.get(p.id), t2) })).filter((r2) => r2.flags.length > 0);
+    const curve = curveFor(ctx, fy);
+    const risks = projects.map((p) => ({ projectId: p.id, name: p.name, flags: riskFlags(p, budgets.get(p.id), t2, curve) })).filter((r3) => r3.flags.length > 0);
     const totals = addSummaries(projects.map((p) => budgets.get(p.id)));
-    const targetSatang = planSeries(ds, projects);
+    const targetSatang = planSeries(ctx, ds, projects);
     const fyNow = currentFiscalYear(ctx.env.now());
     const m = fy < fyNow ? 12 : fy > fyNow ? 0 : fiscalMonthIndex(t2);
     const unitRows = buildUnitRows(ctx, ds, projects, m);
@@ -2914,14 +3006,14 @@ var KPP = (() => {
     const unitName = (id) => areaName(units.find((u) => u.id === id));
     const total = (key, label, rs) => {
       const { plan, planQ, ...budget } = summarizeRows(rs);
-      return { key, label, budget, plan, planQ, projects: new Set(rs.map((r2) => r2.projectId)).size, activities: new Set(rs.filter((r2) => r2.activityId).map((r2) => r2.activityId)).size };
+      return { key, label, budget, plan, planQ, projects: new Set(rs.map((r3) => r3.projectId)).size, activities: new Set(rs.filter((r3) => r3.activityId).map((r3) => r3.activityId)).size };
     };
     const byUnitOf = (rows) => {
       const mm = /* @__PURE__ */ new Map();
-      for (const r2 of rows) (mm.get(r2.unitId) ?? mm.set(r2.unitId, []).get(r2.unitId)).push(r2);
+      for (const r3 of rows) (mm.get(r3.unitId) ?? mm.set(r3.unitId, []).get(r3.unitId)).push(r3);
       return units.filter((u) => mm.has(u.id)).map((u) => total(u.id, unitName(u.id), mm.get(u.id)));
     };
-    const byGroupOf = (rows) => groups.filter((g) => rows.some((r2) => r2.workgroupId === g.id)).map((g) => total(g.id, g.name, rows.filter((r2) => r2.workgroupId === g.id)));
+    const byGroupOf = (rows) => groups.filter((g) => rows.some((r3) => r3.workgroupId === g.id)).map((g) => total(g.id, g.name, rows.filter((r3) => r3.workgroupId === g.id)));
     const settings = getSettings(ctx);
     const inScopeDisb = ds.disbursements.filter((d) => ids.has(d.projectId));
     const planItems = projects.some((p) => p.planDocId) ? live(ctx.env.db.list("PlanItems")) : [];
@@ -2939,7 +3031,7 @@ var KPP = (() => {
       mBudget += b.currentBudget;
       mRemaining += Math.max(0, b.currentBudget - b.disbursed);
     }
-    const delayed = risks.filter((r2) => r2.flags.includes("OVERDUE") || r2.flags.includes("BEHIND_SPENDING")).length;
+    const delayed = risks.filter((r3) => r3.flags.includes("OVERDUE") || r3.flags.includes("BEHIND_SPENDING")).length;
     return {
       fiscalYear: fy,
       generatedAt: nowIso(ctx),
@@ -2956,11 +3048,11 @@ var KPP = (() => {
       avgPhysicalProgress: projects.length ? Math.round(projects.reduce((s, p) => s + (Number(p.physicalProgress) || 0), 0) / projects.length * 100) / 100 : 0,
       byFundingSource: group((p) => p.fundingSourceId, (k) => sources.find((s) => s.id === k)?.name ?? "\u0E44\u0E21\u0E48\u0E23\u0E30\u0E1A\u0E38"),
       byWorkgroup: group((p) => p.workgroupId, (k) => groups.find((g) => g.id === k)?.name ?? "\u0E44\u0E21\u0E48\u0E23\u0E30\u0E1A\u0E38").map((g) => {
-        const rs = unitRows.filter((r2) => r2.workgroupId === g.key);
+        const rs = unitRows.filter((r3) => r3.workgroupId === g.key);
         const sum = summarizeRows(rs);
-        return { ...g, plan: sum.plan, planQ: sum.planQ, activities: new Set(rs.filter((r2) => r2.activityId).map((r2) => r2.activityId)).size, units: byUnitOf(rs) };
+        return { ...g, plan: sum.plan, planQ: sum.planQ, activities: new Set(rs.filter((r3) => r3.activityId).map((r3) => r3.activityId)).size, units: byUnitOf(rs) };
       }),
-      byUnit: byUnitOf(unitRows).map((u) => ({ ...u, groups: byGroupOf(unitRows.filter((r2) => r2.unitId === u.key)) })),
+      byUnit: byUnitOf(unitRows).map((u) => ({ ...u, groups: byGroupOf(unitRows.filter((r3) => r3.unitId === u.key)) })),
       activitiesWithoutUnits: (() => {
         const withShares = new Set(ctx.env.db.list("ActivityUnits").filter((x) => !x.isDeleted).map((x) => x.activityId));
         return ds.activities.filter((a) => ids.has(a.projectId) && !withShares.has(a.id)).length;
@@ -2968,7 +3060,8 @@ var KPP = (() => {
       byPlan: group(planKey, (k) => k),
       targets: {
         annualPct: Math.min(100, Math.max(0, Number(settings.annualTargetPct) || 98)),
-        meetingDeadline: `${fy - 543}-06-30`
+        meetingDeadline: `${fy - 543}-06-30`,
+        spend: spendTargetFor(ctx, fy)
       },
       meetings: { activities: meetingActs.filter((a) => a.status !== "CANCELLED").length, remaining: mRemaining, budget: mBudget },
       monthly: {
@@ -2978,7 +3071,7 @@ var KPP = (() => {
       risks: risks.slice(0, 50),
       dataQuality: {
         projectsWithoutBudget: projects.filter((p) => budgets.get(p.id).currentBudget === 0).length,
-        projectsWithoutReport45d: risks.filter((r2) => r2.flags.includes("NO_RECENT_REPORT")).length,
+        projectsWithoutReport45d: risks.filter((r3) => r3.flags.includes("NO_RECENT_REPORT")).length,
         lastImportAt: settings.lastImportAt || (live(ctx.env.db.list("ImportJobs")).filter((j) => j.committedAt).map((j) => j.committedAt).sort().pop() ?? "")
       }
     };
@@ -2986,6 +3079,38 @@ var KPP = (() => {
   function publicSummary(ctx, b) {
     const fy = fyOf(ctx, b.fiscalYear);
     return cached(ctx, `summary:${fy}`, () => buildSummary(ctx, fy, true));
+  }
+  function publicReport(ctx, b) {
+    const fy = fyOf(ctx, b.fiscalYear);
+    return cached(ctx, `report:${fy}`, () => {
+      const ds = loadDataset(ctx);
+      const projects = ds.projects.filter((p) => p.published && Number(p.fiscalYear) === fy);
+      const fyNow = currentFiscalYear(ctx.env.now());
+      const m = fy < fyNow ? 12 : fy > fyNow ? 0 : fiscalMonthIndex(today(ctx));
+      return { fiscalYear: fy, generatedAt: nowIso(ctx), monthIndex: m, rows: buildUnitRows(ctx, ds, projects, m) };
+    });
+  }
+  function visitHit(ctx, b) {
+    const props = ctx.env.props;
+    const day = today(ctx);
+    const read = () => {
+      const [d, n] = (props.get("visits:day") || "").split("|");
+      return { today: d === day ? Number(n) || 0 : 0, total: Number(props.get("visits:total")) || 0, since: props.get("visits:since") || day };
+    };
+    if (!b.count) return read();
+    try {
+      return ctx.env.lock.withLock(() => {
+        const v = read();
+        v.today += 1;
+        v.total += 1;
+        props.set("visits:day", `${day}|${v.today}`);
+        props.set("visits:total", String(v.total));
+        if (!props.get("visits:since")) props.set("visits:since", day);
+        return v;
+      }, 3e3);
+    } catch {
+      return read();
+    }
   }
   function writeSnapshot(ctx) {
     const fy = currentFiscalYear(ctx.env.now());
@@ -3011,7 +3136,7 @@ var KPP = (() => {
       return s;
     })();
     return {
-      pendingRequests: u.role === "admin" ? 0 : ctx.env.db.list("AccessRequests").filter((r2) => r2.status === "pending").length,
+      pendingRequests: u.role === "admin" ? 0 : ctx.env.db.list("AccessRequests").filter((r3) => r3.status === "pending").length,
       stagedImports: live(ctx.env.db.list("ImportJobs")).filter((j) => j.status === "STAGED" && (u.role !== "admin" || j.createdBy === u.sub || j.channel === "INBOX")).map(({ id, fileName, channel, totalRows, errorRows, warningRows, createdAt }) => ({ id, fileName, channel, totalRows, errorRows, warningRows, createdAt })),
       risks: projects.filter((p) => p.risks.length).map((p) => ({ projectId: p.id, name: p.name, flags: p.risks })).slice(0, 30),
       newDeviceLogins: attempts.filter((a) => a.newDevice && a.result === "success").length,
@@ -3029,11 +3154,11 @@ var KPP = (() => {
   function listRequests(ctx, b) {
     requireRole(ctx, "minisuper", "superadmin");
     const st = cleanText(b.status, 20);
-    return ctx.env.db.list("AccessRequests").filter((r2) => !st || st === "all" || r2.status === st).sort((a, b2) => b2.createdAt.localeCompare(a.createdAt));
+    return ctx.env.db.list("AccessRequests").filter((r3) => !st || st === "all" || r3.status === st).sort((a, b2) => b2.createdAt.localeCompare(a.createdAt));
   }
   function decideRequest(ctx, b) {
     const u = requireRole(ctx, "minisuper", "superadmin");
-    const req = ctx.env.db.list("AccessRequests").find((r2) => r2.id === b.requestId);
+    const req = ctx.env.db.list("AccessRequests").find((r3) => r3.id === b.requestId);
     if (!req) throw new AppError("NOT_FOUND", "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E04\u0E33\u0E02\u0E2D");
     if (req.status !== "pending") throw new AppError("VALIDATION_FAILED", "\u0E04\u0E33\u0E02\u0E2D\u0E19\u0E35\u0E49\u0E44\u0E14\u0E49\u0E23\u0E31\u0E1A\u0E01\u0E32\u0E23\u0E1E\u0E34\u0E08\u0E32\u0E23\u0E13\u0E32\u0E41\u0E25\u0E49\u0E27");
     const role = b.role === "minisuper" ? "minisuper" : "admin";
@@ -3175,7 +3300,7 @@ var KPP = (() => {
     const name = cleanText(b.item.name, 200);
     if (!code || !name) throw new AppError("VALIDATION_FAILED", "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E01\u0E23\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A\u0E41\u0E25\u0E30\u0E0A\u0E37\u0E48\u0E2D");
     const rows = live(ctx.env.db.list(table));
-    if (rows.some((r2) => r2.code.toLowerCase() === code.toLowerCase() && r2.id !== b.item.id)) throw new AppError("VALIDATION_FAILED", "\u0E23\u0E2B\u0E31\u0E2A\u0E0B\u0E49\u0E33");
+    if (rows.some((r3) => r3.code.toLowerCase() === code.toLowerCase() && r3.id !== b.item.id)) throw new AppError("VALIDATION_FAILED", "\u0E23\u0E2B\u0E31\u0E2A\u0E0B\u0E49\u0E33");
     const extra = {};
     if (table === "Workgroups") {
       const orgs = live(ctx.env.db.list("Organizations"));
@@ -3339,13 +3464,13 @@ var KPP = (() => {
     });
   }
   function rawMatrix(ctx, job, meta) {
-    const rows = ctx.env.db.list("ImportRows").filter((r2) => r2.jobId === job.id && r2.rowKey.startsWith("raw:"));
-    const max = rows.reduce((m, r2) => Math.max(m, Number(r2.rowNo)), meta.headerRow + meta.headerSpan);
+    const rows = ctx.env.db.list("ImportRows").filter((r3) => r3.jobId === job.id && r3.rowKey.startsWith("raw:"));
+    const max = rows.reduce((m, r3) => Math.max(m, Number(r3.rowNo)), meta.headerRow + meta.headerSpan);
     const matrix = Array.from({ length: max }, () => []);
     matrix[meta.headerRow] = meta.headers;
-    for (const r2 of rows) {
+    for (const r3 of rows) {
       try {
-        matrix[Number(r2.rowNo) - 1] = JSON.parse(r2.raw);
+        matrix[Number(r3.rowNo) - 1] = JSON.parse(r3.raw);
       } catch {
       }
     }
@@ -3435,14 +3560,14 @@ var KPP = (() => {
     };
     ctx.env.db.insert("ImportJobs", [job]);
     const firstData = det.headerRow + det.headerSpan;
-    ctx.env.db.insert("ImportRows", table.rows.slice(firstData).map((r2, i) => ({
+    ctx.env.db.insert("ImportRows", table.rows.slice(firstData).map((r3, i) => ({
       id: ctx.env.uuid(),
       jobId: job.id,
       rowNo: firstData + i + 1,
       rowKey: "raw:",
       status: "",
       messages: "",
-      raw: JSON.stringify(r2.slice(0, 60).map((c) => c instanceof Date ? c.toISOString().slice(0, 10) : c)).slice(0, 8e3),
+      raw: JSON.stringify(r3.slice(0, 60).map((c) => c instanceof Date ? c.toISOString().slice(0, 10) : c)).slice(0, 8e3),
       normalized: "",
       committed: false
     })).filter((x) => x.raw !== "[]" && !/^\[(""|,|null)*\]$/.test(x.raw)));
@@ -3626,8 +3751,8 @@ var KPP = (() => {
         const tables = ctx.env.files.readTables(f.id, mime);
         const pv = stageFile(ctx, { fileName: f.name, fiscalYear: fy }, "INBOX", { tables, sha256: ctx.env.crypto.sha256Hex(bytes), driveFileId: f.id, fileName: f.name });
         if (settings.autoCommitClean === "true" && pv.summary.error === 0 && pv.summary.warning === 0 && pv.summary.valid > 0) {
-          const r2 = commitImport(ctx, { jobId: pv.job.id, acceptWarnings: false });
-          out.push({ file: f.name, result: `\u0E19\u0E33\u0E40\u0E02\u0E49\u0E32\u0E2D\u0E31\u0E15\u0E42\u0E19\u0E21\u0E31\u0E15\u0E34 ${r2.committed} \u0E41\u0E16\u0E27` });
+          const r3 = commitImport(ctx, { jobId: pv.job.id, acceptWarnings: false });
+          out.push({ file: f.name, result: `\u0E19\u0E33\u0E40\u0E02\u0E49\u0E32\u0E2D\u0E31\u0E15\u0E42\u0E19\u0E21\u0E31\u0E15\u0E34 ${r3.committed} \u0E41\u0E16\u0E27` });
         } else out.push({ file: f.name, result: `\u0E23\u0E2D\u0E22\u0E37\u0E19\u0E22\u0E31\u0E19 (${pv.summary.valid} \u0E1C\u0E48\u0E32\u0E19, ${pv.summary.warning} \u0E15\u0E23\u0E27\u0E08, ${pv.summary.error} \u0E1C\u0E34\u0E14)` });
       } catch (e) {
         out.push({ file: f.name, result: `\u0E1C\u0E34\u0E14\u0E1E\u0E25\u0E32\u0E14: ${e.message}` });
@@ -3697,7 +3822,7 @@ var KPP = (() => {
       nextRound: same.reduce((m, d) => Math.max(m, Number(d.round)), 0) + 1
     };
   }
-  var cleanTable = (t2) => (Array.isArray(t2) ? t2 : []).slice(0, MAX_ROWS + 1).map((r2) => Array.isArray(r2) ? r2.slice(0, 4).map((c) => cleanText(c, 1e3)) : []);
+  var cleanTable = (t2) => (Array.isArray(t2) ? t2 : []).slice(0, MAX_ROWS + 1).map((r3) => Array.isArray(r3) ? r3.slice(0, 4).map((c) => cleanText(c, 1e3)) : []);
   function commitPlan(ctx, b) {
     const u = requireRole(ctx, "minisuper", "superadmin");
     const fy = Number(b.fiscalYear);
@@ -3854,9 +3979,9 @@ var KPP = (() => {
         }
         const oldAct = live(ctx.env.db.list("Activities")).find((a) => a.id === item.activityId);
         carry = { shares: activityUnitsOf(ctx, item.activityId), planQuarters: oldAct?.planQuarters ?? "" };
-        const r2 = unassignPlanItems(ctx, { itemIds: [id] });
-        if (r2.skipped.length) {
-          skipped.push({ id, reason: r2.skipped[0].reason });
+        const r3 = unassignPlanItems(ctx, { itemIds: [id] });
+        if (r3.skipped.length) {
+          skipped.push({ id, reason: r3.skipped[0].reason });
           continue;
         }
         Object.assign(item, findById(ctx, "PlanItems", id, "\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23"));
@@ -3982,6 +4107,41 @@ var KPP = (() => {
     return { fiscalYear: fy, generatedAt: nowIso(ctx), monthIndex: m, rows: buildUnitRows(ctx, ds, projects, m) };
   }
 
+  // src/core/services/targets.ts
+  var fyOf2 = (v) => {
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < 2500 || n > 2700) throw new AppError("VALIDATION_FAILED", "\u0E1B\u0E35\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07");
+    return n;
+  };
+  function getTargets(ctx, b) {
+    requireRole(ctx, "admin", "minisuper", "superadmin");
+    const fy = fyOf2(b.fiscalYear);
+    const target = spendTargetFor(ctx, fy);
+    return { fiscalYear: fy, target, curve: targetCurve(target) };
+  }
+  function saveTargets(ctx, b) {
+    requireRole(ctx, "minisuper", "superadmin");
+    const fy = fyOf2(b.fiscalYear);
+    const t2 = b.target ?? {};
+    const clean = {
+      mode: t2.mode === "deadline" ? "deadline" : "quarter",
+      quarters: Array.isArray(t2.quarters) ? t2.quarters.slice(0, 4).map(Number) : [],
+      month: Number(t2.month),
+      pct: Number(t2.pct)
+    };
+    if (clean.mode === "quarter") {
+      clean.month = 12;
+      clean.pct = 100;
+    } else clean.quarters = [];
+    const err = validateSpendTarget(clean.mode === "deadline" ? { ...clean, quarters: [0, 0, 0, 0] } : clean);
+    if (err) throw new AppError("VALIDATION_FAILED", err);
+    const before = spendTargetFor(ctx, fy);
+    setSetting(ctx, `spendTarget:${fy}`, JSON.stringify(clean));
+    audit(ctx, "targets.save", "Settings", `spendTarget:${fy}`, { before, after: clean });
+    bumpDataVersion(ctx);
+    return { fiscalYear: fy, target: clean, curve: targetCurve(clean) };
+  }
+
   // src/core/router.ts
   var r = (fn, write, limit) => ({ fn, write, limit });
   var ROUTES = {
@@ -3989,6 +4149,9 @@ var KPP = (() => {
     "public.summary": r(publicSummary, false, "public"),
     "public.projects": r(publicProjects, false, "public"),
     "public.project": r(publicProject, false, "public"),
+    "public.report": r(publicReport, false, "public"),
+    // นับผู้เข้าชม: ใช้ lock สั้น ๆ ภายใน service เอง (ไม่ใช้ lock 25 วินาทีของ action เขียนข้อมูล)
+    "public.hit": r(visitHit, false, "public"),
     "auth.requestAccess": r(requestAccess, true, "auth"),
     "auth.login": r(loginAdmin, true, "auth"),
     "auth.loginSuper": r(loginSuper, true, "auth"),
@@ -4030,6 +4193,9 @@ var KPP = (() => {
     "activities.setUnits": r(setActivityUnits, true, "admin"),
     "activities.setUnitsBulk": r(setActivityUnitsBulk, true, "admin"),
     "reports.data": r(reportData, false, "admin"),
+    "targets.get": r(getTargets, false, "admin"),
+    "targets.save": r(saveTargets, true, "admin"),
+    "activities.setDue": r(setActivityDue, true, "admin"),
     "admin.requests": r(listRequests, false, "admin"),
     "admin.decideRequest": r(decideRequest, true, "admin"),
     "admin.users": r((c) => listUsers(c), false, "admin"),
@@ -4141,7 +4307,7 @@ var KPP = (() => {
   function retireDistrictWorkgroup(ctx) {
     const dist = live(ctx.env.db.list("Workgroups")).find((g) => g.code === "DIST");
     if (!dist) return;
-    const used = live(ctx.env.db.list("Projects")).some((p) => p.workgroupId === dist.id) || live(ctx.env.db.list("Users")).some((u) => u.workgroupId === dist.id || String(u.scopeWorkgroups ?? "").includes(dist.id)) || live(ctx.env.db.list("PlanItems")).some((i) => i.workgroupId === dist.id) || live(ctx.env.db.list("AccessRequests")).some((r2) => r2.status === "pending" && r2.workgroupId === dist.id);
+    const used = live(ctx.env.db.list("Projects")).some((p) => p.workgroupId === dist.id) || live(ctx.env.db.list("Users")).some((u) => u.workgroupId === dist.id || String(u.scopeWorkgroups ?? "").includes(dist.id)) || live(ctx.env.db.list("PlanItems")).some((i) => i.workgroupId === dist.id) || live(ctx.env.db.list("AccessRequests")).some((r3) => r3.status === "pending" && r3.workgroupId === dist.id);
     if (used) return;
     ctx.env.db.update("Workgroups", dist.id, { ...dist, isDeleted: true, version: dist.version + 1, updatedAt: nowIso(ctx), updatedBy: "system" });
     const org = live(ctx.env.db.list("Organizations")).find((o) => o.id === dist.orgId && o.code === "KPP-DISTRICT");
@@ -4312,13 +4478,13 @@ var KPP = (() => {
       const pk = primaryKeyOf(table);
       const rows = [];
       const rowNum = /* @__PURE__ */ new Map();
-      for (let r2 = 1; r2 < values.length; r2++) {
-        const line = values[r2];
+      for (let r3 = 1; r3 < values.length; r3++) {
+        const line = values[r3];
         if (line.every((c) => c === "" || c === null)) continue;
         const obj = {};
         for (const [col, type] of def.columns) obj[col] = fromCell(type, idx.has(col) ? line[idx.get(col)] : "");
         rows.push(obj);
-        rowNum.set(String(obj[pk]), r2 + 1);
+        rowNum.set(String(obj[pk]), r3 + 1);
       }
       const m = { header, rows, rowNum, pending: [] };
       this.memo.set(table, m);
@@ -4329,14 +4495,14 @@ var KPP = (() => {
       return m.header.map((h) => types.has(h) ? toCell(types.get(h), row[h]) : "");
     }
     list(table) {
-      return this.load(table).rows.map((r2) => ({ ...r2 }));
+      return this.load(table).rows.map((r3) => ({ ...r3 }));
     }
     insert(table, rows) {
       if (!rows.length) return;
       const m = this.load(table);
-      for (const r2 of rows) {
+      for (const r3 of rows) {
         const norm = {};
-        for (const [col, type] of TABLES[table].columns) norm[col] = fromCell(type, toCell(type, r2[col]));
+        for (const [col, type] of TABLES[table].columns) norm[col] = fromCell(type, toCell(type, r3[col]));
         m.rows.push(norm);
         m.pending.push(norm);
       }
@@ -4344,11 +4510,11 @@ var KPP = (() => {
     update(table, id, patch) {
       const m = this.load(table);
       const pk = primaryKeyOf(table);
-      const i = m.rows.findIndex((r2) => r2[pk] === id);
+      const i = m.rows.findIndex((r3) => r3[pk] === id);
       if (i < 0) throw new AppError("NOT_FOUND", `\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 ${table}`);
       const next = { ...m.rows[i], ...patch };
       m.rows[i] = next;
-      const p = m.pending.findIndex((r2) => r2[pk] === id);
+      const p = m.pending.findIndex((r3) => r3[pk] === id);
       if (p >= 0) {
         m.pending[p] = next;
         return;
@@ -4363,11 +4529,11 @@ var KPP = (() => {
         if (!m.pending.length) continue;
         const sh = this.sheet(table);
         const start = sh.getLastRow() + 1;
-        const lines = m.pending.map((r2) => this.toLine(table, m, r2));
+        const lines = m.pending.map((r3) => this.toLine(table, m, r3));
         sh.getRange(start, 1, lines.length, m.header.length).setValues(lines);
         this.dirty.add(table);
         const pk = primaryKeyOf(table);
-        m.pending.forEach((r2, i) => m.rowNum.set(String(r2[pk]), start + i));
+        m.pending.forEach((r3, i) => m.rowNum.set(String(r3[pk]), start + i));
         m.pending = [];
       }
       if (this.dirty.size) {

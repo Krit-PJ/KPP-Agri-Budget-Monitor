@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { computeAreaShares, type AreaMode } from './areaShares';
 import { Link } from 'react-router-dom';
 import {
-  areaName, areaSummary, formatBaht, normalizeKey, splitEqual, splitMoney,
+  MEETING_RE, areaName, areaSummary, formatBaht, normalizeKey, splitEqual, splitMoney,
   type PlanActivityState, type PlanDetail, type PlanItem, type SessionUser,
 } from '@kpp/domain';
 import { ApiError, call } from '../../api/client';
 import { Async, Empty, ErrorBox, bahtInputToSatang, useApi, useLookups, useNames, useSubmit, useToast } from '../../components/ui';
 import { FiscalYearPicker } from '../public/Home';
 import PlanImport from './PlanImport';
+import { FISCAL_MONTHS, monthYear } from './Targets';
 
 /**
  * แผนและผู้รับผิดชอบ (ADR-006): หน้าเดียว ไม่มีชั้นซ้อน
@@ -99,6 +100,12 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
     (!key || normalizeKey(pathOf(i, bySeq).map((x) => `${x.number} ${x.name}`).join(' ')).includes(key));
   const shown = leaves.filter(visible);
   const projects = d.items.filter((i) => i.kind === 'PROJECT' || (i.kind === 'ACTIVITY' && i.projectSeq === i.seq));
+  const visibleProjects = projects.filter((p) => shown.some((i) => i.planIndex === p.planIndex && i.projectSeq === p.seq));
+  const setDue = (i: PlanItem, dueMonth: number) => void run(async () => {
+    await call('activities.setDue', { activityId: i.activityId, dueMonth });
+    toast(dueMonth > 0 ? `กำหนดให้เบิกครบภายใน ${FISCAL_MONTHS[dueMonth - 1]} แล้ว` : 'ใช้เป้าการเบิกจ่ายของปีแล้ว');
+    reload();
+  });
   const assigned = leaves.filter((i) => i.workgroupId).length;
   const done = leaves.filter(confirmed).length;
   const pickedItems = leaves.filter((i) => picked.has(i.id));
@@ -148,15 +155,25 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
         <Progress label="มีกลุ่มงานรับผิดชอบ" done={assigned} total={leaves.length} />
         <Progress label="ยืนยันพื้นที่ดำเนินการแล้ว" done={done} total={leaves.length} hint="ยังไม่ยืนยัน = นับเป็นระดับจังหวัดไปก่อน" />
       </div>
-      <div className="toolbar">
+      <div className="pb-sticky" role="search">
+        <div className="pb-sticky-row">
+          <label className="field pb-search"><span className="sr-only">ค้นหา</span><input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหากิจกรรม โครงการ หรือเลขลำดับ" /></label>
+          <label className="field pb-jump"><span className="sr-only">ไปที่โครงการ</span>
+            <select value="" onChange={(e) => { document.getElementById(e.target.value)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>
+              <option value="">ไปที่โครงการ…</option>
+              {visibleProjects.map((p) => <option key={p.id} value={`pj-${p.id}`}>{p.number} {p.name.length > 60 ? `${p.name.slice(0, 60)}…` : p.name}</option>)}
+            </select>
+          </label>
+          <span className="small muted pb-count" aria-live="polite">พบ {shown.length.toLocaleString('th-TH')} รายการ</span>
+        </div>
         <div className="segmented" role="group" aria-label="แสดงรายการ">
           {user.workgroupIds !== null && <button aria-pressed={filter === 'mine'} onClick={() => setFilter('mine')}>ของกลุ่มฉัน ({leaves.filter(mine).length})</button>}
           <button aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>ทั้งหมด ({leaves.length})</button>
           <button aria-pressed={filter === 'noGroup'} onClick={() => setFilter('noGroup')}>ยังไม่มีกลุ่ม ({leaves.length - assigned})</button>
           <button aria-pressed={filter === 'noArea'} onClick={() => setFilter('noArea')}>ยังไม่ยืนยันพื้นที่ ({assigned - leaves.filter((i) => i.workgroupId && confirmed(i)).length})</button>
         </div>
-        <label className="field" style={{ flex: '1 1 220px' }}><span className="sr-only">ค้นหา</span><input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหากิจกรรม โครงการ หรือเลขลำดับ" /></label>
       </div>
+      <BackToTop />
       {error && <ErrorBox error={error} />}
       {!shown.length && <Empty title="ไม่มีรายการตามตัวกรองนี้" />}
       <div className="pb-head" aria-hidden="true">
@@ -168,7 +185,7 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
         const ids = rows.map((i) => i.id);
         const allPicked = ids.every((x) => picked.has(x));
         return (
-          <section key={p.id} className="ob-project">
+          <section key={p.id} id={`pj-${p.id}`} className="ob-project">
             <div className="ob-project-head">
               <label className="ob-check">
                 <input type="checkbox" checked={allPicked} onChange={(e) => setPicked((s0) => { const nx = new Set(s0); for (const x of ids) { if (e.target.checked) nx.add(x); else nx.delete(x); } return nx; })} aria-label={`เลือกทุกรายการใน ${p.name}`} />
@@ -213,6 +230,7 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
                             {canEdit && st && !isOpen && <button className="btn btn-ghost btn-sm" onClick={() => setEditing(i.id)}>กำหนดพื้นที่</button>}
                             {mine(i) && i.projectId && <Link className="xs" to={`/admin/projects/${i.projectId}`}>บันทึกเบิกจ่าย</Link>}
                           </span>
+                          {st && <DueSelect name={i.name} fy={d.doc.fiscalYear} value={st.dueMonth} disabled={!canEdit || busy} onChange={(v) => setDue(i, v)} />}
                         </>
                       )}
                     </div>
@@ -258,6 +276,31 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
       )}
     </>
   );
+}
+
+/** เดือนที่กิจกรรมต้องเบิกครบ 100% — ค่าเริ่มต้น: ตามเป้าของปี (อบรม/ประชุม/สัมมนา = มิ.ย.) */
+function DueSelect({ name, fy, value, disabled, onChange }: { name: string; fy: number; value: number; disabled: boolean; onChange: (v: number) => void }) {
+  const meeting = MEETING_RE.test(name);
+  return (
+    <label className="due-select">
+      <span>เบิกครบภายใน</span>
+      <select value={value} disabled={disabled} onChange={(e) => onChange(Number(e.target.value))}>
+        <option value={0}>{meeting ? 'มิ.ย. (อบรม/ประชุม ค่าเริ่มต้น)' : 'ตามเป้าของปี'}</option>
+        {meeting && <option value={-1}>ตามเป้าของปี</option>}
+        {FISCAL_MONTHS.map((m, k) => <option key={m} value={k + 1}>{m} {String(monthYear(fy, k + 1)).slice(2)}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function BackToTop() {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const on = () => setShow(window.scrollY > 600);
+    window.addEventListener('scroll', on, { passive: true });
+    return () => window.removeEventListener('scroll', on);
+  }, []);
+  return show ? <button className="btn back-top" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="กลับขึ้นบนสุด">↑ บนสุด</button> : null;
 }
 
 function Progress({ label, done, total, hint }: { label: string; done: number; total: number; hint?: string }) {

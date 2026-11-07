@@ -1,14 +1,14 @@
 /** โครงการ กิจกรรม ผลการดำเนินงาน + การคำนวณยอดเงินจากธุรกรรม */
 import {
   AppError, ALLOCATION_TYPES, PROJECT_STATUSES, cleanText, computeBudget, currentFiscalYear, monthlyCumulative,
-  monthlyTargetPct, parseThaiDate, riskFlags, todayBangkok,
+  parseThaiDate, riskFlags, todayBangkok,
   type Activity, type Allocation, type Attachment, type AuditLog, type BudgetSummary, type Disbursement,
   type FundingSource, type ProgressReport, type Project, type ProjectDetail, type ProjectListItem, type Workgroup,
 } from '@kpp/domain';
 import { canAccessWorkgroup, requireRole, requireWorkgroup } from '../auth';
 import { activityUnitsOf, listUnits, provinceUnitId } from './units';
 import {
-  actor, audit, bumpDataVersion, findById, findByIdempotency, getSettings, live, newMeta, nowIso, updateVersioned, type Ctx,
+  actor, audit, bumpDataVersion, curveFor, findById, findByIdempotency, getSettings, live, newMeta, nowIso, updateVersioned, type Ctx,
 } from '../context';
 
 export interface Dataset {
@@ -60,7 +60,7 @@ export function listProjects(ctx: Ctx, b: { fiscalYear?: number }): ProjectListI
     .filter((p) => (!fy || Number(p.fiscalYear) === fy) && canAccessWorkgroup(u, p.workgroupId))
     .map((p) => {
       const budget = budgets.get(p.id)!;
-      return { ...p, budget, risks: riskFlags(p, budget, t) };
+      return { ...p, budget, risks: riskFlags(p, budget, t, curveFor(ctx, Number(p.fiscalYear))) };
     })
     .sort((x, y) => y.fiscalYear - x.fiscalYear || x.projectCode.localeCompare(y.projectCode, 'th'));
 }
@@ -73,10 +73,11 @@ export function getProject(ctx: Ctx, b: { id: string }): ProjectDetail {
   const disbursements = ctx.env.db.list<Disbursement>('Disbursements').filter((d) => d.projectId === p.id);
   const budget = computeBudget(live(allocations), live(disbursements));
   const shares = activityUnitsOf(ctx);
+  const curve = curveFor(ctx, Number(p.fiscalYear));
   return {
     project: p,
     budget,
-    risks: riskFlags(p, budget, today(ctx)),
+    risks: riskFlags(p, budget, today(ctx), curve),
     activities: activities
       .map((a) => ({
         ...a,
@@ -91,7 +92,7 @@ export function getProject(ctx: Ctx, b: { id: string }): ProjectDetail {
       .map(({ ocrText: _omit, ...rest }) => rest),
     audit: ctx.env.db.list<AuditLog>('AuditLogs').filter((l) => l.projectId === p.id || l.entityId === p.id)
       .sort((x, y) => y.at.localeCompare(x.at)).slice(0, 100),
-    monthly: { disbursedCumulative: monthlyCumulative(live(disbursements), p.fiscalYear), targetPct: monthlyTargetPct(p.quarterTargets) },
+    monthly: { disbursedCumulative: monthlyCumulative(live(disbursements), p.fiscalYear), targetPct: curve },
   };
 }
 

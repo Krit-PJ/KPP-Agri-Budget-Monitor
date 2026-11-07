@@ -68,16 +68,29 @@ function groupBy<T>(xs: T[], key: (x: T) => string): Map<string, T[]> {
   return m;
 }
 
-export default function Reports({ user }: { user: SessionUser }) {
+/** publicMode: ผู้ไม่ได้เข้าสู่ระบบ — เฉพาะรายงานสำหรับผู้บริหาร จากโครงการที่เผยแพร่ */
+function ReportLogos() {
+  const base = import.meta.env.BASE_URL;
+  return (
+    <div className="report-logos" aria-hidden="true">
+      <img src={`${base}logo-doae.png`} alt="" width={64} height={64} />
+      <img src={`${base}logo-kpp.png`} alt="" width={64} height={64} />
+    </div>
+  );
+}
+
+export default function Reports({ user, publicMode = false }: { user: SessionUser | null; publicMode?: boolean }) {
   const l = useLookups();
   const n = useNames();
   const [fy, setFy] = useState(l.currentFiscalYear);
   const [kind, setKind] = useState<Kind>('exec');
   const [showAreas, setShowAreas] = useState(false);
   const [fund, setFund] = useState('');
-  const [group, setGroup] = useState(user.workgroupIds?.length === 1 ? user.workgroupIds[0] : '');
-  const s = useApi('reports.data', { fiscalYear: fy }, [fy]);
-  const groups = l.workgroups.filter((g) => !g.noActivities && (user.workgroupIds === null || user.workgroupIds.includes(g.id)));
+  const [group, setGroup] = useState(!publicMode && user?.workgroupIds?.length === 1 ? user.workgroupIds[0] : '');
+  const s = useApi((publicMode || !user ? 'public.report' : 'reports.data') as 'reports.data', { fiscalYear: fy }, [fy, publicMode]);
+  const allGroups = publicMode || !user || user.workgroupIds === null;
+  const groups = l.workgroups.filter((g) => !g.noActivities && (allGroups || user!.workgroupIds!.includes(g.id)));
+  const kinds = publicMode ? KINDS.filter((x) => x.k === 'exec') : KINDS;
   const title = KINDS.find((x) => x.k === kind)!.title;
 
   const model = useMemo((): Model | null => {
@@ -240,14 +253,17 @@ export default function Reports({ user }: { user: SessionUser }) {
   return (
     <>
       <div className="no-print">
-        <h1>รายงาน</h1>
+        <h1>{publicMode ? 'พิมพ์รายงานสำหรับผู้บริหาร' : 'รายงาน'}</h1>
+        {publicMode && <p className="small muted" style={{ marginTop: 0 }}>เลือกปีและเงื่อนไข แล้วกด &ldquo;พิมพ์ / บันทึกเป็น PDF&rdquo; รายงานอื่นของเจ้าหน้าที่ดูได้หลังเข้าสู่ระบบ</p>}
         <div className="toolbar">
           <FiscalYearPicker value={fy} onChange={setFy} />
-          <label className="field"><span>รายงาน</span>
-            <select value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
-              {KINDS.map((x, i) => <option key={x.k} value={x.k}>{i + 1}. {x.title}</option>)}
-            </select>
-          </label>
+          {kinds.length > 1 && (
+            <label className="field"><span>รายงาน</span>
+              <select value={kind} onChange={(e) => setKind(e.target.value as Kind)}>
+                {kinds.map((x, i) => <option key={x.k} value={x.k}>{i + 1}. {x.title}</option>)}
+              </select>
+            </label>
+          )}
           <label className="field"><span>แหล่งงบ</span>
             <select value={fund} onChange={(e) => setFund(e.target.value)}>
               <option value="">ทั้งหมด</option>
@@ -256,7 +272,7 @@ export default function Reports({ user }: { user: SessionUser }) {
           </label>
           <label className="field"><span>กลุ่มงาน</span>
             <select value={group} onChange={(e) => setGroup(e.target.value)}>
-              {(user.workgroupIds === null || groups.length > 1) && <option value="">ทั้งหมด</option>}
+              {(allGroups || groups.length > 1) && <option value="">ทั้งหมด</option>}
               {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
           </label>
@@ -281,6 +297,7 @@ export default function Reports({ user }: { user: SessionUser }) {
           <article className="report exec">
             <section className="exec-summary">
               <header className="report-head">
+                <ReportLogos />
                 <p className="report-org">{l.organizations[0]?.name ?? 'สำนักงานเกษตรจังหวัดกำแพงเพชร'}</p>
                 <h2>{title}</h2>
                 <p>ปีงบประมาณ พ.ศ. {fy} — {scope}</p>
@@ -348,6 +365,7 @@ export default function Reports({ user }: { user: SessionUser }) {
         ) : model && (
           <article className="report">
             <header className="report-head">
+              <ReportLogos />
               <p className="report-org">{l.organizations[0]?.name ?? 'สำนักงานเกษตรจังหวัดกำแพงเพชร'}</p>
               <h2>{title}</h2>
               <p>ปีงบประมาณ พ.ศ. {fy} — {scope}</p>

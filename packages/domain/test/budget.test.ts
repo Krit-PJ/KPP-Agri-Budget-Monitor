@@ -24,3 +24,23 @@ describe('แผนรายไตรมาสและการแบ่งง�
     expect(splitByWeight(100, [0, 0])).toEqual([50, 50]);
   });
 });
+
+describe('spend targets', () => {
+  it('builds a monthly curve from quarters or from a deadline month', async () => {
+    const { targetCurve, dueCurve, effectiveDueMonth, parseSpendTarget, validateSpendTarget, planAt } = await import('../src/budget');
+    expect(targetCurve({ mode: 'quarter', quarters: [30, 55, 80, 100], month: 12, pct: 100 }).filter((_, i) => i % 3 === 2)).toEqual([30, 55, 80, 100]);
+    const d = targetCurve({ mode: 'deadline', quarters: [], month: 11, pct: 100 });
+    expect(d[10]).toBe(100);
+    expect(d[11]).toBe(100);
+    const p = targetCurve({ mode: 'deadline', quarters: [], month: 6, pct: 80 });
+    expect([p[5], p[11]]).toEqual([80, 100]);
+    expect(dueCurve(3)).toEqual([33.33, 66.67, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100]);
+    expect(effectiveDueMonth({ name: 'ประชุมคณะกรรมการ' })).toBe(9);
+    expect(effectiveDueMonth({ name: 'ประชุมคณะกรรมการ', dueMonth: -1 })).toBe(0);
+    expect(effectiveDueMonth({ name: 'จัดซื้อวัสดุ', dueMonth: 5 })).toBe(5);
+    expect(validateSpendTarget({ mode: 'quarter', quarters: [30, 20, 80, 100], month: 12, pct: 100 })).toContain('ไตรมาส 2');
+    expect(parseSpendTarget('not json', '25,50,75,100').quarters).toEqual([25, 50, 75, 100]);
+    expect(planAt(1000, d, 0, 0)).toBe(0);
+    expect(planAt(1200, dueCurve(3), 3, 1)).toBe(400);
+  });
+});

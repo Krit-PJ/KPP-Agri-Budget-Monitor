@@ -152,6 +152,82 @@ export function planToDate(budget: Satang, planQuarters: string | null | undefin
   return Math.round((budget * monthlyTargetPct(quarterTargets)[month - 1]) / 100);
 }
 
+/* ------------------------- เป้าการเบิกจ่าย (ตั้งค่าได้) ------------------------- */
+
+/**
+ * เป้าการเบิกจ่ายของปีงบประมาณ — ตั้งได้ 2 แบบ
+ * - quarter: ร้อยละสะสม ณ สิ้นไตรมาส 1–4 เช่น [30, 55, 80, 100]
+ * - deadline: ต้องเบิกให้ถึง pct% ภายในสิ้นเดือน month (1 = ต.ค. … 12 = ก.ย.) เพิ่มขึ้นเท่า ๆ กันทุกเดือน
+ */
+export interface SpendTarget { mode: 'quarter' | 'deadline'; quarters: number[]; month: number; pct: number }
+
+export function parseSpendTarget(json: string | null | undefined, fallbackQuarters = DEFAULT_QUARTER_TARGETS): SpendTarget {
+  const base: SpendTarget = { mode: 'quarter', quarters: [...parseQuarterTargets(fallbackQuarters)], month: 12, pct: 100 };
+  if (!json) return base;
+  try {
+    const t = JSON.parse(json) as Partial<SpendTarget>;
+    const out: SpendTarget = {
+      mode: t.mode === 'deadline' ? 'deadline' : 'quarter',
+      quarters: Array.isArray(t.quarters) ? t.quarters.map(Number) : base.quarters,
+      month: Number(t.month) || 12,
+      pct: Number(t.pct) || 100,
+    };
+    return validateSpendTarget(out) ? base : out;
+  } catch {
+    return base;
+  }
+}
+
+/** คืนข้อความผิดพลาด หรือ null ถ้าถูกต้อง */
+export function validateSpendTarget(t: SpendTarget): string | null {
+  if (t.mode === 'quarter') {
+    const q = t.quarters;
+    if (!Array.isArray(q) || q.length !== 4 || q.some((v) => !Number.isFinite(v) || v < 0 || v > 100)) return 'เป้ารายไตรมาสต้องมี 4 ค่า ค่าละ 0–100';
+    for (let i = 1; i < 4; i++) if (q[i] < q[i - 1]) return `เป้าไตรมาส ${i + 1} ต้องไม่น้อยกว่าไตรมาส ${i} (เป็นร้อยละสะสม)`;
+    return null;
+  }
+  if (!Number.isInteger(t.month) || t.month < 1 || t.month > 12) return 'เดือนที่ต้องเบิกให้ครบไม่ถูกต้อง';
+  if (!Number.isFinite(t.pct) || t.pct <= 0 || t.pct > 100) return 'ร้อยละที่ต้องเบิกต้องอยู่ระหว่าง 1–100';
+  return null;
+}
+
+const r2 = (v: number) => Math.round(v * 100) / 100;
+
+/** ร้อยละสะสมรายเดือน 12 ค่า (ต.ค. … ก.ย.) จากเป้าของปี */
+export function targetCurve(t: SpendTarget): number[] {
+  if (t.mode === 'quarter') return monthlyTargetPct(t.quarters.join(','));
+  const out: number[] = [];
+  for (let m = 1; m <= 12; m++) {
+    out.push(r2(m <= t.month ? (t.pct * m) / t.month : t.pct + ((100 - t.pct) * (m - t.month)) / (12 - t.month)));
+  }
+  return out;
+}
+
+/** ร้อยละสะสมรายเดือนของกิจกรรมที่ต้องเบิกครบ 100% ภายในเดือน dueMonth */
+export function dueCurve(dueMonth: number): number[] {
+  return Array.from({ length: 12 }, (_, i) => r2(Math.min(1, (i + 1) / dueMonth) * 100));
+}
+
+/**
+ * เดือนที่กิจกรรมต้องเบิกครบ: ค่าที่ตั้งไว้ (1–12) > อบรม/ประชุม/สัมมนา = มิ.ย. (มาตรการเร่งรัดฯ) > 0 = ตามเป้าของปี
+ * dueMonth = -1 คือเลือก "ตามเป้าของปี" โดยตั้งใจ (ใช้ยกเว้นกิจกรรมประเภทอบรม)
+ */
+export function effectiveDueMonth(a: { name: string; dueMonth?: number | string | null }): number {
+  const d = Number(a.dueMonth) || 0;
+  if (d >= 1 && d <= 12) return d;
+  if (d < 0) return 0;
+  return MEETING_RE.test(a.name) ? MEETING_DUE_MONTH : 0;
+}
+/** มิ.ย. = เดือนที่ 9 ของปีงบ (สิ้นไตรมาส 3) */
+export const MEETING_DUE_MONTH = 9;
+
+/** แผนการเบิกจ่ายสะสม (สตางค์) ณ สิ้นเดือน m จากเป้าของปี หรือกำหนดเสร็จของกิจกรรม */
+export function planAt(budget: Satang, curve: number[], dueMonth: number, m: number): Satang {
+  if (m <= 0 || budget <= 0) return 0;
+  const c = dueMonth > 0 ? dueCurve(dueMonth) : curve;
+  return Math.round((budget * (c[Math.min(12, m) - 1] ?? 0)) / 100);
+}
+
 /**
  * แบ่งยอดเท่า ๆ กัน — เศษกระจายทีละ 1 หน่วยให้รายการแรก ๆ (เช่น 16 คน ÷ 11 = 2,2,2,2,2,1,…)
  * step: หน่วยที่ใช้แบ่ง เช่น 100 = แบ่งเป็นบาทเต็ม (ใช้เมื่อยอดรวมเป็นบาทเต็ม)
@@ -191,6 +267,8 @@ export function riskFlags(
   project: Pick<Project, 'status' | 'endDate' | 'quarterTargets' | 'fiscalYear' | 'lastProgressAt' | 'startDate'>,
   summary: BudgetSummary,
   today: string = todayBangkok(),
+  /** ร้อยละสะสมรายเดือนของเป้าปีงบ (ถ้าไม่ส่ง ใช้เป้ารายไตรมาสของโครงการ) */
+  curve?: number[],
 ): RiskFlag[] {
   const flags: RiskFlag[] = [];
   if (summary.remaining < 0) flags.push('OVER_BUDGET');
@@ -198,7 +276,7 @@ export function riskFlags(
   if (active && project.endDate && project.endDate < today) flags.push('OVERDUE');
   const { start, end } = fiscalYearRange(project.fiscalYear);
   if (active && today >= start && today <= end && summary.currentBudget > 0) {
-    const target = monthlyTargetPct(project.quarterTargets)[fiscalMonthIndex(today) - 1];
+    const target = (curve ?? monthlyTargetPct(project.quarterTargets))[fiscalMonthIndex(today) - 1];
     if (summary.spendingPct + 10 < target) flags.push('BEHIND_SPENDING');
   }
   if (active && project.startDate && project.startDate <= today) {

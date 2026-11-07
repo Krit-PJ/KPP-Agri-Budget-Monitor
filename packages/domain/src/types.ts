@@ -109,6 +109,8 @@ export interface Activity extends Meta {
   targetQty: number;
   /** แผนการใช้จ่ายรายไตรมาส (สตางค์, ไม่สะสม) "q1,q2,q3,q4" — ว่าง = ใช้เป้ามาตรฐานของโครงการ */
   planQuarters: string;
+  /** ต้องเบิกครบ 100% ภายในเดือนที่ (1 = ต.ค. … 12 = ก.ย.); 0 = ค่าเริ่มต้น (อบรม = มิ.ย.); -1 = ตามเป้าของปี */
+  dueMonth?: number;
 }
 
 export interface Allocation extends Meta {

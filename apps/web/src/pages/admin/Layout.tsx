@@ -9,6 +9,7 @@ import Reports from './Reports';
 import Users from './Users';
 import System from './System';
 import Plans from './Plans';
+import Targets from './Targets';
 
 const ROLE_LABEL: Record<SessionUser['role'], string> = { admin: 'Admin', minisuper: 'Mini Super Admin', superadmin: 'Super Admin' };
 
@@ -35,6 +36,7 @@ export default function AdminLayout({ user }: { user: SessionUser }) {
         <NavLink to="/admin/plans">แผนและผู้รับผิดชอบ</NavLink>
         <NavLink to="/admin/projects">บันทึกการเบิกจ่าย</NavLink>
         <NavLink to="/admin/import">นำเข้าจากไฟล์</NavLink>
+        <NavLink to="/admin/targets">เป้าการเบิกจ่าย</NavLink>
         <NavLink to="/admin/reports">รายงาน</NavLink>
         {canManageUsers && <NavLink to="/admin/users">ผู้ใช้งาน</NavLink>}
         {isSuper && <NavLink to="/admin/system">ตั้งค่าระบบ</NavLink>}
@@ -47,6 +49,7 @@ export default function AdminLayout({ user }: { user: SessionUser }) {
           <Route path="projects" element={<ProjectsAdmin user={user} />} />
           <Route path="projects/:id" element={<ProjectDetail user={user} />} />
           <Route path="import" element={<ImportCenter user={user} />} />
+          <Route path="targets" element={<Targets user={user} />} />
           <Route path="reports" element={<Reports user={user} />} />
           {canManageUsers && <Route path="users" element={<Users user={user} />} />}
           {isSuper && <Route path="system" element={<System />} />}

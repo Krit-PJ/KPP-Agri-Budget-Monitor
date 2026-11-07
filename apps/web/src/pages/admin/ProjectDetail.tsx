@@ -87,7 +87,7 @@ function OverviewTab({ d, reload }: { d: Detail; reload: () => void }) {
             <dt>กลุ่มงาน</dt><dd>{n.group(d.project.workgroupId)}</dd>
             <dt>ผู้รับผิดชอบ</dt><dd>{d.project.ownerName || '–'}</dd>
             <dt>ระยะเวลา</dt><dd>{formatThaiDate(d.project.startDate)} ถึง {formatThaiDate(d.project.endDate)}</dd>
-            <dt>เป้าหมายเบิกจ่ายรายไตรมาส</dt><dd>{d.project.quarterTargets.split(',').map((x) => `${x}%`).join(', ')}</dd>
+            <dt>เป้าหมายการเบิกจ่าย</dt><dd>ตามเป้าของปีงบประมาณ (เมนู &ldquo;เป้าการเบิกจ่าย&rdquo;) หรือเดือนที่ต้องเบิกครบของแต่ละกิจกรรม</dd>
             <dt>หน้าสาธารณะ</dt><dd>{d.project.published ? 'เผยแพร่' : 'ไม่เผยแพร่'}</dd>
           </dl>
         </section>
@@ -108,7 +108,6 @@ function OverviewTab({ d, reload }: { d: Detail; reload: () => void }) {
               </select>
             </label>
             <label className="field"><span>ผู้รับผิดชอบ</span><input value={f.ownerName} onChange={(e) => setF({ ...f, ownerName: e.target.value })} /></label>
-            <label className="field"><span>เป้าหมายรายไตรมาส (%)</span><input value={f.quarterTargets} onChange={(e) => setF({ ...f, quarterTargets: e.target.value })} /><span className="hint">4 ค่าคั่นด้วยจุลภาค เช่น 30,55,80,100</span></label>
             <label className="field"><span>วันเริ่มต้น</span><input type="date" value={f.startDate} onChange={(e) => setF({ ...f, startDate: e.target.value })} /></label>
             <label className="field"><span>วันสิ้นสุด</span><input type="date" value={f.endDate} onChange={(e) => setF({ ...f, endDate: e.target.value })} /></label>
             <label className="field wide"><span>รายละเอียด (แสดงบนหน้าสาธารณะ)</span><textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></label>
