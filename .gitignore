@@ -12,3 +12,4 @@ coverage/
 *.tsbuildinfo
 dist-artifact/
 .demo-dist/
+apps/web/dist-demo/

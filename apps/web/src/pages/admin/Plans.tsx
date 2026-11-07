@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { computeAreaShares, type AreaMode } from './areaShares';
 import { Link } from 'react-router-dom';
 import {
   areaName, areaSummary, formatBaht, normalizeKey, splitEqual, splitMoney,
@@ -273,7 +274,7 @@ function Progress({ label, done, total, hint }: { label: string; done: number; t
 
 /* ------------------------------ ตัวแก้ไขพื้นที่ดำเนินการ (กางในแถว) ------------------------------ */
 
-type Mode = 'province' | 'all' | 'some';
+type Mode = AreaMode;
 const toBaht = (s: number) => (s / 100).toFixed(2).replace(/\.00$/, '');
 
 /**
@@ -318,18 +319,13 @@ function AreaEditor({ item, st, onCancel, onDone }: { item: PlanItem; st: PlanAc
   }, [selKey]);
 
   const rows = sel.map((id) => ({ id, unit: l.units.find((u) => u.id === id)!, q: Number(vals[id]?.q || 0), b: bahtInputToSatang(vals[id]?.b ?? '') }));
-  const sumQ = rows.reduce((a, r) => a + r.q, 0);
-  const sumB = rows.reduce((a, r) => a + (r.b ?? 0), 0);
-  const badMoney = rows.some((r) => r.b === null);
   // ส่วนของจังหวัด = ส่วนที่เหลือ
-  const restQ = hasTarget ? total - sumQ : 0;
-  const restB = st.budget - sumB;
+  const { restQty: restQ, restBudget: restB, badMoney, ok, shares } = computeAreaShares({
+    mode, provinceId: pao.id, totalQty: total, totalBudget: st.budget,
+    districts: rows.map((r) => ({ unitId: r.id, targetQty: r.q, budgetSatang: r.b })),
+  });
   const qOk = restQ >= 0;
   const bOk = !badMoney && restB >= 0;
-  const ok = (mode === 'province' || rows.length > 0) && qOk && bOk;
-  const shares = mode === 'province'
-    ? [{ unitId: pao.id, budgetSatang: st.budget, targetQty: total }]
-    : [...(restB > 0 || restQ > 0 ? [{ unitId: pao.id, budgetSatang: restB, targetQty: restQ }] : []), ...rows.map((r) => ({ unitId: r.id, budgetSatang: r.b ?? 0, targetQty: r.q }))];
 
   const save = () => void run(async () => {
     await call('activities.setUnits', { activityId: st.activityId, units: shares });
