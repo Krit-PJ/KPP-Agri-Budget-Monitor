@@ -43,13 +43,30 @@ export interface Meta {
 }
 
 export interface Organization extends Meta { code: string; name: string }
-export interface Workgroup extends Meta { orgId: string; code: string; name: string }
+/** noActivities = ไม่รับผิดชอบกิจกรรมในแผน (เช่น ฝ่ายบริหารทั่วไป) — คงไว้ให้ผู้ใช้สังกัดได้ */
+export interface Workgroup extends Meta { orgId: string; code: string; name: string; noActivities: boolean }
 export interface FundingSource extends Meta { code: string; name: string; shortName: string }
 /**
  * หน่วยดำเนินการ: สำนักงานเกษตรจังหวัด และสำนักงานเกษตรอำเภอ 11 อำเภอ
  * (เป็นผู้ดำเนินกิจกรรมและใช้งบ — ไม่ใช่ "หน่วยเบิกจ่าย" ตามความหมายของ GFMIS)
  */
 export interface Unit extends Meta { code: string; name: string; shortName: string; kind: 'PROVINCE' | 'DISTRICT'; sortOrder: number }
+/** ชื่อพื้นที่ดำเนินการสำหรับแสดงผล (ตามแบบ ผป.03): สนง.เกษตรจังหวัด = "ระดับจังหวัด", อำเภอ = ชื่ออำเภอ */
+export function areaName(u: Pick<Unit, 'kind' | 'shortName'> | undefined): string {
+  if (!u) return '–';
+  return u.kind === 'PROVINCE' ? 'ระดับจังหวัด' : u.shortName.replace(/^อ\./, '');
+}
+/** สรุปพื้นที่ดำเนินการของกิจกรรม: "ระดับจังหวัด" / "ทั้ง 11 อำเภอ" / "3 อำเภอ: ไทรงาม คลองลาน พรานกระต่าย" */
+export function areaSummary(unitIds: string[], units: Array<Pick<Unit, 'id' | 'kind' | 'shortName'>>, maxNames = 3): string {
+  const sel = units.filter((u) => unitIds.includes(u.id));
+  const districts = units.filter((u) => u.kind === 'DISTRICT');
+  const dSel = sel.filter((u) => u.kind === 'DISTRICT');
+  const prov = sel.some((u) => u.kind === 'PROVINCE');
+  if (!sel.length || (prov && !dSel.length)) return 'ระดับจังหวัด';
+  const d = dSel.length === districts.length ? `ทั้ง ${districts.length} อำเภอ`
+    : `${dSel.length} อำเภอ: ${dSel.slice(0, maxNames).map(areaName).join(' ')}${dSel.length > maxNames ? ' ฯลฯ' : ''}`;
+  return prov ? `ระดับจังหวัด และ${d}` : d;
+}
 /** งบและเป้าหมายของกิจกรรมที่แบ่งให้หน่วยดำเนินการ — ผลรวมงบต้องเท่างบกิจกรรม (ส่วนที่ไม่ได้แบ่งนับเป็นของสำนักงานเกษตรจังหวัด) */
 export interface ActivityUnit extends Meta { projectId: string; activityId: string; unitId: string; budgetSatang: Satang; targetQty: number }
 

@@ -65,11 +65,11 @@ function KeyFacts({ d, fy, target, m }: { d: PublicSummary; fy: number; target: 
 }
 
 type By = 'group' | 'unit' | 'plan' | 'fund';
-const BY_LABEL: Record<By, string> = { group: 'กลุ่มงาน', unit: 'หน่วยดำเนินการ', plan: 'แผนงาน', fund: 'แหล่งงบ' };
+const BY_LABEL: Record<By, string> = { group: 'กลุ่มงาน', unit: 'พื้นที่ดำเนินการ', plan: 'แผนงาน', fund: 'แหล่งงบ' };
 
 /**
  * ตารางผลการเบิกจ่าย: งบ / แผน ณ เดือนนี้ / เบิกจ่าย / ผูกพัน / คงเหลือ / ร้อยละคงเหลือ + แถบเทียบเป้า
- * แถวกลุ่มงานกดเพื่อดูรายหน่วยดำเนินการ (สนง.เกษตรจังหวัด/อำเภอ)
+ * แถวกลุ่มงานกดเพื่อดูรายพื้นที่ดำเนินการ (ระดับจังหวัด/อำเภอ)
  */
 function Breakdown({ d, target }: { d: PublicSummary; target: number }) {
   const [by, setBy] = useState<By>('group');

@@ -218,7 +218,7 @@ describe('หน่วยดำเนินการ (ADR-006)', () => {
     const share = [Math.floor(item.amountSatang / 3), Math.floor(item.amountSatang / 3)];
     share.push(item.amountSatang - share[0] - share[1]);
     const st = ok<PlanDetail['activities'][string]>('activities.setUnits', {
-      activityId: item.activityId, units: ids.map((unitId, i) => ({ unitId, budgetSatang: share[i], targetQty: 1 })),
+      activityId: item.activityId, units: ids.map((unitId, i) => ({ unitId, budgetSatang: share[i], targetQty: [5, 5, item.quantity - 10][i] })),
       planQuarters: [item.amountSatang, 0, 0, 0],
     }, superToken);
     expect(st.units).toHaveLength(3);
@@ -228,7 +228,7 @@ describe('หน่วยดำเนินการ (ADR-006)', () => {
     expect(call('disbursements.create', { ...base, unitId: districts()[5], idempotencyKey: 'u1' }, superToken).error?.message).toContain('ไม่ได้รับงบ');
     ok('disbursements.create', { ...base, unitId: ids[1], idempotencyKey: 'u2' }, superToken);
     // เอาอำเภอที่มีเบิกจ่ายออก → ไม่ได้
-    const drop = call('activities.setUnits', { activityId: item.activityId, units: [{ unitId: ids[0], budgetSatang: item.amountSatang }] }, superToken);
+    const drop = call('activities.setUnits', { activityId: item.activityId, units: [{ unitId: ids[0], budgetSatang: item.amountSatang, targetQty: item.quantity }] }, superToken);
     expect(drop.error?.message).toContain('มีรายการเบิกจ่ายแล้ว');
     // dashboard: กลุ่มงาน → รายอำเภอ
     const sum = ok<{ byWorkgroup: Array<{ key: string; plan: number; units: Array<{ key: string; budget: { currentBudget: number; disbursed: number } }> }>; activitiesWithoutUnits: number }>('public.summary', { fiscalYear: 2570 });
@@ -243,6 +243,28 @@ describe('หน่วยดำเนินการ (ADR-006)', () => {
     const rep = ok<{ rows: Array<{ unitId: string; budget: number; disbursed: number }> }>('reports.data', { fiscalYear: 2570 }, superToken);
     expect(rep.rows.map((r) => r.unitId)).toEqual(ids);
     expect(rep.rows.reduce((a, r) => a + r.budget, 0)).toBe(item.amountSatang);
+  });
+
+  it('requires district targets to add up to the activity target, and district budgets to cover what was already spent', () => {
+    const { item } = assignedLeaf('Smart Group');
+    const ids = districts().slice(0, 2);
+    const half = [Math.floor(item.amountSatang / 2), item.amountSatang - Math.floor(item.amountSatang / 2)];
+    const wrongQty = call('activities.setUnits', { activityId: item.activityId, units: ids.map((unitId, i) => ({ unitId, budgetSatang: half[i], targetQty: 1 })) }, superToken);
+    expect(wrongQty.error?.message).toContain('ไม่เท่าเป้าหมายทั้งสิ้น');
+    const q = [Math.floor(item.quantity / 2), item.quantity - Math.floor(item.quantity / 2)];
+    ok('activities.setUnits', { activityId: item.activityId, units: ids.map((unitId, i) => ({ unitId, budgetSatang: half[i], targetQty: q[i] })) }, superToken);
+    ok('disbursements.create', { projectId: item.projectId, activityId: item.activityId, unitId: ids[0], status: 'PAID', amountSatang: 2_000_00, date: '2025-11-01', idempotencyKey: 'f1' }, superToken);
+    // ลดงบอำเภอแรกให้ต่ำกว่ายอดเบิกแล้ว → ไม่ได้
+    const tooLow = call('activities.setUnits', { activityId: item.activityId, units: [{ unitId: ids[0], budgetSatang: 1_000_00, targetQty: q[0] }, { unitId: ids[1], budgetSatang: item.amountSatang - 1_000_00, targetQty: q[1] }] }, superToken);
+    expect(tooLow.error?.message).toContain('ต่ำกว่ายอดที่เบิกจ่ายแล้ว');
+  });
+
+  it('keeps the admin section out of activity ownership', () => {
+    const admin = lookups.workgroups.find((g) => g.code === 'ADMIN')!;
+    expect(admin.noActivities).toBe(true);
+    const { detail } = importPlan();
+    const leaf = detail.items.find((i) => i.isLeaf)!;
+    expect(call('plans.assign', { itemIds: [leaf.id], workgroupId: admin.id }, superToken).error?.message).toContain('ไม่รับผิดชอบกิจกรรม');
   });
 
   it('unsplit budget and unit-less disbursements belong to the province office', () => {

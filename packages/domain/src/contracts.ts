@@ -63,7 +63,7 @@ export interface SessionUser {
 
 export interface Lookups {
   organizations: Pick<Organization, 'id' | 'code' | 'name'>[];
-  workgroups: Pick<Workgroup, 'id' | 'orgId' | 'code' | 'name'>[];
+  workgroups: Pick<Workgroup, 'id' | 'orgId' | 'code' | 'name' | 'noActivities'>[];
   fundingSources: Pick<FundingSource, 'id' | 'code' | 'name' | 'shortName'>[];
   /** หน่วยดำเนินการ เรียงตามรหัส (สำนักงานเกษตรจังหวัดก่อน) */
   units: Pick<Unit, 'id' | 'code' | 'name' | 'shortName' | 'kind'>[];

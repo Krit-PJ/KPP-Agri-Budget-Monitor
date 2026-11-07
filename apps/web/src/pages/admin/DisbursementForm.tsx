@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
-  formatBaht, formatThaiDate, todayBangkok, type CoverLetterResult, type DisbursementStatus, type ProjectDetail, type SessionUser,
+  areaName, formatBaht, formatThaiDate, todayBangkok, type CoverLetterResult, type DisbursementStatus, type ProjectDetail, type SessionUser,
 } from '@kpp/domain';
 import { ApiError, call, fileToBase64, newKey, shrinkImage } from '../../api/client';
 import { bahtInputToSatang, ErrorBox, useLookups, useSubmit, useToast } from '../../components/ui';
@@ -137,14 +137,14 @@ export default function DisbursementForm({ d, user, onDone }: { d: ProjectDetail
           </label>
         )}
         {(actUnits.length > 1) && (
-          <label className="field"><span className="req">หน่วยดำเนินการ</span>
+          <label className="field"><span className="req">พื้นที่ดำเนินการ</span>
             <select value={f.unitId} onChange={set('unitId')} required>
-              <option value="">เลือกอำเภอ/หน่วย</option>
-              {actUnits.map((s) => <option key={s.unitId} value={s.unitId}>{l.units.find((u) => u.id === s.unitId)?.shortName ?? '?'}</option>)}
+              <option value="">เลือกพื้นที่</option>
+              {actUnits.map((s) => <option key={s.unitId} value={s.unitId}>{areaName(l.units.find((u) => u.id === s.unitId))}</option>)}
             </select>
           </label>
         )}
-        {actUnits.length === 1 && <p className="small muted field">หน่วยดำเนินการ: {l.units.find((u) => u.id === actUnits[0].unitId)?.shortName}</p>}
+        {actUnits.length === 1 && <p className="small muted field">พื้นที่ดำเนินการ: {areaName(l.units.find((u) => u.id === actUnits[0].unitId))}</p>}
         <label className="field wide"><span>รายการ</span><input value={f.description} onChange={set('description')} placeholder="เช่น ค่าวัสดุอบรมเกษตรกร" /></label>
         {willExceed && user.role === 'superadmin' && (
           <label className="field wide"><span className="req">เหตุผลการอนุมัติเกินงบ</span><input value={f.override} onChange={set('override')} /></label>

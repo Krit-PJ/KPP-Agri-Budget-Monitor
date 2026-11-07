@@ -51,6 +51,10 @@ export function seedMasterData(ctx: Ctx): void {
   const newUnits = SEED_UNITS.map((u, i) => ({ ...u, sortOrder: i })).filter((u) => !units.some((x) => x.code === u.code)).map((u) => ({ ...newMeta(ctx), ...u }));
   if (newUnits.length) ctx.env.db.insert('Units', newUnits);
   retireDistrictWorkgroup(ctx);
+  // ฝ่ายบริหารทั่วไป: ไม่รับผิดชอบกิจกรรมในแผน (คงไว้ให้ผู้ใช้สังกัด)
+  for (const g of live(ctx.env.db.list<Workgroup>('Workgroups')).filter((x) => x.code === 'ADMIN' && !x.noActivities)) {
+    ctx.env.db.update('Workgroups', g.id, { ...g, noActivities: true, version: g.version + 1, updatedAt: nowIso(ctx), updatedBy: 'system' });
+  }
 }
 
 /**

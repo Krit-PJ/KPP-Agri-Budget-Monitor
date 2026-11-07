@@ -5,7 +5,7 @@
  * - แผนการเบิกจ่าย ณ เดือนใด ๆ: แผนรายไตรมาสของกิจกรรม (ถ้ามี) ไม่เช่นนั้นใช้เป้าร้อยละของโครงการ
  */
 import {
-  AppError, MEETING_RE, computeBudget, pct, planToDate, splitEqual, splitMoney,
+  AppError, MEETING_RE, areaName, computeBudget, pct, planToDate, splitEqual, splitMoney,
   type Activity, type ActivityUnit, type Allocation, type BudgetSummary, type Disbursement, type PlanActivityState,
   type Project, type ReportRow, type Satang, type Unit, type UnitShareInput,
 } from '@kpp/domain';
@@ -67,6 +67,24 @@ export function setActivityUnits(ctx: Ctx, b: { activityId: string; units: UnitS
     if (sum !== st.budget) {
       throw new AppError('VALIDATION_FAILED', `ผลรวมงบที่แบ่ง ${(sum / 100).toLocaleString('th-TH')} บาท ไม่เท่างบกิจกรรม ${(st.budget / 100).toLocaleString('th-TH')} บาท`);
     }
+    // เป้าหมายรายพื้นที่ต้องรวมเท่าเป้าหมายทั้งสิ้น (เฉพาะกิจกรรมที่มีเป้าหมาย)
+    const target = Math.round(Number(a.targetQty) || 0);
+    const qtySum = clean.reduce((s, x) => s + x.targetQty, 0);
+    if (target > 0 && qtySum !== target) {
+      throw new AppError('VALIDATION_FAILED', `ผลรวมเป้าหมาย ${qtySum.toLocaleString('th-TH')} ไม่เท่าเป้าหมายทั้งสิ้น ${target.toLocaleString('th-TH')} ${a.unit}`);
+    }
+  }
+  // งบของแต่ละพื้นที่ต้องไม่ต่ำกว่ายอดที่เบิกจ่ายไปแล้วในพื้นที่นั้น
+  const paoId = provinceUnitId(units);
+  const spent = new Map<string, number>();
+  for (const d of live(ctx.env.db.list<Disbursement>('Disbursements')).filter((x) => x.activityId === a.id && (x.status === 'APPROVED' || x.status === 'PAID'))) {
+    spent.set(d.unitId || paoId, (spent.get(d.unitId || paoId) ?? 0) + Number(d.amountSatang));
+  }
+  for (const x of clean) {
+    const used = spent.get(x.unitId) ?? 0;
+    if (x.budgetSatang < used) {
+      throw new AppError('VALIDATION_FAILED', `งบของ${areaName(units.find((u) => u.id === x.unitId))} ต่ำกว่ายอดที่เบิกจ่ายแล้ว ${(used / 100).toLocaleString('th-TH')} บาท`);
+    }
   }
   // หน่วยที่มีรายการเบิกจ่ายแล้ว ต้องยังอยู่
   const pao = provinceUnitId(units);
@@ -76,7 +94,7 @@ export function setActivityUnits(ctx: Ctx, b: { activityId: string; units: UnitS
   const keepPao = clean.length === 0; // ไม่แบ่ง = ทั้งหมดเป็นของจังหวัด
   for (const uid of used) {
     if (!keep.has(uid) && !(keepPao && uid === pao)) {
-      throw new AppError('VALIDATION_FAILED', `${units.find((u) => u.id === uid)?.shortName ?? 'หน่วยนี้'} มีรายการเบิกจ่ายแล้ว เอาออกไม่ได้`);
+      throw new AppError('VALIDATION_FAILED', `${areaName(units.find((u) => u.id === uid))} มีรายการเบิกจ่ายแล้ว เอาออกไม่ได้`);
     }
   }
   let planQuarters = a.planQuarters ?? '';

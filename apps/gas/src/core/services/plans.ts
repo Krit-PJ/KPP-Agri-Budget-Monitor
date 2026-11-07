@@ -212,6 +212,7 @@ export function assignPlanItems(ctx: Ctx, b: { itemIds: string[]; workgroupId: s
   const u = requireRole(ctx, 'admin', 'minisuper', 'superadmin');
   const wg = live(ctx.env.db.list<Workgroup>('Workgroups')).find((g) => g.id === b.workgroupId);
   if (!wg) throw new AppError('VALIDATION_FAILED', 'กรุณาเลือกกลุ่มงาน');
+  if (wg.noActivities) throw new AppError('VALIDATION_FAILED', `${wg.name}ไม่รับผิดชอบกิจกรรมในแผน`);
   if (!canAccessWorkgroup(u, wg.id)) throw new AppError('FORBIDDEN_SCOPE', 'เลือกรายการให้กลุ่มงานอื่นไม่ได้');
   const ids = [...new Set((b.itemIds ?? []).map(String))].slice(0, 300);
   if (!ids.length) throw new AppError('VALIDATION_FAILED', 'ยังไม่ได้เลือกรายการ');

@@ -323,6 +323,10 @@ var KPP = (() => {
   // ../../packages/domain/src/types.ts
   var PROJECT_STATUSES = ["PLANNED", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
   var ALLOCATION_TYPES = ["ORIGINAL", "TRANSFER_IN", "TRANSFER_OUT"];
+  function areaName(u) {
+    if (!u) return "\u2013";
+    return u.kind === "PROVINCE" ? "\u0E23\u0E30\u0E14\u0E31\u0E1A\u0E08\u0E31\u0E07\u0E2B\u0E27\u0E31\u0E14" : u.shortName.replace(/^อ\./, "");
+  }
   var AppError = class extends Error {
     constructor(code, message, details) {
       super(message);
@@ -1888,7 +1892,7 @@ var KPP = (() => {
   }
 
   // src/core/schema.ts
-  var SCHEMA_VERSION = "2026.11.07-2";
+  var SCHEMA_VERSION = "2026.11.07-3";
   var META = [
     ["id", "string"],
     ["createdAt", "string"],
@@ -1942,7 +1946,7 @@ var KPP = (() => {
       ["newDevice", "boolean"]
     ], false),
     Organizations: t("CORE", [["code", "string"], ["name", "string"]]),
-    Workgroups: t("CORE", [["orgId", "string"], ["code", "string"], ["name", "string"]]),
+    Workgroups: t("CORE", [["orgId", "string"], ["code", "string"], ["name", "string"], ["noActivities", "boolean"]]),
     FundingSources: t("CORE", [["code", "string"], ["name", "string"], ["shortName", "string"]]),
     Units: t("CORE", [["code", "string"], ["name", "string"], ["shortName", "string"], ["kind", "string"], ["sortOrder", "number"]]),
     ActivityUnits: t("CORE", [["projectId", "string"], ["activityId", "string"], ["unitId", "string"], ["budgetSatang", "number"], ["targetQty", "number"]]),
@@ -2191,6 +2195,22 @@ var KPP = (() => {
       if (sum !== st.budget) {
         throw new AppError("VALIDATION_FAILED", `\u0E1C\u0E25\u0E23\u0E27\u0E21\u0E07\u0E1A\u0E17\u0E35\u0E48\u0E41\u0E1A\u0E48\u0E07 ${(sum / 100).toLocaleString("th-TH")} \u0E1A\u0E32\u0E17 \u0E44\u0E21\u0E48\u0E40\u0E17\u0E48\u0E32\u0E07\u0E1A\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21 ${(st.budget / 100).toLocaleString("th-TH")} \u0E1A\u0E32\u0E17`);
       }
+      const target = Math.round(Number(a.targetQty) || 0);
+      const qtySum = clean.reduce((s, x) => s + x.targetQty, 0);
+      if (target > 0 && qtySum !== target) {
+        throw new AppError("VALIDATION_FAILED", `\u0E1C\u0E25\u0E23\u0E27\u0E21\u0E40\u0E1B\u0E49\u0E32\u0E2B\u0E21\u0E32\u0E22 ${qtySum.toLocaleString("th-TH")} \u0E44\u0E21\u0E48\u0E40\u0E17\u0E48\u0E32\u0E40\u0E1B\u0E49\u0E32\u0E2B\u0E21\u0E32\u0E22\u0E17\u0E31\u0E49\u0E07\u0E2A\u0E34\u0E49\u0E19 ${target.toLocaleString("th-TH")} ${a.unit}`);
+      }
+    }
+    const paoId = provinceUnitId(units);
+    const spent = /* @__PURE__ */ new Map();
+    for (const d of live(ctx.env.db.list("Disbursements")).filter((x) => x.activityId === a.id && (x.status === "APPROVED" || x.status === "PAID"))) {
+      spent.set(d.unitId || paoId, (spent.get(d.unitId || paoId) ?? 0) + Number(d.amountSatang));
+    }
+    for (const x of clean) {
+      const used2 = spent.get(x.unitId) ?? 0;
+      if (x.budgetSatang < used2) {
+        throw new AppError("VALIDATION_FAILED", `\u0E07\u0E1A\u0E02\u0E2D\u0E07${areaName(units.find((u) => u.id === x.unitId))} \u0E15\u0E48\u0E33\u0E01\u0E27\u0E48\u0E32\u0E22\u0E2D\u0E14\u0E17\u0E35\u0E48\u0E40\u0E1A\u0E34\u0E01\u0E08\u0E48\u0E32\u0E22\u0E41\u0E25\u0E49\u0E27 ${(used2 / 100).toLocaleString("th-TH")} \u0E1A\u0E32\u0E17`);
+      }
     }
     const pao = provinceUnitId(units);
     const used = new Set(live(ctx.env.db.list("Disbursements")).filter((d) => d.activityId === a.id && d.status !== "VOID").map((d) => d.unitId || pao));
@@ -2198,7 +2218,7 @@ var KPP = (() => {
     const keepPao = clean.length === 0;
     for (const uid of used) {
       if (!keep.has(uid) && !(keepPao && uid === pao)) {
-        throw new AppError("VALIDATION_FAILED", `${units.find((u) => u.id === uid)?.shortName ?? "\u0E2B\u0E19\u0E48\u0E27\u0E22\u0E19\u0E35\u0E49"} \u0E21\u0E35\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E40\u0E1A\u0E34\u0E01\u0E08\u0E48\u0E32\u0E22\u0E41\u0E25\u0E49\u0E27 \u0E40\u0E2D\u0E32\u0E2D\u0E2D\u0E01\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49`);
+        throw new AppError("VALIDATION_FAILED", `${areaName(units.find((u) => u.id === uid))} \u0E21\u0E35\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E40\u0E1A\u0E34\u0E01\u0E08\u0E48\u0E32\u0E22\u0E41\u0E25\u0E49\u0E27 \u0E40\u0E2D\u0E32\u0E2D\u0E2D\u0E01\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49`);
       }
     }
     let planQuarters = a.planQuarters ?? "";
@@ -2806,7 +2826,7 @@ var KPP = (() => {
       for (const p of live(ctx.env.db.list("Projects"))) years.add(Number(p.fiscalYear));
       return {
         organizations: live(ctx.env.db.list("Organizations")).map(({ id, code, name }) => ({ id, code, name })),
-        workgroups: live(ctx.env.db.list("Workgroups")).map(({ id, orgId, code, name }) => ({ id, orgId, code, name })),
+        workgroups: live(ctx.env.db.list("Workgroups")).map(({ id, orgId, code, name, noActivities }) => ({ id, orgId, code, name, noActivities: !!noActivities })),
         fundingSources: live(ctx.env.db.list("FundingSources")).map(({ id, code, name, shortName }) => ({ id, code, name, shortName })),
         units: listUnits(ctx).map(({ id, code, name, shortName, kind }) => ({ id, code, name, shortName, kind })),
         fiscalYears: [...years].sort((a, b) => b - a),
@@ -2884,7 +2904,7 @@ var KPP = (() => {
     const m = fy < fyNow ? 12 : fy > fyNow ? 0 : fiscalMonthIndex(t2);
     const unitRows = buildUnitRows(ctx, ds, projects, m);
     const units = listUnits(ctx);
-    const unitName = (id) => units.find((u) => u.id === id)?.shortName ?? "\u0E44\u0E21\u0E48\u0E23\u0E30\u0E1A\u0E38";
+    const unitName = (id) => areaName(units.find((u) => u.id === id));
     const byUnitOf = (rows) => {
       const mm = /* @__PURE__ */ new Map();
       for (const r2 of rows) (mm.get(r2.unitId) ?? mm.set(r2.unitId, []).get(r2.unitId)).push(r2);
@@ -3795,6 +3815,7 @@ var KPP = (() => {
     const u = requireRole(ctx, "admin", "minisuper", "superadmin");
     const wg = live(ctx.env.db.list("Workgroups")).find((g) => g.id === b.workgroupId);
     if (!wg) throw new AppError("VALIDATION_FAILED", "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19");
+    if (wg.noActivities) throw new AppError("VALIDATION_FAILED", `${wg.name}\u0E44\u0E21\u0E48\u0E23\u0E31\u0E1A\u0E1C\u0E34\u0E14\u0E0A\u0E2D\u0E1A\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E43\u0E19\u0E41\u0E1C\u0E19`);
     if (!canAccessWorkgroup(u, wg.id)) throw new AppError("FORBIDDEN_SCOPE", "\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E43\u0E2B\u0E49\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19\u0E2D\u0E37\u0E48\u0E19\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49");
     const ids = [...new Set((b.itemIds ?? []).map(String))].slice(0, 300);
     if (!ids.length) throw new AppError("VALIDATION_FAILED", "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23");
@@ -4104,6 +4125,9 @@ var KPP = (() => {
     const newUnits = SEED_UNITS.map((u, i) => ({ ...u, sortOrder: i })).filter((u) => !units.some((x) => x.code === u.code)).map((u) => ({ ...newMeta(ctx), ...u }));
     if (newUnits.length) ctx.env.db.insert("Units", newUnits);
     retireDistrictWorkgroup(ctx);
+    for (const g of live(ctx.env.db.list("Workgroups")).filter((x) => x.code === "ADMIN" && !x.noActivities)) {
+      ctx.env.db.update("Workgroups", g.id, { ...g, noActivities: true, version: g.version + 1, updatedAt: nowIso(ctx), updatedBy: "system" });
+    }
   }
   function retireDistrictWorkgroup(ctx) {
     const dist = live(ctx.env.db.list("Workgroups")).find((g) => g.code === "DIST");

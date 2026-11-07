@@ -409,3 +409,82 @@ input.is-edited { border-color: var(--straw); }
 @media (max-width: 760px) {
   table.data.stack.bd-table td > div.xs { display: inline; margin-left: .5em; }
 }
+
+/* ===== แผนและผู้รับผิดชอบ: ตารางซ้าย→ขวา + กางแก้ไขทีละแถว ===== */
+.pb-head, .pb-row { display: grid; grid-template-columns: 2.25rem minmax(0, 1fr) 8em 9em 15em 17em; gap: var(--s3); align-items: center; }
+.pb-head { padding: var(--s2) var(--s4) var(--s1) var(--s2); margin-top: var(--s4); font-size: var(--fs-xs); font-weight: 600; color: var(--ink-2); }
+.pb-head .r, .pb-qty, .pb-amt { text-align: right; }
+.pb-row { padding: var(--s3) var(--s4) var(--s3) var(--s2); border-top: 1px solid #edf1ee; font-size: var(--fs-sm); }
+.pb-row:first-child { border-top: 0; }
+.pb-row.is-picked { background: var(--paddy-soft); }
+.pb-row.is-open { background: #f7faf7; box-shadow: inset 4px 0 0 var(--forest); }
+.pb-qty { white-space: nowrap; }
+.pb-amt { white-space: nowrap; font-weight: 600; }
+.pb-area { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.area-sum { display: flex; flex-direction: column; font-size: var(--fs-sm); }
+.area-state { font-size: var(--fs-xs); color: var(--straw-ink); }
+.area-sum.is-ok .area-state { color: var(--forest); }
+.area-actions { display: flex; gap: var(--s3); align-items: center; flex-wrap: wrap; }
+.pb-editor { grid-column: 2 / -1; }
+.area-editor { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--s4); margin-top: var(--s2); }
+.area-mode { border: 0; padding: 0; margin: 0 0 var(--s3); display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); }
+.area-mode legend { font-weight: 600; margin-bottom: var(--s2); }
+.area-opt { display: flex; gap: 8px; align-items: center; min-height: 40px; font-size: var(--fs-md); cursor: pointer; }
+.area-opt input { width: 20px; min-height: 20px; }
+.area-pick { padding-left: 0; margin-bottom: var(--s3); }
+.area-table { max-width: 560px; }
+.area-table input { width: 9em; min-height: 38px; padding: 4px 8px; text-align: right; font-size: var(--fs-sm); }
+.area-table input.is-invalid { border-color: var(--clay); }
+.area-table tfoot td { font-weight: 600; border-top: 2px solid var(--line); white-space: nowrap; }
+.sum-ok { color: var(--forest); margin-left: .5em; }
+.sum-bad { color: var(--clay); margin-left: .5em; }
+.confirm-box { border: 2px solid var(--forest); border-radius: var(--r-md); padding: var(--s3) var(--s4); background: #f1f7f2; margin-top: var(--s3); }
+.confirm-box p { margin: 0 0 var(--s2); }
+@media (max-width: 1100px) {
+  .pb-head { display: none; }
+  .pb-row { grid-template-columns: 2.25rem minmax(0, 1fr) auto; }
+  .pb-row .ob-name { grid-column: 2 / -1; }
+  .pb-qty { grid-column: 2; text-align: left; }
+  .pb-qty::before { content: 'เป้าหมาย '; color: var(--ink-3); font-size: var(--fs-xs); }
+  .pb-amt { grid-column: 3; }
+  .pb-row .ob-group { grid-column: 2 / -1; }
+  .pb-area { grid-column: 2 / -1; }
+  .pb-editor { grid-column: 1 / -1; }
+  .area-table { max-width: none; }
+  .area-table input { width: 6.5em; }
+}
+
+/* ===== รายงานสรุปสำหรับผู้บริหาร: ตัวใหญ่ อ่านง่าย พิมพ์ขาวดำได้ ===== */
+.report.exec { color: #000; }
+.exec .report-head h2 { font-size: 1.5rem; }
+.exec .report-head p { font-size: 1.05rem; }
+.exec-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); margin: var(--s4) 0; }
+.exec-kpis > div { border: 2px solid #1f2a22; border-radius: 8px; padding: var(--s3) var(--s4); display: flex; flex-direction: column; }
+.exec-kpis span { font-size: 1.1rem; font-weight: 600; }
+.exec-kpis strong { font-size: 2.1rem; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.exec-kpis em { font-style: normal; font-size: 1rem; }
+.exec-kpis small { font-size: .95rem; margin-top: 2px; }
+.exec-kpis .exec-pct { background: #eef5ef; }
+.exec-sentence { font-size: 1.2rem; font-weight: 600; border-left: 6px solid #1f2a22; padding: var(--s2) var(--s3); margin: var(--s4) 0; }
+.exec-table { font-size: 1rem; }
+.exec-table th { font-size: .95rem; }
+.exec-table td, .exec-table th { padding: 6px 8px; border-color: #555; }
+.exec-foot { font-size: .95rem; margin-top: var(--s3); }
+.exec-detail { margin-top: var(--s6); }
+.exec-detail-title { font-size: 1.25rem; text-align: center; }
+@page exec-portrait { size: A4 portrait; margin: 12mm; }
+@page exec-landscape { size: A4 landscape; margin: 10mm; }
+@media print {
+  .exec-summary { page: exec-portrait; }
+  .exec-detail { page: exec-landscape; break-before: page; margin-top: 0; }
+  .exec .report-head h2 { font-size: 18pt; }
+  .exec .report-head p { font-size: 13pt; }
+  .exec-kpis span { font-size: 14pt; }
+  .exec-kpis strong { font-size: 24pt; }
+  .exec-kpis em, .exec-kpis small, .exec-foot { font-size: 12pt; }
+  .exec-sentence { font-size: 15pt; }
+  .exec-table { font-size: 12pt; }
+  .exec-table th { font-size: 11pt; }
+  .exec-kpis .exec-pct { background: none; }
+  .exec-detail-title { font-size: 15pt; }
+}

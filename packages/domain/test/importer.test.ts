@@ -12,9 +12,9 @@ const FS: FundingSource[] = [
   { ...meta, id: 'fs3', code: 'PROVGROUP', name: 'งบกลุ่มจังหวัดภาคเหนือตอนล่าง 2', shortName: 'กลุ่มจังหวัด' },
 ];
 const WG: Workgroup[] = [
-  { ...meta, id: 'wg1', orgId: 'o1', code: 'PLAN', name: 'กลุ่มยุทธศาสตร์และสารสนเทศ' },
-  { ...meta, id: 'wg2', orgId: 'o1', code: 'PROD', name: 'กลุ่มส่งเสริมและพัฒนาการผลิต' },
-  { ...meta, id: 'wg3', orgId: 'o1', code: 'FARMER', name: 'กลุ่มส่งเสริมและพัฒนาเกษตรกร' },
+  { ...meta, id: 'wg1', orgId: 'o1', code: 'PLAN', name: 'กลุ่มยุทธศาสตร์และสารสนเทศ', noActivities: false },
+  { ...meta, id: 'wg2', orgId: 'o1', code: 'PROD', name: 'กลุ่มส่งเสริมและพัฒนาการผลิต', noActivities: false },
+  { ...meta, id: 'wg3', orgId: 'o1', code: 'FARMER', name: 'กลุ่มส่งเสริมและพัฒนาเกษตรกร', noActivities: false },
 ];
 
 function ctx(over: Partial<PlanContext> = {}): PlanContext {

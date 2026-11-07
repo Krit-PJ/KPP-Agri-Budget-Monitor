@@ -3,7 +3,7 @@
  * cache ด้วย dataVersion และบันทึก snapshot ลง REPORTING
  */
 import {
-  AppError, MEETING_RE, addSummaries, computeBudget, currentFiscalYear, fiscalMonthIndex, monthlyCumulative, monthlyTargetPct, pct, riskFlags,
+  AppError, MEETING_RE, addSummaries, areaName, computeBudget, currentFiscalYear, fiscalMonthIndex, monthlyCumulative, monthlyTargetPct, pct, riskFlags,
   type Activity, type BudgetSummary, type FundingSource, type GroupTotal, type ImportJob, type Lookups, type Organization,
   type PlanItem, type Project, type PublicProject, type PublicSummary, type ReportRow, type Workgroup,
 } from '@kpp/domain';
@@ -34,7 +34,7 @@ export function lookups(ctx: Ctx): Lookups {
     for (const p of live(ctx.env.db.list<Project>('Projects'))) years.add(Number(p.fiscalYear));
     return {
       organizations: live(ctx.env.db.list<Organization>('Organizations')).map(({ id, code, name }) => ({ id, code, name })),
-      workgroups: live(ctx.env.db.list<Workgroup>('Workgroups')).map(({ id, orgId, code, name }) => ({ id, orgId, code, name })),
+      workgroups: live(ctx.env.db.list<Workgroup>('Workgroups')).map(({ id, orgId, code, name, noActivities }) => ({ id, orgId, code, name, noActivities: !!noActivities })),
       fundingSources: live(ctx.env.db.list<FundingSource>('FundingSources')).map(({ id, code, name, shortName }) => ({ id, code, name, shortName })),
       units: listUnits(ctx).map(({ id, code, name, shortName, kind }) => ({ id, code, name, shortName, kind })),
       fiscalYears: [...years].sort((a, b) => b - a),
@@ -110,7 +110,7 @@ export function buildSummary(ctx: Ctx, fy: number, onlyPublished: boolean): Publ
   const m = fy < fyNow ? 12 : fy > fyNow ? 0 : fiscalMonthIndex(t);
   const unitRows = buildUnitRows(ctx, ds, projects, m);
   const units = listUnits(ctx);
-  const unitName = (id: string) => units.find((u) => u.id === id)?.shortName ?? 'ไม่ระบุ';
+  const unitName = (id: string) => areaName(units.find((u) => u.id === id));
   const byUnitOf = (rows: ReportRow[]): GroupTotal[] => {
     const mm = new Map<string, ReportRow[]>();
     for (const r of rows) (mm.get(r.unitId) ?? mm.set(r.unitId, []).get(r.unitId)!).push(r);

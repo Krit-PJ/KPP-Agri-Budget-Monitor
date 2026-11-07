@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
-  ALLOCATION_TYPE_LABEL, DISBURSEMENT_STATUS_LABEL, formatThaiDate, formatThaiDateTime, PROJECT_STATUSES, PROJECT_STATUS_LABEL,
+  ALLOCATION_TYPE_LABEL, areaName, areaSummary, DISBURSEMENT_STATUS_LABEL, formatThaiDate, formatThaiDateTime, PROJECT_STATUSES, PROJECT_STATUS_LABEL,
   todayBangkok, type AllocationType, type Disbursement, type ProjectDetail as Detail, type SessionUser,
 } from '@kpp/domain';
 import { ApiError, call, newKey } from '../../api/client';
@@ -155,7 +155,7 @@ function ActivitiesTab({ d, reload }: { d: Detail; reload: () => void }) {
                   {a.name}
                   <div className="xs muted">
                     {a.planItemId ? `แผน: ${a.activityCode}` : a.activityCode}
-                    {' · '}{a.units.length ? a.units.map((u) => l.units.find((x) => x.id === u.unitId)?.shortName).join(', ') : 'สนง.เกษตรจังหวัด'}
+                    {' · '}{areaSummary(a.units.map((u) => u.unitId), l.units)}
                   </div>
                 </td>
                 <td data-label="เป้าหมาย" className="r">{a.targetQty ? `${a.targetQty.toLocaleString('th-TH')} ${a.unit}` : '–'}</td>
@@ -267,7 +267,7 @@ function DisbursementsTab({ d, reload, user }: { d: Detail; reload: () => void; 
           <tbody>
             {d.disbursements.map((x) => (
               <tr key={x.id} style={x.status === 'VOID' ? { opacity: 0.55 } : undefined}>
-                <td className="primary">{formatThaiDate(x.date)}{x.unitId && <div className="xs muted">{l.units.find((u) => u.id === x.unitId)?.shortName}</div>}</td>
+                <td className="primary">{formatThaiDate(x.date)}{x.unitId && <div className="xs muted">{areaName(l.units.find((u) => u.id === x.unitId))}</div>}</td>
                 <td data-label="รายการ">
                   {x.description || '–'}
                   <div className="xs muted">

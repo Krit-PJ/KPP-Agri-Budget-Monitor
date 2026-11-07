@@ -2,7 +2,7 @@
  * Schema ของตารางใน Google Sheets (versioned) — header แถวที่ 1 ของแต่ละแท็บ
  * เปลี่ยน schema: เพิ่มคอลัมน์ต่อท้ายเท่านั้น แล้วเพิ่ม SCHEMA_VERSION; provisioning เติมหัวคอลัมน์ให้เอง
  */
-export const SCHEMA_VERSION = '2026.11.07-2';
+export const SCHEMA_VERSION = '2026.11.07-3';
 
 export type ColType = 'string' | 'number' | 'boolean' | 'json';
 export type FileKey = 'IDENTITY' | 'CORE' | 'STAGING' | 'REPORTING';
@@ -37,7 +37,7 @@ export const TABLES = {
     ['userId', 'string'], ['device', 'string'], ['newDevice', 'boolean'],
   ], false),
   Organizations: t('CORE', [['code', 'string'], ['name', 'string']]),
-  Workgroups: t('CORE', [['orgId', 'string'], ['code', 'string'], ['name', 'string']]),
+  Workgroups: t('CORE', [['orgId', 'string'], ['code', 'string'], ['name', 'string'], ['noActivities', 'boolean']]),
   FundingSources: t('CORE', [['code', 'string'], ['name', 'string'], ['shortName', 'string']]),
   Units: t('CORE', [['code', 'string'], ['name', 'string'], ['shortName', 'string'], ['kind', 'string'], ['sortOrder', 'number']]),
   ActivityUnits: t('CORE', [['projectId', 'string'], ['activityId', 'string'], ['unitId', 'string'], ['budgetSatang', 'number'], ['targetQty', 'number']]),
