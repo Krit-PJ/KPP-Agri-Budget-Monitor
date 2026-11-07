@@ -63,8 +63,25 @@ a:hover { color: var(--forest-2); }
 .brand-name { font-family: var(--font-head); font-weight: 600; font-size: var(--fs-md); line-height: 1.2; }
 .brand-sub { font-size: var(--fs-xs); opacity: 0.8; }
 .nav { display: flex; gap: var(--s1); flex-wrap: wrap; }
-.nav a { color: #e3ece5; text-decoration: none; padding: var(--s2) var(--s3); border-radius: var(--r-sm); font-size: var(--fs-sm); }
-.nav a:hover, .nav a[aria-current='page'] { background: rgba(255, 255, 255, 0.12); color: #fff; }
+/* เมนูหลัก: ตัวใหญ่ อ่านง่ายสำหรับผู้สูงอายุ, พื้นที่กดสูงอย่างน้อย 48px, เมนูปัจจุบันมีพื้นและเส้นใต้ชัด */
+.nav a { display: inline-flex; align-items: center; min-height: 48px; color: #eef4ef; text-decoration: none; padding: var(--s2) var(--s4); border-radius: var(--r-sm); font-size: 1.1875rem; font-weight: 600; border-bottom: 3px solid transparent; }
+.nav a:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.nav a[aria-current='page'] { background: rgba(255, 255, 255, 0.18); color: #fff; border-bottom-color: #f2cf7a; }
+.nav a:focus-visible { outline: 3px solid #f2cf7a; outline-offset: 2px; }
+.text-size { display: flex; gap: 2px; margin-left: auto; background: rgba(255, 255, 255, 0.1); border-radius: var(--r-sm); padding: 2px; }
+.text-size button { min-width: 44px; min-height: 44px; border: 0; border-radius: 6px; background: transparent; color: #eef4ef; font: inherit; font-weight: 700; cursor: pointer; }
+.text-size button:nth-child(1) { font-size: 1rem; }
+.text-size button:nth-child(2) { font-size: 1.15rem; }
+.text-size button:nth-child(3) { font-size: 1.3rem; }
+.text-size button[aria-pressed='true'] { background: #fff; color: var(--forest-ink); }
+.text-size button:focus-visible { outline: 3px solid #f2cf7a; }
+html[data-text-size='1'] { font-size: 112.5%; }
+html[data-text-size='2'] { font-size: 125%; }
+@media (max-width: 640px) {
+  .nav { display: grid; grid-template-columns: 1fr 1fr; width: 100%; gap: 4px; }
+  .nav a { justify-content: center; text-align: center; padding: var(--s2); font-size: 1.0625rem; }
+  .text-size { margin-left: 0; }
+}
 .demo-band { background: var(--straw); color: var(--ink); font-size: var(--fs-sm); text-align: center; padding: var(--s1) var(--s4); }
 main { max-width: var(--maxw); margin: 0 auto; padding: var(--s5) var(--s4) var(--s8); }
 footer { max-width: var(--maxw); margin: 0 auto; padding: var(--s5) var(--s4); color: var(--ink-3); font-size: var(--fs-sm); border-top: 1px solid var(--line); }
@@ -205,7 +222,7 @@ dialog.sheet::backdrop { background: rgba(22, 40, 32, 0.45); }
 /* ===== Admin ===== */
 .admin-shell { display: grid; grid-template-columns: 220px 1fr; gap: var(--s5); }
 .side { position: sticky; top: var(--s4); align-self: start; display: flex; flex-direction: column; gap: 2px; }
-.side a { text-decoration: none; color: var(--ink-2); padding: var(--s2) var(--s3); border-radius: var(--r-sm); font-size: var(--fs-sm); }
+.side a { display: flex; align-items: center; min-height: 48px; text-decoration: none; color: var(--ink-2); padding: var(--s2) var(--s3); border-radius: var(--r-sm); font-size: 1.0625rem; font-weight: 600; }
 .side a:hover { background: #e6eee8; color: var(--forest-ink); }
 .side a[aria-current='page'] { background: var(--forest); color: #fff; }
 .side .who { padding: var(--s3); margin-bottom: var(--s2); border-radius: var(--r-md); background: var(--paper); box-shadow: var(--shadow); font-size: var(--fs-sm); }
@@ -593,3 +610,11 @@ input.is-invalid { border-color: var(--clay); background: #fbeeea; }
 .due-wrap { display: flex; flex-direction: column; gap: 2px; }
 .due-alert { font-size: var(--fs-xs); font-weight: 600; color: var(--straw-ink); }
 .due-alert.is-late { color: var(--clay); }
+
+/* ===== ตัวกรองหน้าภาพรวม ===== */
+.ov-filter { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: flex-end; margin-bottom: var(--s4); }
+.ov-filter .field { margin: 0; }
+.ov-filter .ov-project { flex: 1 1 320px; }
+.ov-filter .ov-project select { width: 100%; }
+.ov-banner { background: #fbecc6; border: 2px solid #e2b44c; border-radius: var(--r-md); padding: var(--s2) var(--s4); margin: 0 0 var(--s4); font-size: var(--fs-md); color: #5b4208; }
+.ov-banner span { font-size: var(--fs-sm); }

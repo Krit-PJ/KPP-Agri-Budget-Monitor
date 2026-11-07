@@ -61,6 +61,31 @@ function useVisits(): VisitCount | null {
   return v;
 }
 
+/** ปรับขนาดตัวอักษรทั้งเว็บ 3 ระดับ (ผู้สูงอายุ) — จำค่าไว้ในเบราว์เซอร์นี้ */
+const TEXT_SIZES = [{ v: '0', label: 'ก', aria: 'ตัวอักษรปกติ' }, { v: '1', label: 'ก+', aria: 'ตัวอักษรใหญ่' }, { v: '2', label: 'ก++', aria: 'ตัวอักษรใหญ่มาก' }];
+export function applyTextSize(v?: string): string {
+  let size = v;
+  try {
+    // eslint-disable-next-line no-restricted-syntax -- ค่าการแสดงผลของผู้ชม ไม่ใช่ข้อมูลส่วนบุคคล
+    if (size === undefined) size = localStorage.getItem('kpp:text-size') ?? '0';
+    // eslint-disable-next-line no-restricted-syntax -- ค่าการแสดงผลของผู้ชม ไม่ใช่ข้อมูลส่วนบุคคล
+    else localStorage.setItem('kpp:text-size', size);
+  } catch { /* storage ไม่พร้อม */ }
+  const s = TEXT_SIZES.some((x) => x.v === size) ? size! : '0';
+  document.documentElement.dataset.textSize = s;
+  return s;
+}
+function TextSize() {
+  const [v, setV] = useState(() => document.documentElement.dataset.textSize ?? '0');
+  return (
+    <div className="text-size" role="group" aria-label="ขนาดตัวอักษร">
+      {TEXT_SIZES.map((x) => (
+        <button key={x.v} type="button" aria-pressed={v === x.v} aria-label={x.aria} title={x.aria} onClick={() => setV(applyTextSize(x.v))}>{x.label}</button>
+      ))}
+    </div>
+  );
+}
+
 function SiteFooter() {
   const v = useVisits();
   const n = (x: number) => x.toLocaleString('th-TH');
@@ -100,6 +125,7 @@ function Shell() {
             <NavLink to="/report">พิมพ์รายงาน</NavLink>
             {user ? <NavLink to="/admin">จัดการข้อมูล</NavLink> : <NavLink to="/login">เข้าสู่ระบบเจ้าหน้าที่</NavLink>}
           </nav>
+          <TextSize />
         </div>
       </header>
       <main id="main">

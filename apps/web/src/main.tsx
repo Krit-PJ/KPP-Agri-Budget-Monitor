@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { currentFiscalYear } from '@kpp/domain';
-import App from './App';
+import App, { applyTextSize } from './App';
 import { getSession, prefetch } from './api/client';
 import './styles.css';
 
@@ -24,6 +24,9 @@ function prefetchForRoute(): void {
   }
 }
 prefetchForRoute();
+
+// ใช้ขนาดตัวอักษรที่ผู้ชมเลือกไว้ก่อนแสดงผล (ไม่กระพริบ)
+applyTextSize();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

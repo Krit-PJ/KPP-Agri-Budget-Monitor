@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { fiscalMonthIndex, fiscalYearRange, formatThaiDate, formatThaiDateTime, todayBangkok, type GroupTotal, type PublicSummary } from '@kpp/domain';
+import { useMemo, useState, type ReactNode } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { areaName, fiscalMonthIndex, fiscalYearRange, formatThaiDate, formatThaiDateTime, todayBangkok, type GroupTotal, type PublicSummary } from '@kpp/domain';
 import { Async, Baht, QuarterBar, useApi, useLookups } from '../../components/ui';
 import { BreakdownTable, quarterOf, totalQuarterPct } from './Breakdown';
+import { activityTotals, filteredSummary } from './filterView';
 
 export function FiscalYearPicker({ value, onChange }: { value: number; onChange: (fy: number) => void }) {
   const l = useLookups();
@@ -83,18 +84,96 @@ function inOrder(rows: GroupTotal[], ids: string[]): GroupTotal[] {
   return [...rows].sort((a, b) => pos(a.key) - pos(b.key));
 }
 
-/** หน้าภาพรวมสำหรับผู้บริหาร: ตัวเลขหลัก + แถบ 3 ชั้น, เรื่องที่ต้องรู้, แยกตามกลุ่มงาน, แยกตามพื้นที่ */
+/** ตัวกรองหน้าภาพรวม: ?g=<กลุ่มงาน>&p=<โครงการ> (อยู่ในลิงก์ จึงส่งต่อ/พิมพ์ได้ตรงกัน) */
+function useOverviewFilter() {
+  const [sp, setSp] = useSearchParams();
+  const g = sp.get('g') ?? '';
+  const p = sp.get('p') ?? '';
+  const set = (next: { g?: string; p?: string }) => {
+    const n = new URLSearchParams(sp);
+    const ng = next.g ?? g;
+    const np = next.g !== undefined && next.g !== g ? '' : next.p ?? p;
+    if (ng) n.set('g', ng); else n.delete('g');
+    if (np) n.set('p', np); else n.delete('p');
+    setSp(n, { replace: true });
+  };
+  return { g, p, set };
+}
+
+/** หน้าภาพรวมสำหรับผู้บริหาร: ตัวเลขหลัก + แถบเป้า, เรื่องที่ต้องรู้, แยกตามกลุ่มงาน (หรือรายกิจกรรม), แยกตามพื้นที่ */
 export default function Home() {
   const l = useLookups();
   const [fy, setFy] = useState(l.currentFiscalYear);
+  const f = useOverviewFilter();
   const s = useApi('public.summary', { fiscalYear: fy }, [fy]);
+  const projects = useApi('public.projects', { fiscalYear: fy }, [fy]);
+  const groups = l.workgroups.filter((g) => !g.noActivities);
+  const projList = (projects.data ?? []).filter((x) => !f.g || x.workgroupId === f.g).sort((a, b) => (a.projectCode || a.name).localeCompare(b.projectCode || b.name, 'th'));
+  const project = (projects.data ?? []).find((x) => x.id === f.p);
+  const filtered = !!(f.g || f.p);
+  const filterBar = (
+    <div className="ov-filter" role="search" aria-label="เลือกข้อมูลที่จะแสดง">
+      <FiscalYearPicker value={fy} onChange={setFy} />
+      <label className="field"><span>กลุ่มงาน</span>
+        <select value={f.g} onChange={(e) => f.set({ g: e.target.value })}>
+          <option value="">ทุกกลุ่มงาน</option>
+          {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+        </select>
+      </label>
+      <label className="field ov-project"><span>โครงการ</span>
+        <select value={f.p} onChange={(e) => f.set({ p: e.target.value })}>
+          <option value="">ทุกโครงการ{f.g ? 'ของกลุ่มนี้' : ''} ({projList.length})</option>
+          {projList.map((x) => <option key={x.id} value={x.id}>{x.name.length > 70 ? `${x.name.slice(0, 70)}…` : x.name}</option>)}
+        </select>
+      </label>
+      {filtered && <button type="button" className="btn btn-ghost" onClick={() => f.set({ g: '', p: '' })}>แสดงทั้งหมด</button>}
+      {filtered && <Link className="btn btn-ghost" to={`/report?${new URLSearchParams({ ...(f.g ? { g: f.g } : {}), ...(f.p ? { p: f.p } : {}) }).toString()}`}>พิมพ์รายงานของที่เลือก</Link>}
+    </div>
+  );
+  const groupName = f.g ? l.workgroups.find((g) => g.id === f.g)?.name ?? '' : project ? l.workgroups.find((g) => g.id === project.workgroupId)?.name ?? '' : '';
+  const banner = filtered ? (
+    <p className="ov-banner" role="status">
+      กำลังแสดงเฉพาะ: <b>{groupName || 'ทุกกลุ่มงาน'}</b>{project && <> › <b>{project.name}</b></>}
+      <span> — ไม่ใช่ตัวเลขทั้งจังหวัด</span>
+    </p>
+  ) : null;
+  return (
+    <Async s={s} lines={8}>
+      {(d0) => filtered
+        ? <FilteredOverview d0={d0} fy={fy} g={f.g} p={f.p} filterBar={filterBar} banner={banner} />
+        : <Overview d={d0} fy={fy} filterBar={filterBar} banner={null} filtered={false} />}
+    </Async>
+  );
+}
+
+function FilteredOverview({ d0, fy, g, p, filterBar, banner }: { d0: PublicSummary; fy: number; g: string; p: string; filterBar: ReactNode; banner: ReactNode }) {
+  const l = useLookups();
+  const r = useApi('public.report', { fiscalYear: fy }, [fy]);
+  const names = useMemo(() => ({
+    group: (id: string) => l.workgroups.find((x) => x.id === id)?.name ?? 'ไม่ระบุกลุ่มงาน',
+    unit: (id: string) => { const u = l.units.find((x) => x.id === id); return u ? areaName(u) : 'ไม่ระบุพื้นที่'; },
+  }), [l]);
+  return (
+    <>
+      <Async s={r} lines={8}>
+        {(rep) => {
+          const rows = rep.rows.filter((x) => (!g || x.workgroupId === g) && (!p || x.projectId === p));
+          const d = filteredSummary(d0, rows, names);
+          return <Overview d={d} fy={fy} filterBar={filterBar} banner={banner} filtered activities={p ? activityTotals(rows, names) : undefined} projectId={p} />;
+        }}
+      </Async>
+    </>
+  );
+}
+
+function Overview({ d, fy, filterBar, banner, filtered, activities, projectId }: {
+  d: PublicSummary; fy: number; filterBar: ReactNode; banner: ReactNode; filtered: boolean; activities?: GroupTotal[]; projectId?: string;
+}) {
+  const l = useLookups();
   const m = monthsElapsed(fy);
   const curQ = quarterOf(m);
   const groupIds = l.workgroups.map((g) => g.id);
   const unitIds = l.units.map((u) => u.id);
-  return (
-    <Async s={s} lines={8}>
-      {(d) => {
         const target = m ? d.monthly.targetPct[m - 1] : 0;
         const t = d.totals;
         const q = totalQuarterPct(d);
@@ -106,6 +185,8 @@ export default function Home() {
         return (
           <>
             <section className="hero" aria-labelledby="hero-title">
+              {filterBar}
+              {banner}
               <div className="hero-head">
                 <div>
                   <h1 id="hero-title">งบประมาณปี {fy} เบิกจ่ายไปแล้ว <span className="num">{pct1(t.spendingPct)}%</span></h1>
@@ -116,7 +197,6 @@ export default function Home() {
                       : ` ต่ำกว่าแผนสะสมของเดือนนี้ที่ ${target.toFixed(0)}%`)}
                   </p>
                 </div>
-                <FiscalYearPicker value={fy} onChange={setFy} />
               </div>
               <div className="strip-wrap">
                 <QuarterBar b={t} q={q} curQ={curQ} size="lg" />
@@ -135,6 +215,15 @@ export default function Home() {
 
             <KeyFacts d={d} fy={fy} target={target} m={m} />
 
+            {activities ? (
+              <section className="panel section" aria-labelledby="by-act">
+                <h2 id="by-act">ผลการเบิกจ่ายรายกิจกรรม</h2>
+                <p className="small muted" style={{ marginTop: 0 }}>กดชื่อกิจกรรมเพื่อดูรายพื้นที่ดำเนินการ{projectId && <> · <Link to={`/projects/${projectId}`}>ดูรายละเอียดโครงการ</Link></>}</p>
+                {activities.length
+                  ? <BreakdownTable rows={activities} head="กิจกรรม" childrenOf={(a) => inOrder(a.units ?? [], unitIds)} d={d} curQ={curQ} planFallback={target} />
+                  : <p className="muted">ไม่มีกิจกรรม</p>}
+              </section>
+            ) : (
             <section className="panel section" aria-labelledby="by-group">
               <h2 id="by-group">ผลการเบิกจ่ายแยกตามกลุ่มงาน</h2>
               <p className="small muted" style={{ marginTop: 0 }}>กดชื่อกลุ่มงานเพื่อดูรายพื้นที่ดำเนินการ บนแถบ: เส้นเข้ม = เป้าสิ้นไตรมาสนี้ ลายเหลือง = ส่วนที่ยังขาด ส่วน &ldquo;เทียบแผน&rdquo; เทียบกับแผนสะสม ณ สิ้นเดือนนี้</p>
@@ -142,12 +231,13 @@ export default function Home() {
                 ? <BreakdownTable rows={inOrder(d.byWorkgroup, groupIds)} head="กลุ่มงาน" childrenOf={(g) => inOrder(g.units ?? [], unitIds)} d={d} curQ={curQ} planFallback={target} />
                 : <p className="muted">ยังไม่มีโครงการในปีงบนี้</p>}
             </section>
+            )}
 
             <section className="panel section" aria-labelledby="by-unit">
               <h2 id="by-unit">ผลการเบิกจ่ายแยกตามพื้นที่ดำเนินการ</h2>
               <p className="small muted" style={{ marginTop: 0 }}>
                 กดชื่อพื้นที่เพื่อดูว่ากลุ่มงานใดใช้งบในพื้นที่นั้น.{' '}
-                {acts > 0 && <>กำหนดพื้นที่แล้ว <b>{confirmed.toLocaleString('th-TH')}</b> จาก {acts.toLocaleString('th-TH')} กิจกรรม{confirmed < acts ? ' กิจกรรมที่ยังไม่กำหนดนับไว้ที่ระดับจังหวัด' : ''}</>}
+                {!filtered && acts > 0 && <>กำหนดพื้นที่แล้ว <b>{confirmed.toLocaleString('th-TH')}</b> จาก {acts.toLocaleString('th-TH')} กิจกรรม{confirmed < acts ? ' กิจกรรมที่ยังไม่กำหนดนับไว้ที่ระดับจังหวัด' : ''}</>}
               </p>
               {d.byUnit.length
                 ? <BreakdownTable rows={inOrder(d.byUnit, unitIds)} head="พื้นที่ดำเนินการ" childrenOf={(u) => inOrder(u.groups ?? [], groupIds)} d={d} curQ={curQ} planFallback={target} />
@@ -160,10 +250,7 @@ export default function Home() {
               {' '}&ldquo;เบิกจ่ายแล้ว&rdquo; ไม่รวมยอดผูกพัน. เป้าหมายอ้างอิงมาตรการเร่งรัดการเบิกจ่ายงบประมาณ พ.ศ. 2570 (มติ ครม. 29 ก.ย. 2569).
               {' '}<Link to="/projects">ดูกราฟและโครงการที่ต้องติดตาม</Link>
             </p>
-            {s.refreshing && <span className="sr-only" role="status">กำลังอัปเดตข้อมูล</span>}
+
           </>
-        );
-      }}
-    </Async>
   );
 }
