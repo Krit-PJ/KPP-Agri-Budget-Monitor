@@ -1937,7 +1937,7 @@ var KPP = (() => {
   }
 
   // src/core/schema.ts
-  var SCHEMA_VERSION = "2026.11.07-5";
+  var SCHEMA_VERSION = "2026.11.07-6";
   var META = [
     ["id", "string"],
     ["createdAt", "string"],
@@ -2027,7 +2027,8 @@ var KPP = (() => {
       ["unit", "string"],
       ["targetQty", "number"],
       ["planQuarters", "string"],
-      ["dueMonth", "number"]
+      ["dueMonth", "number"],
+      ["dueDate", "string"]
     ]),
     Allocations: t("CORE", [
       ["projectId", "string"],
@@ -2216,7 +2217,8 @@ var KPP = (() => {
       planQuarters: a.planQuarters ?? "",
       units: (shares ?? activityUnitsOf(ctx)).filter((x) => x.activityId === a.id),
       hasDisbursement: di.some((d) => d.status !== "VOID" && !d.isDeleted),
-      dueMonth: Number(a.dueMonth) || 0
+      dueMonth: Number(a.dueMonth) || 0,
+      dueDate: a.dueDate || ""
     };
   }
   function activityPlan(budget, _a, curve, m) {
@@ -2226,15 +2228,26 @@ var KPP = (() => {
     const a = findById(ctx, "Activities", String(b.activityId), "\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21");
     const p = findById(ctx, "Projects", a.projectId, "\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23");
     const actor2 = requireWorkgroup(ctx, p.workgroupId).sub;
-    const d = Number(b.dueMonth);
-    if (!Number.isInteger(d) || d < -1 || d > 12) throw new AppError("VALIDATION_FAILED", "\u0E40\u0E14\u0E37\u0E2D\u0E19\u0E17\u0E35\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E40\u0E1A\u0E34\u0E01\u0E04\u0E23\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07");
-    const before = Number(a.dueMonth) || 0;
-    if (before !== d) {
-      ctx.env.db.update("Activities", a.id, { ...a, dueMonth: d, version: a.version + 1, updatedAt: nowIso(ctx), updatedBy: actor2 });
-      audit(ctx, "activity.due", "Activity", a.id, { before: { dueMonth: before }, after: { dueMonth: d }, projectId: p.id });
+    let dueDate = String(b.dueDate ?? "").trim();
+    let d;
+    if (dueDate) {
+      const { start, end } = fiscalYearRange(Number(p.fiscalYear));
+      const t2 = /* @__PURE__ */ new Date(`${dueDate}T00:00:00Z`);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate) || Number.isNaN(t2.getTime()) || t2.toISOString().slice(0, 10) !== dueDate) throw new AppError("VALIDATION_FAILED", "\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48\u0E01\u0E33\u0E2B\u0E19\u0E14\u0E40\u0E1A\u0E34\u0E01\u0E04\u0E23\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07");
+      if (dueDate < start || dueDate > end) throw new AppError("VALIDATION_FAILED", `\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48\u0E01\u0E33\u0E2B\u0E19\u0E14\u0E40\u0E1A\u0E34\u0E01\u0E04\u0E23\u0E1A\u0E15\u0E49\u0E2D\u0E07\u0E2D\u0E22\u0E39\u0E48\u0E43\u0E19\u0E1B\u0E35\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13 ${p.fiscalYear} (1 \u0E15.\u0E04. \u2013 30 \u0E01.\u0E22.)`);
+      d = fiscalMonthIndex(dueDate);
+    } else {
+      d = Number(b.dueMonth ?? 0);
+      if (!Number.isInteger(d) || d < -1 || d > 12) throw new AppError("VALIDATION_FAILED", "\u0E40\u0E14\u0E37\u0E2D\u0E19\u0E17\u0E35\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E40\u0E1A\u0E34\u0E01\u0E04\u0E23\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07");
+      dueDate = "";
+    }
+    const before = { dueMonth: Number(a.dueMonth) || 0, dueDate: a.dueDate || "" };
+    if (before.dueMonth !== d || before.dueDate !== dueDate) {
+      ctx.env.db.update("Activities", a.id, { ...a, dueMonth: d, dueDate, version: a.version + 1, updatedAt: nowIso(ctx), updatedBy: actor2 });
+      audit(ctx, "activity.due", "Activity", a.id, { before, after: { dueMonth: d, dueDate }, projectId: p.id });
       bumpDataVersion(ctx);
     }
-    return activityState(ctx, { ...a, dueMonth: d });
+    return activityState(ctx, { ...a, dueMonth: d, dueDate });
   }
   function setActivityUnits(ctx, b) {
     const a = findById(ctx, "Activities", String(b.activityId), "\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21");

@@ -37,7 +37,7 @@ export interface PlanCommitRequest {
 }
 export type PlanDocSummary = PlanDoc & { assignedCount: number; assignedSatang: number; groups: Array<{ workgroupId: string; count: number; satang: number }> };
 /** สถานะกิจกรรมที่สร้างจากแผน — ใช้ในหน้า "บันทึกแผนงานและผู้รับผิดชอบ" */
-export interface PlanActivityState { activityId: string; projectId: string; budget: Satang; disbursed: Satang; committed: Satang; planQuarters: string; units: ActivityUnit[]; hasDisbursement: boolean; dueMonth: number }
+export interface PlanActivityState { activityId: string; projectId: string; budget: Satang; disbursed: Satang; committed: Satang; planQuarters: string; units: ActivityUnit[]; hasDisbursement: boolean; dueMonth: number; dueDate: string }
 export interface PlanDetail { doc: PlanDoc; items: PlanItem[]; activities: Record<string, PlanActivityState> }
 export interface UnitShareInput { unitId: string; budgetSatang: Satang; targetQty?: number }
 /** แถวข้อมูลรายงาน: 1 แถว = กิจกรรม × หน่วยดำเนินการ */
@@ -250,7 +250,8 @@ export interface Actions {
   'targets.get': [{ fiscalYear: number }, { fiscalYear: number; target: SpendTarget; curve: number[] }];
   'targets.save': [{ fiscalYear: number; target: SpendTarget }, { fiscalYear: number; target: SpendTarget; curve: number[] }];
   /** กำหนดเดือนที่กิจกรรมต้องเบิกครบ (1–12), 0 = ค่าเริ่มต้น, -1 = ตามเป้าของปี */
-  'activities.setDue': [{ activityId: string; dueMonth: number }, PlanActivityState];
+  /** กำหนดเบิกครบ: dueDate (YYYY-MM-DD ในปีงบ) หรือ ล้างวันที่ด้วย dueMonth 0 = ค่าเริ่มต้น / -1 = ไม่กำหนด */
+  'activities.setDue': [{ activityId: string; dueMonth?: number; dueDate?: string }, PlanActivityState];
   'plans.unassign': [{ itemIds: string[] }, { unassigned: number; skipped: Array<{ id: string; reason: string }> }];
   // super admin
   'admin.requests': [{ status?: string }, AccessRequest[]];

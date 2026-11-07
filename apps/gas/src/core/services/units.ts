@@ -5,7 +5,7 @@
  * - แผนการเบิกจ่าย ณ เดือนใด ๆ: เป้าหมายการเบิกจ่ายของปีงบ (ADR-007 ฉบับแก้ไข 7 พ.ย.)
  */
 import {
-  AppError, MEETING_RE, areaName, computeBudget, pct, planAt, splitEqual, splitMoney,
+  AppError, MEETING_RE, areaName, computeBudget, fiscalMonthIndex, fiscalYearRange, pct, planAt, splitEqual, splitMoney,
   type Activity, type ActivityUnit, type Allocation, type BudgetSummary, type Disbursement, type EntryActivity, type PlanActivityState,
   type Project, type ReportRow, type Satang, type Unit, type UnitShareInput,
 } from '@kpp/domain';
@@ -36,6 +36,7 @@ export function activityState(ctx: Ctx, a: Activity, allocs?: Allocation[], disb
     planQuarters: a.planQuarters ?? '', units: (shares ?? activityUnitsOf(ctx)).filter((x) => x.activityId === a.id),
     hasDisbursement: di.some((d) => d.status !== 'VOID' && !d.isDeleted),
     dueMonth: Number(a.dueMonth) || 0,
+    dueDate: a.dueDate || '',
   };
 }
 
@@ -48,19 +49,30 @@ export function activityPlan(budget: Satang, _a: Pick<Activity, 'name' | 'planQu
 }
 
 /** กำหนดเบิกครบของกิจกรรม (ใช้เตือน): 1–12, 0 = ค่าเริ่มต้น (อบรม/ประชุม = มิ.ย.), -1 = ไม่มีกำหนดเฉพาะ */
-export function setActivityDue(ctx: Ctx, b: { activityId: string; dueMonth: number }): PlanActivityState {
+export function setActivityDue(ctx: Ctx, b: { activityId: string; dueMonth?: number; dueDate?: string }): PlanActivityState {
   const a = findById<Activity>(ctx, 'Activities', String(b.activityId), 'กิจกรรม');
   const p = findById<Project>(ctx, 'Projects', a.projectId, 'โครงการ');
   const actor = requireWorkgroup(ctx, p.workgroupId).sub;
-  const d = Number(b.dueMonth);
-  if (!Number.isInteger(d) || d < -1 || d > 12) throw new AppError('VALIDATION_FAILED', 'เดือนที่ต้องเบิกครบไม่ถูกต้อง');
-  const before = Number(a.dueMonth) || 0;
-  if (before !== d) {
-    ctx.env.db.update('Activities', a.id, { ...a, dueMonth: d, version: a.version + 1, updatedAt: nowIso(ctx), updatedBy: actor });
-    audit(ctx, 'activity.due', 'Activity', a.id, { before: { dueMonth: before }, after: { dueMonth: d }, projectId: p.id });
+  let dueDate = String(b.dueDate ?? '').trim();
+  let d: number;
+  if (dueDate) {
+    const { start, end } = fiscalYearRange(Number(p.fiscalYear));
+    const t = new Date(`${dueDate}T00:00:00Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate) || Number.isNaN(t.getTime()) || t.toISOString().slice(0, 10) !== dueDate) throw new AppError('VALIDATION_FAILED', 'วันที่กำหนดเบิกครบไม่ถูกต้อง');
+    if (dueDate < start || dueDate > end) throw new AppError('VALIDATION_FAILED', `วันที่กำหนดเบิกครบต้องอยู่ในปีงบประมาณ ${p.fiscalYear} (1 ต.ค. – 30 ก.ย.)`);
+    d = fiscalMonthIndex(dueDate);
+  } else {
+    d = Number(b.dueMonth ?? 0);
+    if (!Number.isInteger(d) || d < -1 || d > 12) throw new AppError('VALIDATION_FAILED', 'เดือนที่ต้องเบิกครบไม่ถูกต้อง');
+    dueDate = '';
+  }
+  const before = { dueMonth: Number(a.dueMonth) || 0, dueDate: a.dueDate || '' };
+  if (before.dueMonth !== d || before.dueDate !== dueDate) {
+    ctx.env.db.update('Activities', a.id, { ...a, dueMonth: d, dueDate, version: a.version + 1, updatedAt: nowIso(ctx), updatedBy: actor });
+    audit(ctx, 'activity.due', 'Activity', a.id, { before, after: { dueMonth: d, dueDate }, projectId: p.id });
     bumpDataVersion(ctx);
   }
-  return activityState(ctx, { ...a, dueMonth: d });
+  return activityState(ctx, { ...a, dueMonth: d, dueDate });
 }
 
 /**

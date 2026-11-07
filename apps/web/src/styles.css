@@ -450,7 +450,7 @@ input.is-edited { border-color: var(--straw); }
 }
 
 /* ===== แผนและผู้รับผิดชอบ: ตารางซ้าย→ขวา + กางแก้ไขทีละแถว ===== */
-.pb-head, .pb-row { display: grid; grid-template-columns: 2.25rem minmax(0, 1fr) 8em 9em 15em 17em; gap: var(--s3); align-items: center; }
+.pb-head, .pb-row { display: grid; grid-template-columns: 2.25rem minmax(0, 1fr) 9.5em minmax(16rem, 20rem); gap: var(--s3) var(--s4); align-items: start; }
 .pb-head { padding: var(--s2) var(--s4) var(--s1) var(--s2); margin-top: var(--s4); font-size: var(--fs-xs); font-weight: 600; color: var(--ink-2); }
 .pb-head .r, .pb-qty, .pb-amt { text-align: right; }
 .pb-row { padding: var(--s3) var(--s4) var(--s3) var(--s2); border-top: 1px solid #edf1ee; font-size: var(--fs-sm); }
@@ -459,7 +459,20 @@ input.is-edited { border-color: var(--straw); }
 .pb-row.is-open { background: #f7faf7; box-shadow: inset 4px 0 0 var(--forest); }
 .pb-qty { white-space: nowrap; }
 .pb-amt { white-space: nowrap; font-weight: 600; }
-.pb-area { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.pb-row > .ob-name, .pb-row > .pb-nums { padding-top: 6px; }
+.pb-nums { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; }
+.pb-nums .pb-amt { font-size: var(--fs-md); }
+.pb-nums .pb-amt small { font-weight: 400; color: var(--ink-3); font-size: var(--fs-xs); }
+.pb-qty-l { color: var(--ink-3); font-size: var(--fs-xs); }
+.pb-nums .pb-qty { font-size: var(--fs-sm); color: var(--ink-2); }
+/* คอลัมน์ "กลุ่มที่รับผิดชอบและพื้นที่ดำเนินการ": กลุ่มบนสุด แล้วพื้นที่ + ปุ่ม + กำหนดเบิกครบ */
+.pb-owner { display: flex; flex-direction: column; gap: var(--s2); min-width: 0; }
+.pb-owner .ob-group { display: flex; flex-direction: column; gap: 2px; }
+.pb-owner .ob-group select { width: 100%; min-height: 40px; font-size: var(--fs-sm); font-weight: 600; }
+.pb-owner-l { font-size: var(--fs-xs); color: var(--ink-3); font-weight: 600; }
+.pb-area { display: flex; flex-direction: column; gap: 6px; align-items: stretch; padding-top: var(--s2); border-top: 1px dashed #d8e2da; }
+.area-name { font-weight: 600; color: var(--ink); }
+.pb-rec { align-self: flex-start; }
 .area-sum { display: flex; flex-direction: column; font-size: var(--fs-sm); }
 .area-state { font-size: var(--fs-xs); color: var(--straw-ink); }
 .area-sum.is-ok .area-state { color: var(--forest); }
@@ -483,11 +496,8 @@ input.is-edited { border-color: var(--straw); }
   .pb-head { display: none; }
   .pb-row { grid-template-columns: 2.25rem minmax(0, 1fr) auto; }
   .pb-row .ob-name { grid-column: 2 / -1; }
-  .pb-qty { grid-column: 2; text-align: left; }
-  .pb-qty::before { content: 'เป้าหมาย '; color: var(--ink-3); font-size: var(--fs-xs); }
-  .pb-amt { grid-column: 3; }
-  .pb-row .ob-group { grid-column: 2 / -1; }
-  .pb-area { grid-column: 2 / -1; }
+  .pb-row .pb-nums { grid-column: 2 / -1; flex-direction: row-reverse; justify-content: space-between; align-items: baseline; padding-top: 0; }
+  .pb-row .pb-owner { grid-column: 2 / -1; background: #f7faf7; border: 1px solid #e3ebe5; border-radius: var(--r-md); padding: var(--s3); }
   .pb-editor { grid-column: 1 / -1; }
   .area-table { max-width: none; }
   .area-table input { width: 6.5em; }
@@ -697,3 +707,35 @@ input.is-invalid { border-color: var(--clay); background: #fbeeea; }
 }
 .rec-cols .r, .rec-line .r { text-align: right; }
 @media (max-width: 760px) { .rec-line .r { text-align: left; } }
+
+/* ===== ปฏิทินภาษาไทย ===== */
+.tdp { position: relative; display: inline-block; }
+.tdp-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 10px; border: 1.5px solid #c9d6cc; border-radius: var(--r-sm); background: var(--paper); color: var(--forest-ink); font: inherit; font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
+.tdp-btn:hover:not(:disabled) { border-color: var(--forest); background: #f1f7f2; }
+.tdp-btn.is-set { border-color: var(--forest); background: #eef5ef; }
+.tdp-btn small { font-weight: 400; color: var(--ink-3); }
+.tdp-btn:disabled { opacity: 0.7; cursor: default; }
+.tdp-btn:focus-visible, .tdp-day:focus-visible, .tdp-nav:focus-visible { outline: 3px solid #f2cf7a; outline-offset: 1px; }
+.tdp-backdrop { display: none; }
+.tdp-pop { position: absolute; z-index: 40; top: calc(100% + 6px); right: 0; width: 304px; background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: 0 10px 30px rgba(22, 58, 43, 0.18); padding: var(--s3); }
+.tdp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--s2); }
+.tdp-head strong { font-size: var(--fs-md); color: var(--forest-ink); }
+.tdp-nav { width: 40px; height: 40px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--paper); font-size: 1.4rem; line-height: 1; color: var(--forest-ink); cursor: pointer; }
+.tdp-nav:disabled { opacity: 0.35; cursor: default; }
+.tdp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.tdp-dow { text-align: center; font-size: var(--fs-xs); color: var(--ink-3); font-weight: 600; padding: 2px 0; }
+.tdp-dow:first-child { color: var(--clay); }
+.tdp-day { height: 38px; border: 0; border-radius: 8px; background: transparent; font: inherit; font-size: var(--fs-sm); color: var(--ink); cursor: pointer; }
+.tdp-day:hover:not(:disabled) { background: #e6eee8; }
+.tdp-day.is-today { box-shadow: inset 0 0 0 2px #e2b44c; font-weight: 700; }
+.tdp-day.is-sel { background: var(--forest); color: #fff; font-weight: 700; }
+.tdp-day:disabled { color: #c3cbc5; cursor: default; }
+.tdp-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-top: var(--s2); padding-top: var(--s2); border-top: 1px solid var(--line); }
+@media (max-width: 560px) {
+  /* มือถือ: ปฏิทินเป็นแผ่นเลื่อนขึ้นจากด้านล่าง ปุ่มวันใหญ่ กดง่าย */
+  .tdp-backdrop { display: block; position: fixed; inset: 0; z-index: 39; background: rgba(15, 30, 22, 0.35); }
+  .tdp-pop { position: fixed; left: 0; right: 0; bottom: 0; top: auto; width: auto; border-radius: 16px 16px 0 0; padding: var(--s4) var(--s4) calc(var(--s4) + env(safe-area-inset-bottom)); }
+  .tdp-day { height: 46px; font-size: var(--fs-md); }
+  .tdp-foot .btn { min-height: 44px; flex: 1 1 auto; }
+}
+.nowrap { white-space: nowrap; }

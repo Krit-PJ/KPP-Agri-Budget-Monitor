@@ -359,6 +359,14 @@ describe('เป้าการเบิกจ่าย ตัวนับผู
     expect(st.dueMonth).toBe(3);
     expect(planNow()).toBe(Math.round(item.amountSatang * 0.2));
     expect(call('activities.setDue', { activityId: item.activityId, dueMonth: 13 }, superToken).ok).toBe(false);
+    // กำหนดเป็นวันที่ (ปฏิทิน) — เดือนคำนวณให้เอง; ต้องอยู่ในปีงบ
+    const byDate = ok<{ dueMonth: number; dueDate: string }>('activities.setDue', { activityId: item.activityId, dueDate: '2027-06-15' }, superToken);
+    expect(byDate).toMatchObject({ dueMonth: 9, dueDate: '2027-06-15' });
+    expect(call('activities.setDue', { activityId: item.activityId, dueDate: '2027-10-01' }, superToken).error?.message).toContain('ปีงบประมาณ');
+    expect(call('activities.setDue', { activityId: item.activityId, dueDate: '2027-02-30' }, superToken).ok).toBe(false);
+    expect(call('activities.setDue', { activityId: item.activityId, dueDate: '2027-13-45' }, superToken).error?.code).toBe('VALIDATION_FAILED');
+    const cleared = ok<{ dueMonth: number; dueDate: string }>('activities.setDue', { activityId: item.activityId, dueMonth: -1 }, superToken);
+    expect(cleared).toMatchObject({ dueMonth: -1, dueDate: '' });
     const other = adminFor('0822222222', 'FARMER');
     expect(call('activities.setDue', { activityId: item.activityId, dueMonth: 6 }, other).error?.code).toBe('FORBIDDEN_SCOPE');
   });

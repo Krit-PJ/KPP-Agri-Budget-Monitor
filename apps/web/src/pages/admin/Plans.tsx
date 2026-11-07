@@ -2,15 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { computeAreaShares, type AreaMode } from './areaShares';
 import { Link } from 'react-router-dom';
 import {
-  MEETING_RE, areaName, areaSummary, formatBaht, normalizeKey, splitEqual, splitMoney,
+  MEETING_DUE_MONTH, MEETING_RE, areaName, areaSummary, fiscalYearRange, formatBaht, formatThaiDate, normalizeKey, splitEqual, splitMoney, todayBangkok,
   type PlanActivityState, type PlanDetail, type PlanItem, type SessionUser,
 } from '@kpp/domain';
 import { ApiError, call } from '../../api/client';
 import { Async, Empty, ErrorBox, bahtInputToSatang, useApi, useLookups, useNames, useSubmit, useToast } from '../../components/ui';
-import { FiscalYearPicker, monthsElapsed } from '../public/Home';
+import { FiscalYearPicker } from '../public/Home';
 import PlanImport from './PlanImport';
 import { StickyFinder } from '../../components/StickyFinder';
-import { FISCAL_MONTHS, monthYear } from './Targets';
+import { ThaiDatePicker } from '../../components/ThaiDatePicker';
 
 /**
  * บันทึกแผนงานและผู้รับผิดชอบ (ADR-006): หน้าเดียว ไม่มีชั้นซ้อน
@@ -102,9 +102,9 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
   const shown = leaves.filter(visible);
   const projects = d.items.filter((i) => i.kind === 'PROJECT' || (i.kind === 'ACTIVITY' && i.projectSeq === i.seq));
   const visibleProjects = projects.filter((p) => shown.some((i) => i.planIndex === p.planIndex && i.projectSeq === p.seq));
-  const setDue = (i: PlanItem, dueMonth: number) => void run(async () => {
-    await call('activities.setDue', { activityId: i.activityId, dueMonth });
-    toast(dueMonth > 0 ? `กำหนดเบิกครบภายใน ${FISCAL_MONTHS[dueMonth - 1]} แล้ว (ใช้เตือน)` : 'ยกเลิกกำหนดเบิกครบแล้ว');
+  const setDue = (i: PlanItem, v: { dueDate?: string; dueMonth?: number }) => void run(async () => {
+    await call('activities.setDue', { activityId: i.activityId, ...v });
+    toast(v.dueDate ? `กำหนดเบิกครบภายใน ${formatThaiDate(v.dueDate)} แล้ว (ใช้เตือน)` : v.dueMonth === 0 && MEETING_RE.test(i.name) ? 'ใช้ค่าเริ่มต้น: เบิกครบภายใน 30 มิ.ย. แล้ว' : 'ยกเลิกกำหนดเบิกครบแล้ว');
     reload();
   });
   const assigned = leaves.filter((i) => i.workgroupId).length;
@@ -171,7 +171,7 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
       {error && <ErrorBox error={error} />}
       {!shown.length && <Empty title="ไม่มีรายการตามตัวกรองนี้" />}
       <div className="pb-head" aria-hidden="true">
-        <span /><span>กิจกรรม</span><span className="r">เป้าหมาย (ทั้งสิ้น)</span><span className="r">งบประมาณ (ทั้งสิ้น)</span><span>กลุ่มที่รับผิดชอบ</span><span>พื้นที่ดำเนินการ</span>
+        <span /><span>กิจกรรม</span><span className="r nowrap">งบประมาณ / เป้าหมาย<br />(ทั้งสิ้น)</span><span>กลุ่มที่รับผิดชอบและพื้นที่ดำเนินการ</span>
       </div>
       {projects.map((p) => {
         const rows = shown.filter((i) => i.planIndex === p.planIndex && i.projectSeq === p.seq);
@@ -201,31 +201,35 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
                       <span className="muted">{i.number}</span> {i.name}
                       {trail.length > 0 && <span className="ob-trail">{trail.join(' › ')}</span>}
                     </div>
-                    <span className="pb-qty" data-label="เป้าหมาย">{i.quantity ? `${i.quantity.toLocaleString('th-TH')} ${i.unit}` : '–'}</span>
-                    <span className="pb-amt num" data-label="งบประมาณ">{formatBaht(i.amountSatang)}</span>
-                    <label className="ob-group">
-                      <span className="sr-only">กลุ่มที่รับผิดชอบ</span>
-                      {canEdit ? (
-                        <select value={i.workgroupId} disabled={busy || locked} onChange={(e) => setGroup(i, e.target.value)} title={locked ? 'มีรายการเบิกจ่ายแล้ว เปลี่ยนกลุ่มไม่ได้' : undefined} className={i.workgroupId ? '' : 'is-empty'}>
-                          <option value="">— เลือกกลุ่มงาน —</option>
-                          {(i.workgroupId && !myGroups.some((g) => g.id === i.workgroupId) ? [...myGroups, l.workgroups.find((g) => g.id === i.workgroupId)!] : myGroups)
-                            .map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                        </select>
-                      ) : <span className="badge">{n.group(i.workgroupId)}</span>}
-                    </label>
-                    <div className="pb-area">
-                      {!i.workgroupId ? <span className="small muted">เลือกกลุ่มงานก่อน</span> : (
-                        <>
+                    <div className="pb-nums">
+                      <span className="pb-amt num"><span className="sr-only">งบประมาณ </span>{formatBaht(i.amountSatang)}<small> บาท</small></span>
+                      <span className="pb-qty"><span className="pb-qty-l">เป้าหมาย </span>{i.quantity ? `${i.quantity.toLocaleString('th-TH')} ${i.unit}` : '–'}</span>
+                    </div>
+                    <div className="pb-owner">
+                      <label className="ob-group">
+                        <span className="pb-owner-l">กลุ่มที่รับผิดชอบ</span>
+                        {canEdit ? (
+                          <select value={i.workgroupId} disabled={busy || locked} onChange={(e) => setGroup(i, e.target.value)} title={locked ? 'มีรายการเบิกจ่ายแล้ว เปลี่ยนกลุ่มไม่ได้' : undefined} className={i.workgroupId ? '' : 'is-empty'}>
+                            <option value="">— เลือกกลุ่มงาน —</option>
+                            {(i.workgroupId && !myGroups.some((g) => g.id === i.workgroupId) ? [...myGroups, l.workgroups.find((g) => g.id === i.workgroupId)!] : myGroups)
+                              .map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                          </select>
+                        ) : <span className="badge">{n.group(i.workgroupId)}</span>}
+                      </label>
+                      {!i.workgroupId ? <span className="small muted">เลือกกลุ่มงานก่อน แล้วจึงกำหนดพื้นที่</span> : (
+                        <div className="pb-area">
+                          <span className="pb-owner-l">พื้นที่ดำเนินการ</span>
                           <span className={`area-sum ${confirmed(i) ? 'is-ok' : ''}`}>
-                            {areaSummary(st?.units.map((u) => u.unitId) ?? [], l.units)}
+                            <span className="area-name">{areaSummary(st?.units.map((u) => u.unitId) ?? [], l.units)}</span>
                             <span className="area-state">{confirmed(i) ? '✓ ยืนยันแล้ว' : 'ยังไม่ยืนยัน'}</span>
                           </span>
                           <span className="area-actions">
                             {canEdit && st && !isOpen && <button className="btn btn-ghost btn-sm" onClick={() => setEditing(i.id)}>กำหนดพื้นที่</button>}
-                            {mine(i) && i.projectId && <Link className="xs" to={`/admin/record?a=${i.activityId}`}>บันทึกผลการเบิกจ่าย</Link>}
+                            {st && <DuePicker name={i.name} fy={d.doc.fiscalYear} st={st} disabled={!canEdit || busy} onSet={(v) => setDue(i, v)} />}
                           </span>
-                          {st && <DueSelect name={i.name} fy={d.doc.fiscalYear} value={st.dueMonth} st={st} disabled={!canEdit || busy} onChange={(v) => setDue(i, v)} />}
-                        </>
+                          {st && <DueAlert name={i.name} fy={d.doc.fiscalYear} st={st} />}
+                          {mine(i) && i.projectId && <Link className="xs pb-rec" to={`/admin/record?a=${i.activityId}`}>บันทึกผลการเบิกจ่าย ›</Link>}
+                        </div>
                       )}
                     </div>
                     {isOpen && st && (
@@ -272,33 +276,50 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
   );
 }
 
+/** วันที่กำหนดเบิกครบที่มีผล: วันที่ที่ตั้ง > สิ้นเดือนที่ตั้ง (ข้อมูลเดิม) > อบรม/ประชุม = 30 มิ.ย. */
+function effectiveDue(name: string, fy: number, st: PlanActivityState): { date: string; isDefault: boolean } {
+  if (st.dueDate) return { date: st.dueDate, isDefault: false };
+  const m = st.dueMonth > 0 ? st.dueMonth : st.dueMonth === 0 && MEETING_RE.test(name) ? MEETING_DUE_MONTH : 0;
+  if (!m) return { date: '', isDefault: false };
+  const ce = fy - 543 - (m <= 3 ? 1 : 0);
+  const month = ((m + 8) % 12) + 1;
+  const last = new Date(Date.UTC(ce, month, 0)).getUTCDate();
+  return { date: `${ce}-${String(month).padStart(2, '0')}-${String(last).padStart(2, '0')}`, isDefault: st.dueMonth === 0 };
+}
+
 /**
- * กำหนดเบิกครบของกิจกรรม (ใช้เตือน ไม่เปลี่ยนเป้าบนแถบ) — ค่าเริ่มต้น: อบรม/ประชุม/สัมมนา = มิ.ย. ตามมาตรการเร่งรัดฯ
- * ขึ้นเตือนเมื่อเหลือไม่เกิน 1 เดือน หรือเลยกำหนดแล้วยังเบิกไม่ครบ
+ * กำหนดเบิกครบ (ใช้เตือน ไม่เปลี่ยนเป้าบนแถบ): ไอคอนปฏิทิน → ปฏิทินภาษาไทย เลือก วัน-เดือน-ปี ในปีงบประมาณ
+ * ค่าเริ่มต้นของอบรม/ประชุม/สัมมนา = 30 มิ.ย. ตามมาตรการเร่งรัดฯ
  */
-function DueSelect({ name, fy, value, st, disabled, onChange }: { name: string; fy: number; value: number; st: PlanActivityState; disabled: boolean; onChange: (v: number) => void }) {
+function DuePicker({ name, fy, st, disabled, onSet }: { name: string; fy: number; st: PlanActivityState; disabled: boolean; onSet: (v: { dueDate?: string; dueMonth?: number }) => void }) {
   const meeting = MEETING_RE.test(name);
-  const due = value > 0 ? value : value === 0 && meeting ? 9 : 0;
-  const now = monthsElapsed(fy);
-  const left = st.budget - st.disbursed;
-  const alert = due && left > 0 && now >= due - 1
-    ? <span className={`due-alert ${now > due ? 'is-late' : ''}`}>{now > due ? 'เลยกำหนด' : 'ใกล้ครบกำหนด'} ยังไม่เบิก {formatBaht(left)} บาท</span>
-    : null;
+  const { start, end } = fiscalYearRange(fy);
+  const due = effectiveDue(name, fy, st);
   return (
-    <span className="due-wrap">
-      <label className="due-select">
-        <span>กำหนดเบิกครบ</span>
-        <select value={value} disabled={disabled} onChange={(e) => onChange(Number(e.target.value))}>
-          <option value={0}>{meeting ? 'มิ.ย. (อบรม/ประชุม ค่าเริ่มต้น)' : 'ไม่กำหนด'}</option>
-          {meeting && <option value={-1}>ไม่กำหนด</option>}
-          {FISCAL_MONTHS.map((m, k) => <option key={m} value={k + 1}>{m} {String(monthYear(fy, k + 1)).slice(2)}</option>)}
-        </select>
-      </label>
-      {alert}
-    </span>
+    <ThaiDatePicker
+      value={due.date} min={start} max={end} today={todayBangkok()} disabled={disabled}
+      buttonClass={due.date ? 'is-set' : ''}
+      buttonText={due.date ? <>เบิกครบ {formatThaiDate(due.date)}{due.isDefault && <small> (ค่าเริ่มต้น)</small>}</> : 'กำหนดเบิกครบ'}
+      onPick={(v) => onSet({ dueDate: v })}
+      footer={(close) => (
+        <>
+          {meeting && !due.isDefault && <button type="button" className="btn btn-ghost btn-sm" onClick={() => { onSet({ dueMonth: 0 }); close(); }}>ค่าเริ่มต้น 30 มิ.ย.</button>}
+          {due.date && <button type="button" className="btn btn-ghost btn-sm" onClick={() => { onSet({ dueMonth: meeting ? -1 : 0 }); close(); }}>ไม่กำหนด</button>}
+        </>
+      )}
+    />
   );
 }
 
+/** เตือนเมื่อเหลือไม่เกิน 30 วัน หรือเลยกำหนดแล้วยังเบิกไม่ครบ */
+function DueAlert({ name, fy, st }: { name: string; fy: number; st: PlanActivityState }) {
+  const due = effectiveDue(name, fy, st).date;
+  const left = st.budget - st.disbursed;
+  if (!due || left <= 0) return null;
+  const days = Math.round((Date.parse(`${due}T00:00:00Z`) - Date.parse(`${todayBangkok()}T00:00:00Z`)) / 86_400_000);
+  if (days > 30) return null;
+  return <span className={`due-alert ${days < 0 ? 'is-late' : ''}`}>{days < 0 ? `เลยกำหนด ${-days} วัน` : days === 0 ? 'ครบกำหนดวันนี้' : `อีก ${days} วันครบกำหนด`} — ยังไม่เบิก {formatBaht(left)} บาท</span>;
+}
 
 function Progress({ label, done, total, hint }: { label: string; done: number; total: number; hint?: string }) {
   const p = total ? Math.round((done / total) * 100) : 0;

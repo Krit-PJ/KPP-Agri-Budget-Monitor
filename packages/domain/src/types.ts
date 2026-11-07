@@ -111,6 +111,8 @@ export interface Activity extends Meta {
   planQuarters: string;
   /** ต้องเบิกครบ 100% ภายในเดือนที่ (1 = ต.ค. … 12 = ก.ย.); 0 = ค่าเริ่มต้น (อบรม = มิ.ย.); -1 = ตามเป้าของปี */
   dueMonth?: number;
+  /** กำหนดเบิกครบเป็นวันที่ (YYYY-MM-DD ค.ศ.) — ใช้เตือน; ถ้ามีค่า dueMonth = เดือนของวันนี้ */
+  dueDate?: string;
 }
 
 export interface Allocation extends Meta {
