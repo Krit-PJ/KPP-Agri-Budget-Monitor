@@ -77,7 +77,7 @@ export default function Reports({ user }: { user: SessionUser }) {
   const [fund, setFund] = useState('');
   const [group, setGroup] = useState(user.workgroupIds?.length === 1 ? user.workgroupIds[0] : '');
   const s = useApi('reports.data', { fiscalYear: fy }, [fy]);
-  const groups = l.workgroups.filter((g) => user.workgroupIds === null || user.workgroupIds.includes(g.id));
+  const groups = l.workgroups.filter((g) => !g.noActivities && (user.workgroupIds === null || user.workgroupIds.includes(g.id)));
   const title = KINDS.find((x) => x.k === kind)!.title;
 
   const model = useMemo((): Model | null => {
