@@ -26,7 +26,7 @@ export default function ProjectsAdmin({ user }: { user: SessionUser }) {
           <p className="small muted" style={{ margin: 0 }}>โครงการ › กิจกรรม › พื้นที่ดำเนินการ — เปิดโครงการเพื่อดูรายละเอียดและผลการดำเนินงาน (บันทึกการเบิกจ่ายที่เมนู &ldquo;บันทึกผลการเบิกจ่าย&rdquo;)</p>
         </div>
         <div className="btn-row">
-          <Link className="btn btn-ghost" to="/admin/plans">แผนและผู้รับผิดชอบ</Link>
+          <Link className="btn btn-ghost" to="/admin/plans">บันทึกแผนงานและผู้รับผิดชอบ</Link>
           <button className="btn btn-ghost" onClick={() => setOpen(true)}>เพิ่มโครงการนอกแผน</button>
         </div>
       </div>
@@ -56,7 +56,7 @@ export default function ProjectsAdmin({ user }: { user: SessionUser }) {
         ) : (
           <Empty title={`ยังไม่มีโครงการในปีงบ ${fy}`}>
             <p>เริ่มจากเลือกกิจกรรมที่กลุ่มงานรับผิดชอบในแผนงบประมาณ ระบบจะสร้างโครงการและงบให้อัตโนมัติ</p>
-            <div className="btn-row"><Link className="btn" to="/admin/plans">ไปที่แผนและผู้รับผิดชอบ</Link><button className="btn btn-ghost" onClick={() => setOpen(true)}>เพิ่มโครงการนอกแผน</button></div>
+            <div className="btn-row"><Link className="btn" to="/admin/plans">ไปที่บันทึกแผนงานและผู้รับผิดชอบ</Link><button className="btn btn-ghost" onClick={() => setOpen(true)}>เพิ่มโครงการนอกแผน</button></div>
           </Empty>
         )}
       </Async>

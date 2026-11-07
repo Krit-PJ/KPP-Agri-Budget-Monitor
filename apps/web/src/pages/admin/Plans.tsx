@@ -9,10 +9,11 @@ import { ApiError, call } from '../../api/client';
 import { Async, Empty, ErrorBox, bahtInputToSatang, useApi, useLookups, useNames, useSubmit, useToast } from '../../components/ui';
 import { FiscalYearPicker, monthsElapsed } from '../public/Home';
 import PlanImport from './PlanImport';
+import { StickyFinder } from '../../components/StickyFinder';
 import { FISCAL_MONTHS, monthYear } from './Targets';
 
 /**
- * แผนและผู้รับผิดชอบ (ADR-006): หน้าเดียว ไม่มีชั้นซ้อน
+ * บันทึกแผนงานและผู้รับผิดชอบ (ADR-006): หน้าเดียว ไม่มีชั้นซ้อน
  * - เปิดแผนของปีปัจจุบันทันที
  * - แต่ละกิจกรรมย่อย: เลือกกลุ่มงานได้ในแถว (เปลี่ยนกลุ่มได้ถ้ายังไม่เบิกจ่าย) และกำหนดพื้นที่ดำเนินการ (ระดับจังหวัด/อำเภอ) พร้อมเป้าหมายและงบรายพื้นที่
  * - ติ๊กหลายแถวเพื่อกำหนดกลุ่ม/หน่วยพร้อมกัน
@@ -30,7 +31,7 @@ export default function Plans({ user }: { user: SessionUser }) {
   return (
     <>
       <div className="section-head">
-        <h1 style={{ margin: 0 }}>แผนและผู้รับผิดชอบ</h1>
+        <h1 style={{ margin: 0 }}>บันทึกแผนงานและผู้รับผิดชอบ</h1>
         {canImport && <button className="btn btn-ghost" onClick={() => setImporting(true)}>นำเข้าแผนงบประมาณ</button>}
       </div>
       <Async s={plans}>
@@ -155,25 +156,18 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
         <Progress label="มีกลุ่มงานรับผิดชอบ" done={assigned} total={leaves.length} />
         <Progress label="ยืนยันพื้นที่ดำเนินการแล้ว" done={done} total={leaves.length} hint="ยังไม่ยืนยัน = นับเป็นระดับจังหวัดไปก่อน" />
       </div>
-      <div className="pb-sticky" role="search">
-        <div className="pb-sticky-row">
-          <label className="field pb-search"><span className="sr-only">ค้นหา</span><input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหากิจกรรม โครงการ หรือเลขลำดับ" /></label>
-          <label className="field pb-jump"><span className="sr-only">ไปที่โครงการ</span>
-            <select value="" onChange={(e) => { document.getElementById(e.target.value)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>
-              <option value="">ไปที่โครงการ…</option>
-              {visibleProjects.map((p) => <option key={p.id} value={`pj-${p.id}`}>{p.number} {p.name.length > 60 ? `${p.name.slice(0, 60)}…` : p.name}</option>)}
-            </select>
-          </label>
-          <span className="small muted pb-count" aria-live="polite">พบ {shown.length.toLocaleString('th-TH')} รายการ</span>
-        </div>
-        <div className="segmented" role="group" aria-label="แสดงรายการ">
-          {user.workgroupIds !== null && <button aria-pressed={filter === 'mine'} onClick={() => setFilter('mine')}>ของกลุ่มฉัน ({leaves.filter(mine).length})</button>}
-          <button aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>ทั้งหมด ({leaves.length})</button>
-          <button aria-pressed={filter === 'noGroup'} onClick={() => setFilter('noGroup')}>ยังไม่มีกลุ่ม ({leaves.length - assigned})</button>
-          <button aria-pressed={filter === 'noArea'} onClick={() => setFilter('noArea')}>ยังไม่ยืนยันพื้นที่ ({assigned - leaves.filter((i) => i.workgroupId && confirmed(i)).length})</button>
-        </div>
-      </div>
-      <BackToTop />
+      <StickyFinder<Filter>
+        q={q} onQ={setQ} placeholder="ค้นหากิจกรรม โครงการ หรือเลขลำดับ"
+        jump={visibleProjects.map((p) => ({ id: `pj-${p.id}`, label: `${p.number} ${p.name}` }))}
+        count={shown.length}
+        filters={[
+          ...(user.workgroupIds !== null ? [{ key: 'mine' as Filter, label: 'ของกลุ่มฉัน', count: leaves.filter(mine).length }] : []),
+          { key: 'all', label: 'ทั้งหมด', count: leaves.length },
+          { key: 'noGroup', label: 'ยังไม่มีกลุ่ม', count: leaves.length - assigned },
+          { key: 'noArea', label: 'ยังไม่ยืนยันพื้นที่', count: assigned - leaves.filter((i) => i.workgroupId && confirmed(i)).length },
+        ]}
+        filter={filter} onFilter={setFilter}
+      />
       {error && <ErrorBox error={error} />}
       {!shown.length && <Empty title="ไม่มีรายการตามตัวกรองนี้" />}
       <div className="pb-head" aria-hidden="true">
@@ -305,15 +299,6 @@ function DueSelect({ name, fy, value, st, disabled, onChange }: { name: string; 
   );
 }
 
-function BackToTop() {
-  const [show, setShow] = useState(false);
-  useEffect(() => {
-    const on = () => setShow(window.scrollY > 600);
-    window.addEventListener('scroll', on, { passive: true });
-    return () => window.removeEventListener('scroll', on);
-  }, []);
-  return show ? <button className="btn back-top" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="กลับขึ้นบนสุด">↑ บนสุด</button> : null;
-}
 
 function Progress({ label, done, total, hint }: { label: string; done: number; total: number; hint?: string }) {
   const p = total ? Math.round((done / total) * 100) : 0;

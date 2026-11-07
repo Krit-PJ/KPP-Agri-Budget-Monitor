@@ -36,7 +36,7 @@ export interface PlanCommitRequest {
   replaceExisting?: boolean;
 }
 export type PlanDocSummary = PlanDoc & { assignedCount: number; assignedSatang: number; groups: Array<{ workgroupId: string; count: number; satang: number }> };
-/** สถานะกิจกรรมที่สร้างจากแผน — ใช้ในหน้า "แผนและผู้รับผิดชอบ" */
+/** สถานะกิจกรรมที่สร้างจากแผน — ใช้ในหน้า "บันทึกแผนงานและผู้รับผิดชอบ" */
 export interface PlanActivityState { activityId: string; projectId: string; budget: Satang; disbursed: Satang; committed: Satang; planQuarters: string; units: ActivityUnit[]; hasDisbursement: boolean; dueMonth: number }
 export interface PlanDetail { doc: PlanDoc; items: PlanItem[]; activities: Record<string, PlanActivityState> }
 export interface UnitShareInput { unitId: string; budgetSatang: Satang; targetQty?: number }
@@ -54,6 +54,8 @@ export interface ReportData { fiscalYear: number; generatedAt: string; monthInde
 export interface EntryActivity {
   activityId: string; projectId: string; projectCode: string; projectName: string; activityName: string; workgroupId: string;
   budget: Satang; disbursed: Satang; committed: Satang;
+  /** กำหนดพื้นที่ดำเนินการ (แบ่งงบรายอำเภอ) แล้วหรือยัง — ยังไม่กำหนด = เลือกได้เฉพาะระดับจังหวัด */
+  hasAreas: boolean;
   units: Array<{ unitId: string; budget: Satang; used: Satang }>;
   history: Array<{ id: string; no: number; date: string; amountSatang: Satang; docNo: string; unitId: string; status: string; hasFile: boolean }>;
 }

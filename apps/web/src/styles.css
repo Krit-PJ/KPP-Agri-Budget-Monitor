@@ -223,7 +223,7 @@ dialog.sheet::backdrop { background: rgba(22, 40, 32, 0.45); }
 .chart text { font-family: var(--font-body); font-size: 11px; fill: var(--ink-3); }
 
 /* ===== Admin ===== */
-.admin-shell { display: grid; grid-template-columns: 220px 1fr; gap: var(--s5); }
+.admin-shell { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: var(--s5); }
 .side { position: sticky; top: var(--s4); align-self: start; display: flex; flex-direction: column; gap: 2px; }
 .side { gap: 6px; }
 /* เมนูด้านซ้าย: ทุกเมนูเป็นปุ่มมีกรอบ/พื้น เห็นชัด; เมนูปัจจุบันพื้นเขียวเข้ม + แถบสีทองด้านซ้าย */
@@ -659,3 +659,41 @@ input.is-invalid { border-color: var(--clay); background: #fbeeea; }
 .void-box { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .void-box input { min-width: 160px; }
 @media (max-width: 640px) { .entry-kpis { grid-template-columns: 1fr; } .entry-kpis b { font-size: var(--fs-lg); } }
+
+/* ===== บันทึกผลการเบิกจ่าย: กระดานรายโครงการ (รูปแบบเดียวกับหน้าบันทึกแผนงานฯ) ===== */
+.rec-project { background: var(--paper); border: 1px solid var(--line); border-left: 6px solid var(--forest); border-radius: var(--r-md); padding: var(--s4); margin-bottom: var(--s4); }
+.rec-phead { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--s2) var(--s4); align-items: flex-start; margin-bottom: var(--s2); }
+.rec-phead h2 { font-size: var(--fs-lg); margin: 0; }
+.rec-ptot { margin: 0; font-size: var(--fs-sm); color: var(--ink-2); white-space: nowrap; }
+.rec-ptot b { color: var(--forest-ink); }
+.rec-pct { display: inline-block; margin-left: 6px; background: #e6eee8; border-radius: 999px; padding: 0 8px; font-weight: 700; color: var(--forest-ink); }
+.rec-cols, .rec-line { display: grid; grid-template-columns: minmax(0, 1fr) 120px 120px 120px 170px; gap: var(--s3); align-items: center; }
+.rec-cols { font-size: var(--fs-xs); color: var(--ink-3); font-weight: 700; padding: 0 var(--s2) var(--s1); border-bottom: 1px solid var(--line); }
+.rec-row { border-bottom: 1px solid var(--line); }
+.rec-row:last-child { border-bottom: 0; }
+.rec-line { padding: var(--s3) var(--s2); }
+.rec-row.is-open > .rec-line { background: #f1f7f2; }
+.rec-name strong { display: block; color: var(--forest-ink); }
+.rec-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.rec-chip { font-size: var(--fs-xs); border-radius: 999px; padding: 1px 10px; border: 1px solid var(--line); background: #f6f8f6; color: var(--ink-2); text-decoration: none; }
+.rec-chip.st-none { background: #fbeeea; border-color: #ecc5b8; color: #8a3a22; }
+.rec-chip.st-partial { background: #fbecc6; border-color: #e8cf8c; color: #5b4208; }
+.rec-chip.st-full { background: #e3f0e3; border-color: #b9d6b9; color: #245b24; }
+.rec-chip.st-warn { background: #fff; border: 1.5px dashed var(--clay); color: var(--clay); font-weight: 600; }
+.rec-line .neg { color: var(--clay); }
+.rec-act { text-align: right; }
+.rec-panel { padding: var(--s3) var(--s2) var(--s4); border-top: 2px solid var(--forest); background: #fafcfa; display: flex; flex-direction: column; gap: var(--s4); }
+.rec-h3 { font-size: var(--fs-md); margin: 0 0 var(--s2); color: var(--forest-ink); }
+.rec-form { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--s4); }
+.rec-project { scroll-margin-top: 9rem; }
+.rec-row { scroll-margin-top: 9rem; }
+@media (max-width: 760px) {
+  .rec-cols { display: none; }
+  .rec-line { grid-template-columns: 1fr 1fr 1fr; }
+  .rec-name, .rec-act { grid-column: 1 / -1; }
+  .rec-act { text-align: left; }
+  .rec-line > .num::before { content: attr(data-label); display: block; font-size: var(--fs-xs); color: var(--ink-3); }
+  .rec-ptot { white-space: normal; }
+}
+.rec-cols .r, .rec-line .r { text-align: right; }
+@media (max-width: 760px) { .rec-line .r { text-align: left; } }

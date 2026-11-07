@@ -304,7 +304,7 @@ export function entryActivities(ctx: Ctx, b: { fiscalYear: number }): EntryActiv
       : [{ unitId: pao, budget: bud.currentBudget, used: usedOf(pao) }];
     out.push({
       activityId: aid, projectId: p.id, projectCode: p.projectCode, projectName: p.name, activityName: a?.name ?? 'งบระดับโครงการ',
-      workgroupId: p.workgroupId, budget: bud.currentBudget, disbursed: bud.disbursed, committed: bud.committed, units,
+      workgroupId: p.workgroupId, budget: bud.currentBudget, disbursed: bud.disbursed, committed: bud.committed, hasAreas: unitShares.length > 0, units,
       history: live_.map((x, i) => ({ id: x.id, no: i + 1, date: x.date, amountSatang: x.amountSatang, docNo: x.docNo, unitId: x.unitId || pao, status: x.status, hasFile: !!x.attachmentId })),
     });
   };

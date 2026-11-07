@@ -2474,6 +2474,7 @@ var KPP = (() => {
         budget: bud.currentBudget,
         disbursed: bud.disbursed,
         committed: bud.committed,
+        hasAreas: unitShares.length > 0,
         units,
         history: live_.map((x, i) => ({ id: x.id, no: i + 1, date: x.date, amountSatang: x.amountSatang, docNo: x.docNo, unitId: x.unitId || pao, status: x.status, hasFile: !!x.attachmentId }))
       });
@@ -2738,7 +2739,7 @@ var KPP = (() => {
     if (!units.some((u) => u.id === id)) throw new AppError("VALIDATION_FAILED", "\u0E2B\u0E19\u0E48\u0E27\u0E22\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07");
     const pao = provinceUnitId(units);
     if (shares.length && !shares.some((s) => s.unitId === id)) throw new AppError("VALIDATION_FAILED", "\u0E2B\u0E19\u0E48\u0E27\u0E22\u0E19\u0E35\u0E49\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E23\u0E31\u0E1A\u0E07\u0E1A\u0E02\u0E2D\u0E07\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E19\u0E35\u0E49");
-    if (!shares.length && id !== pao) throw new AppError("VALIDATION_FAILED", '\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E19\u0E35\u0E49\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E41\u0E1A\u0E48\u0E07\u0E07\u0E1A\u0E43\u0E2B\u0E49\u0E2D\u0E33\u0E40\u0E20\u0E2D \u2014 \u0E01\u0E33\u0E2B\u0E19\u0E14\u0E43\u0E19\u0E2B\u0E19\u0E49\u0E32 "\u0E41\u0E1C\u0E19\u0E41\u0E25\u0E30\u0E1C\u0E39\u0E49\u0E23\u0E31\u0E1A\u0E1C\u0E34\u0E14\u0E0A\u0E2D\u0E1A"');
+    if (!shares.length && id !== pao) throw new AppError("VALIDATION_FAILED", '\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E19\u0E35\u0E49\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E41\u0E1A\u0E48\u0E07\u0E07\u0E1A\u0E43\u0E2B\u0E49\u0E2D\u0E33\u0E40\u0E20\u0E2D \u2014 \u0E01\u0E33\u0E2B\u0E19\u0E14\u0E43\u0E19\u0E2B\u0E19\u0E49\u0E32 "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E41\u0E1C\u0E19\u0E07\u0E32\u0E19\u0E41\u0E25\u0E30\u0E1C\u0E39\u0E49\u0E23\u0E31\u0E1A\u0E1C\u0E34\u0E14\u0E0A\u0E2D\u0E1A"');
     return id === pao && !shares.length ? "" : id;
   }
   function checkActivity(ctx, projectId, activityId) {

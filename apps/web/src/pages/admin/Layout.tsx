@@ -25,7 +25,7 @@ export default function AdminLayout({ user }: { user: SessionUser }) {
         </div>
         <p className="side-h">งานประจำ</p>
         <NavLink to="/admin/record">บันทึกผลการเบิกจ่าย</NavLink>
-        <NavLink to="/admin/plans">แผนและผู้รับผิดชอบ</NavLink>
+        <NavLink to="/admin/plans">บันทึกแผนงานและผู้รับผิดชอบ</NavLink>
         <p className="side-h">ติดตามและรายงาน</p>
         <NavLink to="/admin" end>หน้าหลัก</NavLink>
         <NavLink to="/admin/reports">รายงาน</NavLink>

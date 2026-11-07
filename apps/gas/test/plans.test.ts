@@ -384,7 +384,8 @@ describe('เป้าการเบิกจ่าย ตัวนับผู
     mk('2026-11-05', 1000_00, 'k2');
     const first = mk('2026-10-20', 500_00, 'k1');
     const list = ok<Array<{ activityId: string; units: Array<{ unitId: string; used: number; budget: number }>; history: Array<{ no: number; date: string }> }>>('disbursements.entryList', { fiscalYear: 2570 }, staff);
-    const e = list.find((x) => x.activityId === item.activityId)!;
+    const e = list.find((x) => x.activityId === item.activityId)! as typeof list[number] & { hasAreas: boolean };
+    expect(e.hasAreas).toBe(true);
     expect(e.units.find((u) => u.unitId === d1)).toMatchObject({ budget: half, used: 1500_00 });
     expect(e.history.map((h) => [h.no, h.date])).toEqual([[1, '2026-10-20'], [2, '2026-11-05']]);
     // ยกเลิกครั้งที่ 1 → ครั้งที่เลื่อนให้เอง

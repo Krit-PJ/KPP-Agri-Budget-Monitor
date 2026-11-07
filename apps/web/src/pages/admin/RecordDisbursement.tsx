@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   areaName, formatBaht, formatThaiDate, normalizeKey, todayBangkok,
   type CoverLetterResult, type DisbursementStatus, type EntryActivity, type SessionUser,
@@ -8,6 +8,7 @@ import { ApiError, call, fileToBase64, newKey, shrinkImage } from '../../api/cli
 import { Async, bahtInputToSatang, ErrorBox, useApi, useLookups, useSubmit, useToast } from '../../components/ui';
 import { FiscalYearPicker } from '../public/Home';
 import ImportCenter from './ImportCenter';
+import { StickyFinder } from '../../components/StickyFinder';
 
 const STATUS_TEXT: Record<string, string> = { COMMITTED: 'ผูกพัน', APPROVED: 'อนุมัติเบิก', PAID: 'จ่ายแล้ว' };
 const ACCEPT = 'image/*,application/pdf';
@@ -36,59 +37,118 @@ function EntryForm({ user, initialActivity }: { user: SessionUser; initialActivi
   const [fy, setFy] = useState(l.currentFiscalYear);
   const [tick, setTick] = useState(0);
   const s = useApi('disbursements.entryList', { fiscalYear: fy }, [fy, tick]);
-  const [sel, setSel] = useState(initialActivity);
   return (
     <>
-      <div className="toolbar"><FiscalYearPicker value={fy} onChange={(y) => { setFy(y); setSel(''); }} /></div>
+      <div className="toolbar"><FiscalYearPicker value={fy} onChange={setFy} /></div>
       <Async s={s} lines={6}>
-        {(list) => {
-          const keyOf = (e: EntryActivity) => e.activityId || `P:${e.projectId}`;
-          const cur = list.find((e) => keyOf(e) === sel || e.activityId === sel);
-          return cur
-            ? <Entry key={keyOf(cur)} e={cur} user={user} onChange={() => setTick((t) => t + 1)} onBack={() => setSel('')} />
-            : <Picker list={list} onPick={(e) => setSel(keyOf(e))} />;
-        }}
+        {(list) => <Board key={fy} list={list} user={user} initial={initialActivity} onChange={() => setTick((t) => t + 1)} />}
       </Async>
     </>
   );
 }
 
-/** ขั้นที่ 1: ค้นหาและเลือกกิจกรรม (เฉพาะของกลุ่มตน) */
-function Picker({ list, onPick }: { list: EntryActivity[]; onPick: (e: EntryActivity) => void }) {
+type RFilter = 'all' | 'none' | 'partial' | 'full';
+const keyOf = (e: EntryActivity) => e.activityId || `P:${e.projectId}`;
+const stateOf = (e: EntryActivity): Exclude<RFilter, 'all'> =>
+  !e.history.length ? 'none' : e.budget > 0 && e.disbursed >= e.budget ? 'full' : 'partial';
+const STATE_TEXT = { none: 'ยังไม่เคยเบิก', partial: 'เบิกบางส่วน', full: 'เบิกครบแล้ว' } as const;
+
+/**
+ * จัดหน้าเหมือน "บันทึกแผนงานและผู้รับผิดชอบ": หัวข้อรายโครงการ → แถวกิจกรรม → ฟอร์มกางใต้แถว (ทีละแถว)
+ * แถบค้นหาติดด้านบน (StickyFinder ชิ้นเดียวกับหน้าแผน)
+ */
+function Board({ list, user, initial, onChange }: { list: EntryActivity[]; user: SessionUser; initial: string; onChange: () => void }) {
   const l = useLookups();
   const [q, setQ] = useState('');
-  const shown = useMemo(() => {
-    const k = normalizeKey(q);
-    return list.filter((e) => !k || normalizeKey(`${e.activityName} ${e.projectName} ${e.projectCode}`).includes(k));
-  }, [list, q]);
+  const [filter, setFilter] = useState<RFilter>('all');
+  // ?a=<activityId> (มาจากหน้าบันทึกแผนงานฯ) → กางฟอร์มของกิจกรรมนั้นและเลื่อนไปหา
+  const [open, setOpen] = useState(() => { const f = initial ? list.find((e) => e.activityId === initial || keyOf(e) === initial) : undefined; return f ? keyOf(f) : ''; });
   const group = (id: string) => l.workgroups.find((g) => g.id === id)?.name ?? '';
+
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => document.getElementById(`ra-${open}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const k = normalizeKey(q);
+  const shown = list.filter((e) => (filter === 'all' || stateOf(e) === filter)
+    && (!k || normalizeKey(`${e.activityName} ${e.projectName} ${e.projectCode}`).includes(k)));
+  const projects = useMemo(() => {
+    const m = new Map<string, EntryActivity[]>();
+    for (const e of list) (m.get(e.projectId) ?? m.set(e.projectId, []).get(e.projectId)!).push(e);
+    return m;
+  }, [list]);
+  const shownProjects = [...new Set(shown.map((e) => e.projectId))];
+  const count = (f: Exclude<RFilter, 'all'>) => list.filter((e) => stateOf(e) === f).length;
+
   return (
-    <section className="panel" aria-labelledby="pick-h">
-      <h2 id="pick-h">1. เลือกกิจกรรมที่จะบันทึก</h2>
-      <label className="field"><span>ค้นหาชื่อกิจกรรมหรือโครงการ</span>
-        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="เช่น อบรม, แปลงเรียนรู้, ศัตรูพืช" autoFocus />
-      </label>
-      <p className="small muted">พบ {shown.length.toLocaleString('th-TH')} กิจกรรม</p>
-      {shown.length ? (
-        <ul className="pick-list">
-          {shown.slice(0, 60).map((e) => (
-            <li key={e.activityId || `P:${e.projectId}`}>
-              <button type="button" onClick={() => onPick(e)}>
-                <span className="pick-name">{e.activityName}</span>
-                <span className="pick-sub">{e.projectName}{group(e.workgroupId) && ` · ${group(e.workgroupId)}`}</span>
-                <span className="pick-num">คงเหลือ {formatBaht(e.budget - e.disbursed)} บาท · บันทึกแล้ว {e.history.length} ครั้ง</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : <p className="muted">ไม่พบกิจกรรม {list.length ? 'ลองคำอื่น' : 'ในปีงบประมาณนี้ที่คุณมีสิทธิ์บันทึก'}</p>}
-      {shown.length > 60 && <p className="small muted">แสดง 60 รายการแรก — พิมพ์คำค้นเพิ่มเพื่อให้แคบลง</p>}
-    </section>
+    <>
+      <StickyFinder<RFilter>
+        q={q} onQ={setQ} placeholder="ค้นหากิจกรรมหรือโครงการ เช่น อบรม, แปลงเรียนรู้"
+        jump={shownProjects.map((pid) => { const e = projects.get(pid)![0]; return { id: `rp-${pid}`, label: `${e.projectCode} ${e.projectName}` }; })}
+        count={shown.length}
+        filters={[
+          { key: 'all', label: 'ทั้งหมด', count: list.length },
+          { key: 'none', label: STATE_TEXT.none, count: count('none') },
+          { key: 'partial', label: STATE_TEXT.partial, count: count('partial') },
+          { key: 'full', label: STATE_TEXT.full, count: count('full') },
+        ]}
+        filter={filter} onFilter={setFilter}
+      />
+      {!shown.length && <p className="muted">{list.length ? 'ไม่มีรายการตามตัวกรองนี้ — ลองคำค้นอื่นหรือเลือก "ทั้งหมด"' : 'ไม่มีกิจกรรมในปีงบประมาณนี้ที่คุณมีสิทธิ์บันทึก'}</p>}
+      {shownProjects.map((pid) => {
+        const all = projects.get(pid)!;
+        const head = all[0];
+        const pb = all.reduce((a, e) => a + e.budget, 0);
+        const pd = all.reduce((a, e) => a + e.disbursed, 0);
+        return (
+          <section key={pid} id={`rp-${pid}`} className="ob-project rec-project">
+            <header className="rec-phead">
+              <div>
+                <h2>{head.projectName}</h2>
+                <p className="xs muted" style={{ margin: 0 }}>{head.projectCode}{group(head.workgroupId) && ` · ${group(head.workgroupId)}`} · {all.length} กิจกรรม</p>
+              </div>
+              <p className="rec-ptot num">เบิกแล้ว <b>{formatBaht(pd)}</b> / {formatBaht(pb)} บาท <span className="rec-pct">{pb ? ((pd / pb) * 100).toLocaleString('th-TH', { maximumFractionDigits: 1 }) : 0}%</span></p>
+            </header>
+            <div className="rec-cols" aria-hidden="true"><span>กิจกรรม</span><span className="r">งบประมาณ</span><span className="r">เบิกแล้ว</span><span className="r">คงเหลือ</span><span /></div>
+            {shown.filter((e) => e.projectId === pid).map((e) => {
+              const key = keyOf(e);
+              const isOpen = open === key;
+              const st = stateOf(e);
+              return (
+                <div key={key} id={`ra-${key}`} className={`rec-row ${isOpen ? 'is-open' : ''}`}>
+                  <div className="rec-line">
+                    <div className="rec-name">
+                      <strong>{e.activityName}</strong>
+                      <span className="rec-tags">
+                        <span className={`rec-chip st-${st}`}>{STATE_TEXT[st]}{e.history.length > 0 && ` · ล่าสุดครั้งที่ ${e.history.length}`}</span>
+                        {e.activityId && !e.hasAreas && <Link className="rec-chip st-warn" to="/admin/plans">ยังไม่กำหนดพื้นที่ — กำหนดที่บันทึกแผนงานฯ</Link>}
+                      </span>
+                    </div>
+                    <span className="r num" data-label="งบประมาณ">{formatBaht(e.budget)}</span>
+                    <span className="r num" data-label="เบิกแล้ว">{formatBaht(e.disbursed)}</span>
+                    <span className={`r num ${e.budget - e.disbursed < 0 ? 'neg' : ''}`} data-label="คงเหลือ">{formatBaht(e.budget - e.disbursed)}</span>
+                    <span className="rec-act">
+                      <button type="button" className={`btn btn-sm ${isOpen ? 'btn-ghost' : ''}`} aria-expanded={isOpen} onClick={() => setOpen(isOpen ? '' : key)}>
+                        {isOpen ? 'ปิด' : 'บันทึกการเบิกจ่าย'}
+                      </button>
+                    </span>
+                  </div>
+                  {isOpen && <div className="rec-panel"><Entry e={e} user={user} onChange={onChange} /></div>}
+                </div>
+              );
+            })}
+          </section>
+        );
+      })}
+    </>
   );
 }
 
 /** ขั้นที่ 2: ข้อมูลสำคัญ + ฟอร์มกรอก (ให้น้อยที่สุด) + ประวัติการเบิก */
-function Entry({ e, user, onChange, onBack }: { e: EntryActivity; user: SessionUser; onChange: () => void; onBack: () => void }) {
+function Entry({ e, user, onChange }: { e: EntryActivity; user: SessionUser; onChange: () => void }) {
   const l = useLookups();
   const toast = useToast();
   const unitName = (id: string) => areaName(l.units.find((u) => u.id === id));
@@ -158,15 +218,8 @@ function Entry({ e, user, onChange, onBack }: { e: EntryActivity; user: SessionU
 
   return (
     <>
-      <button type="button" className="btn btn-ghost btn-sm" onClick={onBack}>← เลือกกิจกรรมอื่น</button>
-      <section className="panel section entry-info" aria-labelledby="info-h">
-        <h2 id="info-h">{e.activityName}</h2>
-        <p className="small muted" style={{ marginTop: 0 }}>{e.projectCode} {e.projectName}</p>
-        <div className="entry-kpis">
-          <div><span>งบประมาณ</span><b className="num">{formatBaht(e.budget)}</b></div>
-          <div><span>เบิกแล้ว</span><b className="num">{formatBaht(e.disbursed)}</b></div>
-          <div><span>คงเหลือ</span><b className="num">{formatBaht(remaining)}</b></div>
-        </div>
+      <section className="entry-info" aria-label="งบรายพื้นที่">
+        <h3 className="rec-h3">งบรายพื้นที่ดำเนินการ</h3>
         <table className="data entry-units">
           <thead><tr><th>พื้นที่ดำเนินการ</th><th className="r">งบ (บาท)</th><th className="r">ใช้แล้ว</th><th className="r">คงเหลือ</th></tr></thead>
           <tbody>
@@ -180,8 +233,8 @@ function Entry({ e, user, onChange, onBack }: { e: EntryActivity; user: SessionU
         </table>
       </section>
 
-      <form className="panel section" onSubmit={submit} aria-labelledby="form-h">
-        <h2 id="form-h">2. กรอกการเบิกจ่าย <span className="entry-no">ครั้งที่ {no}</span></h2>
+      <form className="rec-form" onSubmit={submit} aria-label="กรอกการเบิกจ่าย">
+        <h3 className="rec-h3">กรอกการเบิกจ่าย <span className="entry-no">ครั้งที่ {no}</span></h3>
         {error && <ErrorBox error={error} />}
         <div className="form-grid">
           <label className="field"><span className="req">อำเภอ / พื้นที่</span>
@@ -262,8 +315,8 @@ function History({ e, user, unitName, onChange }: { e: EntryActivity; user: Sess
     onChange();
   });
   return (
-    <section className="panel section" aria-labelledby="hist-h">
-      <h2 id="hist-h">ประวัติการเบิกจ่ายของกิจกรรมนี้</h2>
+    <section className="rec-hist" aria-label="ประวัติการเบิกจ่าย">
+      <h3 className="rec-h3">ประวัติการเบิกจ่ายของกิจกรรมนี้</h3>
       {error && <ErrorBox error={error} />}
       {e.history.length ? (
         <div className="table-wrap">

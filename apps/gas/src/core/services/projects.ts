@@ -287,7 +287,7 @@ function checkUnit(ctx: Ctx, activityId: string, unitId?: string): string {
   if (!units.some((u) => u.id === id)) throw new AppError('VALIDATION_FAILED', 'หน่วยดำเนินการไม่ถูกต้อง');
   const pao = provinceUnitId(units);
   if (shares.length && !shares.some((s) => s.unitId === id)) throw new AppError('VALIDATION_FAILED', 'หน่วยนี้ไม่ได้รับงบของกิจกรรมนี้');
-  if (!shares.length && id !== pao) throw new AppError('VALIDATION_FAILED', 'กิจกรรมนี้ยังไม่ได้แบ่งงบให้อำเภอ — กำหนดในหน้า "แผนและผู้รับผิดชอบ"');
+  if (!shares.length && id !== pao) throw new AppError('VALIDATION_FAILED', 'กิจกรรมนี้ยังไม่ได้แบ่งงบให้อำเภอ — กำหนดในหน้า "บันทึกแผนงานและผู้รับผิดชอบ"');
   return id === pao && !shares.length ? '' : id;
 }
 
