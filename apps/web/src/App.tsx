@@ -1,10 +1,10 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { HashRouter, Link, MemoryRouter, NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { HashRouter, Link, MemoryRouter, NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 // build แบบฝังในหน้าอื่น (VITE_ROUTER=memory) ใช้ MemoryRouter เพราะเจ้าของหน้าไม่อนุญาต #/path
 const Router = import.meta.env.VITE_ROUTER === 'memory' ? MemoryRouter : HashRouter;
 import { formatThaiDate, type SessionUser, type VisitCount } from '@kpp/domain';
-import { call, DEMO, getSession } from './api/client';
+import { call, clearSession, DEMO, getSession } from './api/client';
 import { Async, Loading, LookupProvider, ToastProvider, useApi } from './components/ui';
 import PublicHome from './pages/public/Home';
 import PublicProjects from './pages/public/Projects';
@@ -86,6 +86,17 @@ function TextSize() {
   );
 }
 
+/** ออกจากระบบ — อยู่ตำแหน่งเดียวกับ "เข้าสู่ระบบเจ้าหน้าที่" บนแถบด้านบน */
+function LogoutLink() {
+  const nav = useNavigate();
+  const out = async () => {
+    try { await call('auth.logout', {}); } catch { /* ออกจากระบบฝั่งเครื่องอยู่ดี */ }
+    clearSession();
+    nav('/');
+  };
+  return <button type="button" className="nav-btn" onClick={() => void out()}>ออกจากระบบ</button>;
+}
+
 function SiteFooter() {
   const v = useVisits();
   const n = (x: number) => x.toLocaleString('th-TH');
@@ -123,7 +134,9 @@ function Shell() {
             <NavLink to="/" end>ภาพรวม</NavLink>
             <NavLink to="/projects">ติดตามโครงการ</NavLink>
             <NavLink to="/report">พิมพ์รายงาน</NavLink>
-            {user ? <NavLink to="/admin">จัดการข้อมูล</NavLink> : <NavLink to="/login">เข้าสู่ระบบเจ้าหน้าที่</NavLink>}
+            {user
+              ? <><NavLink to="/admin">งานเจ้าหน้าที่</NavLink><LogoutLink /></>
+              : <NavLink to="/login">เข้าสู่ระบบเจ้าหน้าที่</NavLink>}
           </nav>
           <TextSize />
         </div>

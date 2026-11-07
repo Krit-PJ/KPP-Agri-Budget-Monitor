@@ -227,15 +227,39 @@ export function fileToBase64(file: Blob): Promise<string> {
  * ย่อรูปถ่ายหนังสือก่อนอัปโหลด: ยาวสุด 2000px, JPEG 0.85
  * วาดผ่าน canvas จึงตัด EXIF (รวมพิกัด GPS) ออกด้วย
  */
+/** ขนาดไฟล์แนบสูงสุด (หนังสือปะหน้า) */
+export const MAX_ATTACH_BYTES = 1024 * 1024;
+
+/**
+ * ย่อรูปให้ไม่เกิน 1 MB (JPEG): ลดขนาดด้านยาวและคุณภาพทีละขั้น จนได้ไฟล์ไม่เกินเกณฑ์ (ยังอ่านตัวหนังสือได้)
+ * PDF/ไฟล์อื่นย่อในเบราว์เซอร์ไม่ได้ — ถ้าเกิน 1 MB แจ้งให้ถ่ายรูปแทน
+ */
 export async function shrinkImage(file: File): Promise<{ blob: Blob; name: string }> {
-  if (!file.type.startsWith('image/')) return { blob: file, name: file.name };
+  const tooBig = () => new ApiError('VALIDATION_FAILED', `ไฟล์ใหญ่เกิน 1 MB (${(file.size / 1048576).toFixed(1)} MB) — กรุณาถ่ายรูปหนังสือแทน ระบบจะย่อรูปให้เอง`);
+  if (!file.type.startsWith('image/')) {
+    if (file.size > MAX_ATTACH_BYTES) throw tooBig();
+    return { blob: file, name: file.name };
+  }
   const bmp = await createImageBitmap(file).catch(() => null);
-  if (!bmp) return { blob: file, name: file.name };
-  const scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(bmp.width * scale);
-  canvas.height = Math.round(bmp.height * scale);
-  canvas.getContext('2d')!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
-  const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', 0.85));
-  return { blob: blob ?? file, name: file.name.replace(/\.[^.]+$/, '') + '.jpg' };
+  if (!bmp) {
+    if (file.size > MAX_ATTACH_BYTES) throw tooBig();
+    return { blob: file, name: file.name };
+  }
+  const name = file.name.replace(/\.[^.]+$/, '') + '.jpg';
+  const steps: Array<[number, number]> = [[2000, 0.85], [1800, 0.8], [1600, 0.75], [1400, 0.7], [1200, 0.65], [1000, 0.6], [800, 0.55]];
+  let last: Blob | null = null;
+  for (const [maxDim, q] of steps) {
+    const scale = Math.min(1, maxDim / Math.max(bmp.width, bmp.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bmp.width * scale);
+    canvas.height = Math.round(bmp.height * scale);
+    const g = canvas.getContext('2d')!;
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, canvas.width, canvas.height);
+    g.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    last = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', q));
+    if (last && last.size <= MAX_ATTACH_BYTES) return { blob: last, name };
+  }
+  if (last && last.size <= MAX_ATTACH_BYTES) return { blob: last, name };
+  throw tooBig();
 }

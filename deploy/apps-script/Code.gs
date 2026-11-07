@@ -1195,6 +1195,7 @@ var KPP = (() => {
     "admin.overview",
     "projects.list",
     "projects.get",
+    "disbursements.entryList",
     "imports.get",
     "imports.list",
     "plans.check",
@@ -2441,6 +2442,47 @@ var KPP = (() => {
       if (p) add(computeBudget(budgetOf.get(a.id) ?? [], []).currentBudget, a, curveOf(Number(p.fiscalYear)));
     }
     for (const p of projects) add(computeBudget(budgetOf.get(`P:${p.id}`) ?? [], []).currentBudget, null, curveOf(Number(p.fiscalYear)));
+    return out;
+  }
+  function entryActivities(ctx, b) {
+    const u = requireRole(ctx, "admin", "minisuper", "superadmin");
+    const fy = Number(b.fiscalYear);
+    const projects = live(ctx.env.db.list("Projects")).filter((p) => Number(p.fiscalYear) === fy && p.status !== "CANCELLED" && canAccessWorkgroup(u, p.workgroupId));
+    const pids = new Set(projects.map((p) => p.id));
+    const acts = live(ctx.env.db.list("Activities")).filter((a) => pids.has(a.projectId) && a.status !== "CANCELLED");
+    const allocs = live(ctx.env.db.list("Allocations")).filter((x) => pids.has(x.projectId));
+    const disbs = live(ctx.env.db.list("Disbursements")).filter((x) => pids.has(x.projectId));
+    const shares = activityUnitsOf(ctx);
+    const pao = provinceUnitId(listUnits(ctx));
+    const out = [];
+    const emit = (p, a) => {
+      const aid = a?.id ?? "";
+      const al = allocs.filter((x) => x.projectId === p.id && (x.activityId || "") === aid);
+      const di = disbs.filter((x) => x.projectId === p.id && (x.activityId || "") === aid);
+      const bud = computeBudget(al, di);
+      const live_ = di.filter((x) => x.status !== "VOID").sort((x, y) => x.date === y.date ? x.createdAt.localeCompare(y.createdAt) : x.date.localeCompare(y.date));
+      const unitShares = a ? shares.filter((s) => s.activityId === a.id) : [];
+      const usedOf = (unitId) => live_.filter((x) => (x.unitId || pao) === unitId).reduce((s, x) => s + x.amountSatang, 0);
+      const units = unitShares.length ? unitShares.map((s) => ({ unitId: s.unitId, budget: s.budgetSatang, used: usedOf(s.unitId) })) : [{ unitId: pao, budget: bud.currentBudget, used: usedOf(pao) }];
+      out.push({
+        activityId: aid,
+        projectId: p.id,
+        projectCode: p.projectCode,
+        projectName: p.name,
+        activityName: a?.name ?? "\u0E07\u0E1A\u0E23\u0E30\u0E14\u0E31\u0E1A\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23",
+        workgroupId: p.workgroupId,
+        budget: bud.currentBudget,
+        disbursed: bud.disbursed,
+        committed: bud.committed,
+        units,
+        history: live_.map((x, i) => ({ id: x.id, no: i + 1, date: x.date, amountSatang: x.amountSatang, docNo: x.docNo, unitId: x.unitId || pao, status: x.status, hasFile: !!x.attachmentId }))
+      });
+    };
+    for (const p of projects) {
+      const pa = acts.filter((a) => a.projectId === p.id);
+      for (const a of pa) emit(p, a);
+      if (!pa.length || allocs.some((x) => x.projectId === p.id && !x.activityId)) emit(p, null);
+    }
     return out;
   }
 
@@ -4143,6 +4185,7 @@ var KPP = (() => {
     "activities.update": r(updateActivity, true, "admin"),
     "allocations.create": r(createAllocation, true, "admin"),
     "allocations.void": r(voidAllocation, true, "admin"),
+    "disbursements.entryList": r(entryActivities, false, "admin"),
     "disbursements.create": r(createDisbursement, true, "admin"),
     "disbursements.setStatus": r(setDisbursementStatus, true, "admin"),
     "disbursements.void": r(voidDisbursement, true, "admin"),

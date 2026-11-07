@@ -228,7 +228,7 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
                           </span>
                           <span className="area-actions">
                             {canEdit && st && !isOpen && <button className="btn btn-ghost btn-sm" onClick={() => setEditing(i.id)}>กำหนดพื้นที่</button>}
-                            {mine(i) && i.projectId && <Link className="xs" to={`/admin/projects/${i.projectId}`}>บันทึกเบิกจ่าย</Link>}
+                            {mine(i) && i.projectId && <Link className="xs" to={`/admin/record?a=${i.activityId}`}>บันทึกผลการเบิกจ่าย</Link>}
                           </span>
                           {st && <DueSelect name={i.name} fy={d.doc.fiscalYear} value={st.dueMonth} st={st} disabled={!canEdit || busy} onChange={(v) => setDue(i, v)} />}
                         </>

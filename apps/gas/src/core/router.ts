@@ -46,6 +46,7 @@ export const ROUTES: Record<Exclude<ActionName, 'batch'>, Route> = {
   'activities.update': r(projectsSvc.updateActivity, true, 'admin'),
   'allocations.create': r(projectsSvc.createAllocation, true, 'admin'),
   'allocations.void': r(projectsSvc.voidAllocation, true, 'admin'),
+  'disbursements.entryList': r(unitsSvc.entryActivities, false, 'admin'),
   'disbursements.create': r(projectsSvc.createDisbursement, true, 'admin'),
   'disbursements.setStatus': r(projectsSvc.setDisbursementStatus, true, 'admin'),
   'disbursements.void': r(projectsSvc.voidDisbursement, true, 'admin'),

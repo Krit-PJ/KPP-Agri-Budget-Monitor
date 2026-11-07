@@ -26,7 +26,8 @@ const TEMPLATE = [
   ['2570-001', 'โครงการตัวอย่าง', '', 'กลุ่มส่งเสริมและพัฒนาการผลิต', 'งบกรมส่งเสริมการเกษตร', '500,000', '', '', '', '120,000', 'ชื่อผู้รับผิดชอบ', '1 ต.ค. 2569', '30 ก.ย. 2570'],
 ];
 
-export default function ImportCenter({ user }: { user: SessionUser }) {
+/** embedded: อยู่ในแท็บของหน้า "บันทึกผลการเบิกจ่าย" (ไม่แสดงหัวเรื่องซ้ำ และคงแท็บไว้ในลิงก์) */
+export default function ImportCenter({ user, embedded = false }: { user: SessionUser; embedded?: boolean }) {
   const l = useLookups();
   const toast = useToast();
   const [params, setParams] = useSearchParams();
@@ -51,7 +52,7 @@ export default function ImportCenter({ user }: { user: SessionUser }) {
     setPv(p);
     setAccept(false);
     setFilter(p.summary.error ? 'ERROR' : p.summary.warning ? 'WARNING' : '');
-    setParams({ job: p.job.id }, { replace: true });
+    setParams(embedded ? { tab: 'import', job: p.job.id } : { job: p.job.id }, { replace: true });
   };
 
   const upload = (file: File | undefined, allowDuplicate = false) => {
@@ -85,7 +86,7 @@ export default function ImportCenter({ user }: { user: SessionUser }) {
 
   return (
     <>
-      <h1>นำเข้าผลการเบิกจ่ายจากไฟล์</h1>
+      {embedded ? <h2>นำเข้าจากไฟล์</h2> : <h1>นำเข้าผลการเบิกจ่ายจากไฟล์</h1>}
       {!pv && (
         <>
           <p className="muted" style={{ maxWidth: '68ch' }}>
@@ -133,7 +134,7 @@ export default function ImportCenter({ user }: { user: SessionUser }) {
                   <tbody>
                     {list.map((j) => (
                       <tr key={j.id}>
-                        <td className="primary"><button className="btn btn-ghost btn-sm" onClick={() => setParams({ job: j.id })}>{j.fileName}</button></td>
+                        <td className="primary"><button className="btn btn-ghost btn-sm" onClick={() => setParams(embedded ? { tab: 'import', job: j.id } : { job: j.id })}>{j.fileName}</button></td>
                         <td data-label="เมื่อ">{formatThaiDateTime(j.createdAt)}</td>
                         <td data-label="สถานะ">{({ STAGED: 'รอยืนยัน', COMMITTING: 'กำลังนำเข้า', COMMITTED: 'นำเข้าแล้ว', PARTIAL: 'นำเข้าบางส่วน', CANCELLED: 'ยกเลิก', FAILED: 'ล้มเหลว' })[j.status]}</td>
                         <td data-label="แถว" className="r">{j.committedRows || j.validRows + j.warningRows}/{j.totalRows}</td>
@@ -154,7 +155,7 @@ export default function ImportCenter({ user }: { user: SessionUser }) {
               <h2 style={{ margin: 0 }}>{pv.job.fileName}</h2>
               <p className="small muted" style={{ margin: 0 }}>{KIND_LABEL[pv.job.kind]} ปีงบ {pv.job.fiscalYear}</p>
             </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => { setPv(null); setParams({}); setError(null); }}>นำเข้าไฟล์อื่น</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setPv(null); setParams(embedded ? { tab: 'import' } : {}); setError(null); }}>นำเข้าไฟล์อื่น</button>
           </div>
           {pv.job.message && <div className="notice notice-warn">{pv.job.message}</div>}
           {error && <ErrorBox error={error} />}

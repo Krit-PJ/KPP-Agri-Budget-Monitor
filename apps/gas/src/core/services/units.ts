@@ -6,10 +6,10 @@
  */
 import {
   AppError, MEETING_RE, areaName, computeBudget, pct, planAt, splitEqual, splitMoney,
-  type Activity, type ActivityUnit, type Allocation, type BudgetSummary, type Disbursement, type PlanActivityState,
+  type Activity, type ActivityUnit, type Allocation, type BudgetSummary, type Disbursement, type EntryActivity, type PlanActivityState,
   type Project, type ReportRow, type Satang, type Unit, type UnitShareInput,
 } from '@kpp/domain';
-import { requireWorkgroup } from '../auth';
+import { canAccessWorkgroup, requireRole, requireWorkgroup } from '../auth';
 import { audit, bumpDataVersion, curveFor, findById, live, newMeta, nowIso, type Ctx } from '../context';
 import type { Dataset } from './projects';
 
@@ -271,5 +271,48 @@ export function planSeries(ctx: Ctx, ds: Dataset, projects: Project[]): Satang[]
     if (p) add(computeBudget(budgetOf.get(a.id) ?? [], []).currentBudget, a, curveOf(Number(p.fiscalYear)));
   }
   for (const p of projects) add(computeBudget(budgetOf.get(`P:${p.id}`) ?? [], []).currentBudget, null, curveOf(Number(p.fiscalYear)));
+  return out;
+}
+
+/**
+ * ข้อมูลสำหรับหน้า "บันทึกผลการเบิกจ่าย": กิจกรรมในขอบเขตของผู้ใช้ พร้อมงบ/ยอดใช้รายพื้นที่ และประวัติการเบิก
+ * ครั้งที่ = ลำดับตามวันที่ (แล้วตามเวลาบันทึก) ของรายการที่ไม่ถูกยกเลิก — ระบบเลขให้เอง
+ */
+export function entryActivities(ctx: Ctx, b: { fiscalYear: number }): EntryActivity[] {
+  const u = requireRole(ctx, 'admin', 'minisuper', 'superadmin');
+  const fy = Number(b.fiscalYear);
+  const projects = live(ctx.env.db.list<Project>('Projects'))
+    .filter((p) => Number(p.fiscalYear) === fy && p.status !== 'CANCELLED' && canAccessWorkgroup(u, p.workgroupId));
+  const pids = new Set(projects.map((p) => p.id));
+  const acts = live(ctx.env.db.list<Activity>('Activities')).filter((a) => pids.has(a.projectId) && a.status !== 'CANCELLED');
+  const allocs = live(ctx.env.db.list<Allocation>('Allocations')).filter((x) => pids.has(x.projectId));
+  const disbs = live(ctx.env.db.list<Disbursement>('Disbursements')).filter((x) => pids.has(x.projectId));
+  const shares = activityUnitsOf(ctx);
+  const pao = provinceUnitId(listUnits(ctx));
+  const out: EntryActivity[] = [];
+  const emit = (p: Project, a: Activity | null) => {
+    const aid = a?.id ?? '';
+    const al = allocs.filter((x) => x.projectId === p.id && (x.activityId || '') === aid);
+    const di = disbs.filter((x) => x.projectId === p.id && (x.activityId || '') === aid);
+    const bud = computeBudget(al, di);
+    const live_ = di.filter((x) => x.status !== 'VOID')
+      .sort((x, y) => (x.date === y.date ? x.createdAt.localeCompare(y.createdAt) : x.date.localeCompare(y.date)));
+    const unitShares = a ? shares.filter((s) => s.activityId === a.id) : [];
+    const usedOf = (unitId: string) => live_.filter((x) => (x.unitId || pao) === unitId).reduce((s, x) => s + x.amountSatang, 0);
+    const units = unitShares.length
+      ? unitShares.map((s) => ({ unitId: s.unitId, budget: s.budgetSatang, used: usedOf(s.unitId) }))
+      : [{ unitId: pao, budget: bud.currentBudget, used: usedOf(pao) }];
+    out.push({
+      activityId: aid, projectId: p.id, projectCode: p.projectCode, projectName: p.name, activityName: a?.name ?? 'งบระดับโครงการ',
+      workgroupId: p.workgroupId, budget: bud.currentBudget, disbursed: bud.disbursed, committed: bud.committed, units,
+      history: live_.map((x, i) => ({ id: x.id, no: i + 1, date: x.date, amountSatang: x.amountSatang, docNo: x.docNo, unitId: x.unitId || pao, status: x.status, hasFile: !!x.attachmentId })),
+    });
+  };
+  for (const p of projects) {
+    const pa = acts.filter((a) => a.projectId === p.id);
+    for (const a of pa) emit(p, a);
+    // งบที่ยังไม่แยกกิจกรรม (หรือโครงการที่ไม่มีกิจกรรม)
+    if (!pa.length || allocs.some((x) => x.projectId === p.id && !x.activityId)) emit(p, null);
+  }
   return out;
 }

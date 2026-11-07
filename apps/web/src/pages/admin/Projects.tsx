@@ -22,8 +22,8 @@ export default function ProjectsAdmin({ user }: { user: SessionUser }) {
     <>
       <div className="section-head">
         <div>
-          <h1 style={{ margin: 0 }}>บันทึกการเบิกจ่าย</h1>
-          <p className="small muted" style={{ margin: 0 }}>โครงการ › กิจกรรม › พื้นที่ดำเนินการ — เปิดโครงการเพื่อบันทึกการเบิกจ่ายและผลการดำเนินงาน</p>
+          <h1 style={{ margin: 0 }}>รายโครงการ</h1>
+          <p className="small muted" style={{ margin: 0 }}>โครงการ › กิจกรรม › พื้นที่ดำเนินการ — เปิดโครงการเพื่อดูรายละเอียดและผลการดำเนินงาน (บันทึกการเบิกจ่ายที่เมนู &ldquo;บันทึกผลการเบิกจ่าย&rdquo;)</p>
         </div>
         <div className="btn-row">
           <Link className="btn btn-ghost" to="/admin/plans">แผนและผู้รับผิดชอบ</Link>

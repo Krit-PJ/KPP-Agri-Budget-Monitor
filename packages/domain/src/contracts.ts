@@ -50,6 +50,13 @@ export interface ReportRow {
   planQ?: Satang[];
 }
 export interface ReportData { fiscalYear: number; generatedAt: string; monthIndex: number; rows: ReportRow[] }
+/** หน้า "บันทึกผลการเบิกจ่าย": กิจกรรม + งบ/ยอดใช้รายพื้นที่ + ประวัติ (ครั้งที่ระบบเลขให้ตามวันที่) */
+export interface EntryActivity {
+  activityId: string; projectId: string; projectCode: string; projectName: string; activityName: string; workgroupId: string;
+  budget: Satang; disbursed: Satang; committed: Satang;
+  units: Array<{ unitId: string; budget: Satang; used: Satang }>;
+  history: Array<{ id: string; no: number; date: string; amountSatang: Satang; docNo: string; unitId: string; status: string; hasFile: boolean }>;
+}
 export interface VisitCount { today: number; total: number; since: string }
 export interface AssignResult { assigned: number; skipped: Array<{ id: string; reason: string }> }
 
@@ -210,6 +217,7 @@ export interface Actions {
   'activities.update': [{ id: string; version: number; patch: Partial<Activity> }, Activity];
   'allocations.create': [{ projectId: string; activityId?: string; type: Allocation['type']; amountSatang: number; date?: string; docNo?: string; note?: string; idempotencyKey: string }, Allocation];
   'allocations.void': [{ id: string; reason: string }, { ok: true }];
+  'disbursements.entryList': [{ fiscalYear: number }, EntryActivity[]];
   'disbursements.create': [{ projectId: string; activityId?: string; unitId?: string; status: Disbursement['status']; amountSatang: number; date: string; docNo?: string; description?: string; attachmentId?: string; idempotencyKey: string; overrideReason?: string }, Disbursement];
   'disbursements.setStatus': [{ id: string; version: number; status: 'APPROVED' | 'PAID' }, Disbursement];
   'disbursements.void': [{ id: string; reason: string; replacement?: { amountSatang: number; date: string; docNo?: string; description?: string; status: Disbursement['status'] } }, { voided: Disbursement; replacement: Disbursement | null }];
@@ -273,6 +281,6 @@ export const PUBLIC_ACTIONS: ReadonlySet<ActionName> = new Set<ActionName>([
 /** action ที่อ่านอย่างเดียว — หน้าเว็บ cache ผลและรวมเป็น batch ได้ */
 export const READ_ACTIONS: ReadonlySet<ActionName> = new Set<ActionName>([
   'public.lookups', 'public.summary', 'public.projects', 'public.project', 'public.report', 'auth.me', 'targets.get',
-  'admin.overview', 'projects.list', 'projects.get', 'imports.get', 'imports.list', 'plans.check', 'plans.list', 'plans.get', 'reports.data',
+  'admin.overview', 'projects.list', 'projects.get', 'disbursements.entryList', 'imports.get', 'imports.list', 'plans.check', 'plans.list', 'plans.get', 'reports.data',
   'admin.requests', 'admin.users', 'admin.loginReport', 'admin.audit', 'admin.health',
 ]);

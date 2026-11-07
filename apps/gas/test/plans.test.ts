@@ -373,6 +373,29 @@ describe('เป้าการเบิกจ่าย ตัวนับผู
     expect(ok<{ rows: Array<{ projectId: string }> }>('public.report', { fiscalYear: 2570 }).rows.some((r) => r.projectId === p.id)).toBe(false);
   });
 
+  it('entry list shows my activities with area budgets, used amounts and auto-numbered history', () => {
+    const item = assigned('Smart Group');
+    const lk = ok<{ units: Array<{ id: string; kind: string }> }>('public.lookups', {});
+    const [d1, d2] = lk.units.filter((u) => u.kind === 'DISTRICT').map((u) => u.id);
+    const half = Math.floor(item.amountSatang / 2);
+    ok('activities.setUnits', { activityId: item.activityId, units: [{ unitId: d1, budgetSatang: half, targetQty: Math.round(item.quantity) }, { unitId: d2, budgetSatang: item.amountSatang - half, targetQty: 0 }] }, superToken);
+    const staff = adminFor('0833333333', 'PROD');
+    const mk = (date: string, amt: number, key: string) => ok<{ id: string }>('disbursements.create', { projectId: item.projectId, activityId: item.activityId, unitId: d1, status: 'COMMITTED', amountSatang: amt, date, docNo: `กษ 0001/${key}`, idempotencyKey: key }, staff);
+    mk('2026-11-05', 1000_00, 'k2');
+    const first = mk('2026-10-20', 500_00, 'k1');
+    const list = ok<Array<{ activityId: string; units: Array<{ unitId: string; used: number; budget: number }>; history: Array<{ no: number; date: string }> }>>('disbursements.entryList', { fiscalYear: 2570 }, staff);
+    const e = list.find((x) => x.activityId === item.activityId)!;
+    expect(e.units.find((u) => u.unitId === d1)).toMatchObject({ budget: half, used: 1500_00 });
+    expect(e.history.map((h) => [h.no, h.date])).toEqual([[1, '2026-10-20'], [2, '2026-11-05']]);
+    // ยกเลิกครั้งที่ 1 → ครั้งที่เลื่อนให้เอง
+    ok('disbursements.void', { id: first.id, reason: 'กรอกผิด' }, staff);
+    const again = ok<typeof list>('disbursements.entryList', { fiscalYear: 2570 }, staff).find((x) => x.activityId === item.activityId)!;
+    expect(again.history.map((h) => h.no)).toEqual([1]);
+    // กลุ่มอื่นไม่เห็นกิจกรรมนี้
+    const other = adminFor('0844444444', 'FARMER');
+    expect(ok<typeof list>('disbursements.entryList', { fiscalYear: 2570 }, other).some((x) => x.activityId === item.activityId)).toBe(false);
+  });
+
   it('counts visits once per call with count = true and keeps today/total', () => {
     expect(ok<{ today: number; total: number }>('public.hit', {})).toMatchObject({ today: 0, total: 0 });
     ok('public.hit', { count: true });
