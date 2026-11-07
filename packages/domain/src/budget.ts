@@ -152,26 +152,43 @@ export function planToDate(budget: Satang, planQuarters: string | null | undefin
   return Math.round((budget * monthlyTargetPct(quarterTargets)[month - 1]) / 100);
 }
 
-/* ------------------------- เป้าการเบิกจ่าย (ตั้งค่าได้) ------------------------- */
+/* ------------------------- เป้าหมายการเบิกจ่าย (ตั้งค่าได้) ------------------------- */
 
 /**
- * เป้าการเบิกจ่ายของปีงบประมาณ — ตั้งได้ 2 แบบ
- * - quarter: ร้อยละสะสม ณ สิ้นไตรมาส 1–4 เช่น [30, 55, 80, 100]
- * - deadline: ต้องเบิกให้ถึง pct% ภายในสิ้นเดือน month (1 = ต.ค. … 12 = ก.ย.) เพิ่มขึ้นเท่า ๆ กันทุกเดือน
+ * เป้าหมายการเบิกจ่ายของปีงบประมาณ (ร้อยละสะสม เป้าทั้งปี = 100%) — ตั้งได้ 2 แบบ
+ * - quarter: ร้อยละสะสม ณ สิ้นไตรมาส 1–4 เช่น [30, 55, 80, 100] (ไตรมาส 4 ต้องเป็น 100)
+ * - monthly: ร้อยละสะสม ณ สิ้นแต่ละเดือน 12 ค่า (ต.ค. … ก.ย.) ต้องไม่ลดลง และต้องถึง 100 ภายใน ก.ย.
+ *   เดือนแรกที่ถึง 100 = เดือนที่ต้องเบิกครบ; เดือนหลังจากนั้นเป็น 100 เสมอ
+ * ข้อมูลเก่าแบบ deadline (ถึง pct% ภายในเดือน month) แปลงเป็น monthly อัตโนมัติ
  */
-export interface SpendTarget { mode: 'quarter' | 'deadline'; quarters: number[]; month: number; pct: number }
+export interface SpendTarget { mode: 'quarter' | 'monthly'; quarters: number[]; months: number[] }
+
+const r2 = (v: number) => Math.round(v * 100) / 100;
+
+/** เติมเป้ารายเดือนเท่า ๆ กันจาก ต.ค. ให้ถึง 100% ภายในเดือน fullMonth (1 = ต.ค. … 12 = ก.ย.) */
+export function linearMonths(fullMonth: number): number[] {
+  const f = Math.min(12, Math.max(1, Math.round(fullMonth)));
+  return Array.from({ length: 12 }, (_, i) => (i + 1 >= f ? 100 : Math.round(((i + 1) * 100) / f)));
+}
 
 export function parseSpendTarget(json: string | null | undefined, fallbackQuarters = DEFAULT_QUARTER_TARGETS): SpendTarget {
-  const base: SpendTarget = { mode: 'quarter', quarters: [...parseQuarterTargets(fallbackQuarters)], month: 12, pct: 100 };
+  const fq = [...parseQuarterTargets(fallbackQuarters)];
+  if (fq[3] !== 100) fq[3] = 100;
+  const base: SpendTarget = { mode: 'quarter', quarters: fq, months: [] };
   if (!json) return base;
   try {
-    const t = JSON.parse(json) as Partial<SpendTarget>;
-    const out: SpendTarget = {
-      mode: t.mode === 'deadline' ? 'deadline' : 'quarter',
-      quarters: Array.isArray(t.quarters) ? t.quarters.map(Number) : base.quarters,
-      month: Number(t.month) || 12,
-      pct: Number(t.pct) || 100,
-    };
+    const t = JSON.parse(json) as { mode?: string; quarters?: unknown[]; months?: unknown[]; month?: number; pct?: number };
+    let out: SpendTarget;
+    if (t.mode === 'deadline') {
+      // รูปแบบเดิม: ถึง pct% ภายในเดือน month → เส้นตรงรายเดือน (เป้าทั้งปีคือ 100%)
+      const m = Math.min(12, Math.max(1, Number(t.month) || 12));
+      const pct = Math.min(100, Math.max(1, Number(t.pct) || 100));
+      out = { mode: 'monthly', quarters: [], months: Array.from({ length: 12 }, (_, i) => (i + 1 <= m ? Math.round((pct * (i + 1)) / m) : Math.round(pct + ((100 - pct) * (i + 1 - m)) / (12 - m)))) };
+    } else if (t.mode === 'monthly') {
+      out = { mode: 'monthly', quarters: [], months: Array.isArray(t.months) ? t.months.map(Number) : [] };
+    } else {
+      out = { mode: 'quarter', quarters: Array.isArray(t.quarters) ? t.quarters.map(Number) : fq, months: [] };
+    }
     return validateSpendTarget(out) ? base : out;
   } catch {
     return base;
@@ -180,27 +197,32 @@ export function parseSpendTarget(json: string | null | undefined, fallbackQuarte
 
 /** คืนข้อความผิดพลาด หรือ null ถ้าถูกต้อง */
 export function validateSpendTarget(t: SpendTarget): string | null {
-  if (t.mode === 'quarter') {
-    const q = t.quarters;
-    if (!Array.isArray(q) || q.length !== 4 || q.some((v) => !Number.isFinite(v) || v < 0 || v > 100)) return 'เป้ารายไตรมาสต้องมี 4 ค่า ค่าละ 0–100';
-    for (let i = 1; i < 4; i++) if (q[i] < q[i - 1]) return `เป้าไตรมาส ${i + 1} ต้องไม่น้อยกว่าไตรมาส ${i} (เป็นร้อยละสะสม)`;
+  const check = (v: number[], n: number, name: (i: number) => string): string | null => {
+    if (!Array.isArray(v) || v.length !== n || v.some((x) => !Number.isFinite(x))) return `ต้องกรอกเป้าให้ครบ ${n} ช่อง`;
+    for (let i = 0; i < n; i++) {
+      if (v[i] < 0 || v[i] > 100) return `เป้า${name(i)} ต้องอยู่ระหว่าง 0–100%`;
+      if (i > 0 && v[i] < v[i - 1]) return `เป้า${name(i)} ต้องไม่น้อยกว่า${name(i - 1)} (เป็นร้อยละสะสม)`;
+    }
+    if (v[n - 1] !== 100) return `เป้าทั้งปีคือ 100% — ${name(n - 1)}ต้องเป็น 100%`;
     return null;
-  }
-  if (!Number.isInteger(t.month) || t.month < 1 || t.month > 12) return 'เดือนที่ต้องเบิกให้ครบไม่ถูกต้อง';
-  if (!Number.isFinite(t.pct) || t.pct <= 0 || t.pct > 100) return 'ร้อยละที่ต้องเบิกต้องอยู่ระหว่าง 1–100';
-  return null;
+  };
+  if (t.mode === 'monthly') return check(t.months, 12, (i) => `เดือน${FISCAL_MONTH_NAMES[i]}`);
+  return check(t.quarters, 4, (i) => `ไตรมาส ${i + 1}`);
 }
 
-const r2 = (v: number) => Math.round(v * 100) / 100;
+/** ชื่อเดือนของปีงบ (1 = ต.ค.) */
+export const FISCAL_MONTH_NAMES = ['ต.ค.', 'พ.ย.', 'ธ.ค.', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.'];
 
 /** ร้อยละสะสมรายเดือน 12 ค่า (ต.ค. … ก.ย.) จากเป้าของปี */
 export function targetCurve(t: SpendTarget): number[] {
-  if (t.mode === 'quarter') return monthlyTargetPct(t.quarters.join(','));
-  const out: number[] = [];
-  for (let m = 1; m <= 12; m++) {
-    out.push(r2(m <= t.month ? (t.pct * m) / t.month : t.pct + ((100 - t.pct) * (m - t.month)) / (12 - t.month)));
-  }
-  return out;
+  if (t.mode === 'monthly') return t.months.map(r2);
+  return monthlyTargetPct(t.quarters.join(','));
+}
+
+/** เดือนแรกที่เป้าถึง 100% (1–12) = เดือนที่ต้องเบิกครบ */
+export function fullMonthOf(curve: number[]): number {
+  const i = curve.findIndex((v) => v >= 100);
+  return i < 0 ? 12 : i + 1;
 }
 
 /** ร้อยละสะสมรายเดือนของกิจกรรมที่ต้องเบิกครบ 100% ภายในเดือน dueMonth */
@@ -209,8 +231,8 @@ export function dueCurve(dueMonth: number): number[] {
 }
 
 /**
- * เดือนที่กิจกรรมต้องเบิกครบ: ค่าที่ตั้งไว้ (1–12) > อบรม/ประชุม/สัมมนา = มิ.ย. (มาตรการเร่งรัดฯ) > 0 = ตามเป้าของปี
- * dueMonth = -1 คือเลือก "ตามเป้าของปี" โดยตั้งใจ (ใช้ยกเว้นกิจกรรมประเภทอบรม)
+ * กำหนดเบิกครบของกิจกรรม (ใช้เตือน ไม่เปลี่ยนเป้าบนแถบ): ค่าที่ตั้งไว้ (1–12) > อบรม/ประชุม/สัมมนา = มิ.ย. (มาตรการเร่งรัดฯ) > 0 = ไม่มีกำหนดเฉพาะ
+ * dueMonth = -1 คือเลือก "ไม่มีกำหนดเฉพาะ" โดยตั้งใจ (ใช้ยกเว้นกิจกรรมประเภทอบรม)
  */
 export function effectiveDueMonth(a: { name: string; dueMonth?: number | string | null }): number {
   const d = Number(a.dueMonth) || 0;

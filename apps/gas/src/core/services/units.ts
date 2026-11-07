@@ -2,10 +2,10 @@
  * หน่วยดำเนินการ (ADR-006): สำนักงานเกษตรจังหวัด + สำนักงานเกษตรอำเภอ 11 อำเภอ
  * - กิจกรรมแบ่งงบ/เป้าให้หน่วยได้ (ActivityUnits) ผลรวมงบต้องเท่างบกิจกรรม
  * - งบที่ไม่ได้แบ่ง และรายการเบิกจ่ายที่ไม่ระบุหน่วย นับเป็นของสำนักงานเกษตรจังหวัด
- * - แผนการเบิกจ่าย ณ เดือนใด ๆ: เดือนที่ต้องเบิกครบของกิจกรรม > แผนรายไตรมาสของกิจกรรม > อบรม/ประชุม (มิ.ย.) > เป้าของปีงบ
+ * - แผนการเบิกจ่าย ณ เดือนใด ๆ: เป้าหมายการเบิกจ่ายของปีงบ (ADR-007 ฉบับแก้ไข 7 พ.ย.)
  */
 import {
-  AppError, MEETING_RE, areaName, computeBudget, effectiveDueMonth, parsePlanQuarters, pct, planAt, planToDate, splitEqual, splitMoney,
+  AppError, MEETING_RE, areaName, computeBudget, pct, planAt, splitEqual, splitMoney,
   type Activity, type ActivityUnit, type Allocation, type BudgetSummary, type Disbursement, type PlanActivityState,
   type Project, type ReportRow, type Satang, type Unit, type UnitShareInput,
 } from '@kpp/domain';
@@ -39,15 +39,15 @@ export function activityState(ctx: Ctx, a: Activity, allocs?: Allocation[], disb
   };
 }
 
-/** แผนการเบิกจ่ายสะสม ณ สิ้นเดือน m ของกิจกรรม (null = งบระดับโครงการ ใช้เป้าของปี) */
-export function activityPlan(budget: Satang, a: Pick<Activity, 'name' | 'planQuarters' | 'dueMonth'> | null, curve: number[], m: number): Satang {
-  const d = Number(a?.dueMonth) || 0;
-  if (d >= 1 && d <= 12) return planAt(budget, curve, d, m);
-  if (a && parsePlanQuarters(a.planQuarters)) return planToDate(budget, a.planQuarters, '', m);
-  return planAt(budget, curve, a ? effectiveDueMonth(a) : 0, m);
+/**
+ * แผนการเบิกจ่ายสะสม ณ สิ้นเดือน m = งบ × เป้าหมายการเบิกจ่ายของปี (ตามที่ตั้งค่าไว้เท่านั้น)
+ * กำหนดเบิกครบรายกิจกรรม (dueMonth / อบรม = มิ.ย.) ใช้เตือน ไม่เปลี่ยนเป้าบนแถบ — ตัวเลขทุกจุดจึงตรงกับเป้าที่ตั้ง
+ */
+export function activityPlan(budget: Satang, _a: Pick<Activity, 'name' | 'planQuarters' | 'dueMonth'> | null, curve: number[], m: number): Satang {
+  return planAt(budget, curve, 0, m);
 }
 
-/** กำหนดเดือนที่กิจกรรมต้องเบิกครบ 100%: 1–12, 0 = ค่าเริ่มต้น (อบรม/ประชุม = มิ.ย.), -1 = ตามเป้าของปี */
+/** กำหนดเบิกครบของกิจกรรม (ใช้เตือน): 1–12, 0 = ค่าเริ่มต้น (อบรม/ประชุม = มิ.ย.), -1 = ไม่มีกำหนดเฉพาะ */
 export function setActivityDue(ctx: Ctx, b: { activityId: string; dueMonth: number }): PlanActivityState {
   const a = findById<Activity>(ctx, 'Activities', String(b.activityId), 'กิจกรรม');
   const p = findById<Project>(ctx, 'Projects', a.projectId, 'โครงการ');

@@ -3,7 +3,7 @@
  * cache ด้วย dataVersion และบันทึก snapshot ลง REPORTING
  */
 import {
-  AppError, MEETING_RE, addSummaries, areaName, computeBudget, currentFiscalYear, fiscalMonthIndex, monthlyCumulative, pct, riskFlags,
+  AppError, MEETING_RE, addSummaries, areaName, computeBudget, currentFiscalYear, fiscalMonthIndex, fullMonthOf, monthlyCumulative, pct, riskFlags,
   type Activity, type BudgetSummary, type FundingSource, type GroupTotal, type ImportJob, type Lookups, type Organization,
   type PlanItem, type Project, type PublicProject, type PublicSummary, type ReportData, type ReportRow, type VisitCount, type Workgroup,
 } from '@kpp/domain';
@@ -173,7 +173,9 @@ export function buildSummary(ctx: Ctx, fy: number, onlyPublished: boolean): Publ
     })(),
     byPlan: group(planKey, (k) => k),
     targets: {
-      annualPct: Math.min(100, Math.max(0, Number(settings.annualTargetPct) || 98)),
+      // เป้าทั้งปี = 100% ภายในเดือนแรกที่เป้าหมายรายเดือนถึง 100
+      annualPct: 100,
+      fullMonth: fullMonthOf(curve),
       meetingDeadline: `${fy - 543}-06-30`,
       spend: spendTargetFor(ctx, fy),
     },

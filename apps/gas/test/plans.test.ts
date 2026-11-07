@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { fiscalMonthIndex, normalizePlanTable, planToDate, readXlsx, todayBangkok, type ApiEnvelope, type AssignResult, type AuditLog, type Lookups, type PlanCheck, type PlanDetail, type PlanDoc, type PlanDocSummary, type PlanPreview, type ProjectDetail, type ProjectListItem } from '@kpp/domain';
+import { fiscalMonthIndex, normalizePlanTable, readXlsx, todayBangkok, type ApiEnvelope, type AssignResult, type AuditLog, type Lookups, type PlanCheck, type PlanDetail, type PlanDoc, type PlanDocSummary, type PlanPreview, type ProjectDetail, type ProjectListItem } from '@kpp/domain';
 import { createMemoryEnv, type MemoryEnv } from '../src/memory';
 import { handle } from '../src/core/router';
 import { setSuperAdmin } from '../src/core/auth';
@@ -235,20 +235,21 @@ describe('หน่วยดำเนินการ (ADR-006)', () => {
     const prod = sum.byWorkgroup.find((g) => g.key === wg('PROD'))!;
     expect(prod.units.map((u) => u.key)).toEqual(ids);
     expect(prod.units[1].budget).toMatchObject({ currentBudget: share[1], disbursed: 1_000_00 });
-    // แผนไตรมาส 1 = เต็มงบ: แผน ณ เดือนนี้ไล่ขึ้นทีละ 1/3 ในไตรมาส (ปัดเศษรายหน่วยได้ ±1 สตางค์ต่อหน่วย)
+    // แผน ณ เดือนนี้ = งบ × เป้าหมายการเบิกจ่ายของปี (พ.ย. = 20% ตามค่าเริ่มต้น 30/55/80/100) — แผนรายไตรมาสของกิจกรรมไม่เปลี่ยนเป้าบนแถบ
     const m = fiscalMonthIndex(todayBangkok(env.now()));
-    expect(Math.abs(prod.plan - planToDate(item.amountSatang, `${item.amountSatang},0,0,0`, '', m))).toBeLessThanOrEqual(3);
+    expect(m).toBe(2);
+    expect(Math.abs(prod.plan - Math.round(item.amountSatang * 0.2))).toBeLessThanOrEqual(3);
     expect(sum.activitiesWithoutUnits).toBe(0);
-    // แผนสะสมรายไตรมาส: ไตรมาส 1 = เต็มงบ (ปัดเศษรายหน่วย ±1 สตางค์)
+    // แผนสะสมรายไตรมาส = เป้าของปี 30/55/80/100 (ปัดเศษรายหน่วย ±1 สตางค์)
     const pq = (prod as unknown as { planQ: number[] }).planQ;
     expect(pq).toHaveLength(4);
-    for (const v of pq) expect(Math.abs(v - item.amountSatang)).toBeLessThanOrEqual(3);
+    [30, 55, 80, 100].forEach((p, i) => expect(Math.abs(pq[i] - (item.amountSatang * p) / 100)).toBeLessThanOrEqual(3));
     // อำเภอ → กลุ่มงาน
     const byUnit = (sum as unknown as { byUnit: Array<{ key: string; planQ: number[]; groups: Array<{ key: string; budget: { currentBudget: number } }> }> }).byUnit;
     const u1 = byUnit.find((u) => u.key === ids[1])!;
     expect(u1.groups.map((g) => g.key)).toEqual([wg('PROD')]);
     expect(u1.groups[0].budget.currentBudget).toBe(share[1]);
-    expect(u1.planQ[0]).toBe(share[1]);
+    expect(u1.planQ[0]).toBe(Math.round(share[1] * 0.3));
     // รายงาน: 1 แถวต่อ กิจกรรม × หน่วย
     const rep = ok<{ rows: Array<{ unitId: string; budget: number; disbursed: number }> }>('reports.data', { fiscalYear: 2570 }, superToken);
     expect(rep.rows.map((r) => r.unitId)).toEqual(ids);
@@ -330,36 +331,33 @@ describe('เป้าการเบิกจ่าย ตัวนับผู
   }
   type Sum = { monthly: { targetPct: number[] }; targets: { spend: { mode: string } }; byWorkgroup: Array<{ key: string; plan: number; planQ: number[] }> };
 
-  it('fiscal-year target drives the monthly curve, and only Mini Super / Super Admin can change it', () => {
+  it('the yearly target (quarterly or 12 free monthly values, ending at 100%) is exactly what every bar shows', () => {
     const t0 = ok<{ curve: number[] }>('targets.get', { fiscalYear: 2570 }, superToken);
     expect([t0.curve[2], t0.curve[11]]).toEqual([30, 100]);
+    const months = [5, 12, 30, 35, 40, 55, 60, 70, 85, 95, 100, 100];
     const staff = adminFor('0811111111', 'PROD');
-    expect(call('targets.save', { fiscalYear: 2570, target: { mode: 'deadline', month: 11, pct: 100, quarters: [] } }, staff).error?.code).toBe('FORBIDDEN_SCOPE');
-    expect(call('targets.save', { fiscalYear: 2570, target: { mode: 'quarter', quarters: [40, 30, 80, 100], month: 12, pct: 100 } }, superToken).error?.message).toContain('ต้องไม่น้อยกว่า');
-    const saved = ok<{ curve: number[] }>('targets.save', { fiscalYear: 2570, target: { mode: 'deadline', month: 11, pct: 100, quarters: [] } }, superToken);
-    expect(saved.curve[10]).toBe(100); // สิ้น ส.ค.
-    expect(saved.curve[0]).toBeCloseTo(9.09, 1);
-    assigned('Smart Group');
-    const sum = ok<Sum>('public.summary', { fiscalYear: 2570 });
-    expect(sum.targets.spend.mode).toBe('deadline');
-    expect(sum.monthly.targetPct[10]).toBe(100);
+    expect(call('targets.save', { fiscalYear: 2570, target: { mode: 'monthly', months, quarters: [] } }, staff).error?.code).toBe('FORBIDDEN_SCOPE');
+    expect(call('targets.save', { fiscalYear: 2570, target: { mode: 'quarter', quarters: [40, 30, 80, 100], months: [] } }, superToken).error?.message).toContain('ต้องไม่น้อยกว่า');
+    expect(call('targets.save', { fiscalYear: 2570, target: { mode: 'monthly', months: [...months.slice(0, 10), 96, 99], quarters: [] } }, superToken).error?.message).toContain('100%');
+    const saved = ok<{ curve: number[] }>('targets.save', { fiscalYear: 2570, target: { mode: 'monthly', months, quarters: [] } }, superToken);
+    expect(saved.curve).toEqual(months);
+    const item = assigned('Smart Group'); // กิจกรรมอบรม — เดิมถูกดึงเป็น มิ.ย. ตอนนี้ใช้เป้าที่ตั้งเท่านั้น
+    const sum = ok<Sum & { targets: { fullMonth: number; annualPct: number } }>('public.summary', { fiscalYear: 2570 });
+    expect(sum.targets.spend.mode).toBe('monthly');
+    expect(sum.targets).toMatchObject({ fullMonth: 11, annualPct: 100 });
+    expect(sum.monthly.targetPct).toEqual(months);
+    const g = sum.byWorkgroup.find((x) => x.key === wg('PROD'))!;
+    expect(g.plan).toBe(Math.round(item.amountSatang * 0.12)); // พ.ย. = 12%
+    expect(g.planQ).toEqual([30, 55, 85, 100].map((p) => Math.round((item.amountSatang * p) / 100)));
   });
 
-  it('an activity due month overrides the yearly target; training activities default to June', () => {
+  it('an activity due month is stored as a reminder and does not change the plan on the bars', () => {
     const item = assigned('Smart Group');
-    const before = ok<Sum>('public.summary', { fiscalYear: 2570 }).byWorkgroup.find((g) => g.key === wg('PROD'))!;
-    // ปีนี้: พ.ย. = เดือนที่ 2; กิจกรรมนี้เป็นการอบรม/ประชุม → ต้องครบภายใน มิ.ย. (เดือนที่ 9) → 2/9
-    expect(item.name).toMatch(/อบรม|ประชุม|สัมมนา|ถ่ายทอดความรู้|เวที|ศึกษาดูงาน|Workshop|Field Day/i);
-    expect(Math.abs(before.plan - (item.amountSatang * 2) / 9)).toBeLessThanOrEqual(item.amountSatang / 10_000 + 1);
-    // เลือก "ตามเป้าของปี" (-1) → 20%
-    ok('activities.setDue', { activityId: item.activityId, dueMonth: -1 }, superToken);
-    expect(ok<Sum>('public.summary', { fiscalYear: 2570 }).byWorkgroup.find((g) => g.key === wg('PROD'))!.plan).toBe(Math.round(item.amountSatang * 0.2));
-    // ต้องเบิกครบภายใน ธ.ค. (เดือนที่ 3) → 2/3
+    const planNow = () => ok<Sum>('public.summary', { fiscalYear: 2570 }).byWorkgroup.find((g) => g.key === wg('PROD'))!.plan;
+    expect(planNow()).toBe(Math.round(item.amountSatang * 0.2)); // เป้าเริ่มต้น พ.ย. = 20%
     const st = ok<{ dueMonth: number }>('activities.setDue', { activityId: item.activityId, dueMonth: 3 }, superToken);
     expect(st.dueMonth).toBe(3);
-    const after = ok<Sum>('public.summary', { fiscalYear: 2570 }).byWorkgroup.find((g) => g.key === wg('PROD'))!;
-    expect(Math.abs(after.plan - (item.amountSatang * 2) / 3)).toBeLessThanOrEqual(item.amountSatang / 10_000 + 1);
-    expect(after.planQ[0]).toBe(item.amountSatang);
+    expect(planNow()).toBe(Math.round(item.amountSatang * 0.2));
     expect(call('activities.setDue', { activityId: item.activityId, dueMonth: 13 }, superToken).ok).toBe(false);
     const other = adminFor('0822222222', 'FARMER');
     expect(call('activities.setDue', { activityId: item.activityId, dueMonth: 6 }, other).error?.code).toBe('FORBIDDEN_SCOPE');

@@ -21,14 +21,11 @@ export function saveTargets(ctx: Ctx, b: { fiscalYear: number; target: SpendTarg
   requireRole(ctx, 'minisuper', 'superadmin');
   const fy = fyOf(b.fiscalYear);
   const t = b.target ?? ({} as SpendTarget);
-  const clean: SpendTarget = {
-    mode: t.mode === 'deadline' ? 'deadline' : 'quarter',
-    quarters: Array.isArray(t.quarters) ? t.quarters.slice(0, 4).map(Number) : [],
-    month: Number(t.month),
-    pct: Number(t.pct),
-  };
-  if (clean.mode === 'quarter') { clean.month = 12; clean.pct = 100; } else clean.quarters = [];
-  const err = validateSpendTarget(clean.mode === 'deadline' ? { ...clean, quarters: [0, 0, 0, 0] } : clean);
+  const nums = (v: unknown, n: number) => (Array.isArray(v) ? v.slice(0, n).map((x) => Math.round(Number(x) * 100) / 100) : []);
+  const clean: SpendTarget = t.mode === 'monthly'
+    ? { mode: 'monthly', quarters: [], months: nums(t.months, 12) }
+    : { mode: 'quarter', quarters: nums(t.quarters, 4), months: [] };
+  const err = validateSpendTarget(clean);
   if (err) throw new AppError('VALIDATION_FAILED', err);
   const before = spendTargetFor(ctx, fy);
   setSetting(ctx, `spendTarget:${fy}`, JSON.stringify(clean));

@@ -29,6 +29,14 @@ function daysUntil(iso: string): number {
   return Math.round((Date.parse(iso) - Date.parse(todayBangkok())) / 86400_000);
 }
 
+/** วันสุดท้ายของเดือนที่ m ในปีงบ fy (1 = ต.ค.) เป็น YYYY-MM-DD */
+function fullMonthEnd(fy: number, m: number): string {
+  const ce = fy - 543 - (m <= 3 ? 1 : 0);
+  const month = ((m + 8) % 12) + 1; // 1 → 10 (ต.ค.)
+  const last = new Date(Date.UTC(ce, month, 0)).getUTCDate();
+  return `${ce}-${String(month).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
+}
+
 const pct1 = (v: number) => v.toLocaleString('th-TH', { maximumFractionDigits: 1 });
 
 /** 3 เรื่องที่ต้องรู้: ทันแผนเดือนนี้หรือไม่ / เป้าทั้งปี / กำหนดอบรม-ประชุม (มาตรการเร่งรัดฯ) */
@@ -38,7 +46,11 @@ function KeyFacts({ d, fy, target, m }: { d: PublicSummary; fy: number; target: 
   const daysToEnd = daysUntil(end);
   const daysToMeet = daysUntil(d.targets.meetingDeadline);
   const needNow = Math.max(0, Math.round((target / 100) * t.currentBudget) - t.disbursed);
-  const needYear = Math.max(0, Math.round((d.targets.annualPct / 100) * t.currentBudget) - t.disbursed);
+  const needYear = Math.max(0, t.currentBudget - t.disbursed);
+  // เป้าทั้งปี 100% ภายในเดือนที่ตั้งในหน้าเป้าหมายการเบิกจ่าย (เดือนแรกที่เป้าสะสมถึง 100%)
+  const full = d.targets.fullMonth ?? 12;
+  const fullEnd = fullMonthEnd(fy, full);
+  const daysToFull = daysUntil(fullEnd);
   const gap = t.spendingPct - target;
   return (
     <div className="facts">
@@ -52,9 +64,9 @@ function KeyFacts({ d, fy, target, m }: { d: PublicSummary; fy: number; target: 
         ) : <span className="fact-n">ยังไม่ถึงช่วงเบิกจ่ายตามแผน</span>}
       </div>
       <div className="fact">
-        <span className="fact-l">เป้าทั้งปี {d.targets.annualPct}% ภายใน {formatThaiDate(end)}</span>
+        <span className="fact-l">เป้าทั้งปี 100% ภายใน {formatThaiDate(fullEnd)}</span>
         <span className="fact-v num">{needYear > 0 ? <>เหลือ <Baht v={needYear} short /> บาท</> : 'ถึงเป้าแล้ว'}</span>
-        <span className="fact-n">{daysToEnd >= 0 ? `อีก ${daysToEnd.toLocaleString('th-TH')} วัน` : 'สิ้นปีงบประมาณแล้ว'}</span>
+        <span className="fact-n">{daysToFull >= 0 ? `อีก ${daysToFull.toLocaleString('th-TH')} วัน` : daysToEnd >= 0 ? 'เลยกำหนดเบิกครบแล้ว' : 'สิ้นปีงบประมาณแล้ว'}</span>
       </div>
       <div className={`fact ${d.meetings.remaining > 0 && daysToMeet >= 0 && daysToMeet <= 60 ? 'is-behind' : ''}`}>
         <span className="fact-l">อบรม/ประชุม/สัมมนา ต้องเสร็จภายใน {formatThaiDate(d.targets.meetingDeadline)}</span>

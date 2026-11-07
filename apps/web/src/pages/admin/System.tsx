@@ -41,8 +41,7 @@ function Settings() {
             <span>นำเข้าไฟล์จากโฟลเดอร์ Inbox อัตโนมัติ เมื่อไฟล์ไม่มีแถวผิดพลาดหรือต้องตรวจเลย<br /><span className="hint">ไฟล์ที่มีปัญหายังต้องให้เจ้าหน้าที่ยืนยันเสมอ</span></span>
           </label>
           <div className="form-grid" style={{ marginTop: 'var(--s4)' }}>
-            <label className="field"><span>เป้ารายไตรมาสเริ่มต้น (%) — ใช้เมื่อยังไม่ได้ตั้งในเมนู "เป้าการเบิกจ่าย"</span><input value={f.defaultQuarterTargets} onChange={(e) => setF({ ...f, defaultQuarterTargets: e.target.value })} /></label>
-            <label className="field"><span>เป้าเบิกจ่ายทั้งปี (%) ตามมาตรการเร่งรัดฯ</span><input type="number" min={1} max={100} value={f.annualTargetPct ?? '98'} onChange={(e) => setF({ ...f, annualTargetPct: e.target.value })} /></label>
+            <label className="field"><span>เป้ารายไตรมาสเริ่มต้น (%) — ใช้เมื่อยังไม่ได้ตั้งในเมนู "เป้าหมายการเบิกจ่าย"</span><input value={f.defaultQuarterTargets} onChange={(e) => setF({ ...f, defaultQuarterTargets: e.target.value })} /></label>
             <label className="field"><span>ขนาดไฟล์สูงสุด (MB)</span><input type="number" min={1} max={25} value={f.maxUploadMB} onChange={(e) => setF({ ...f, maxUploadMB: e.target.value })} /></label>
             <label className="field"><span>เก็บสำเนาสำรอง (วัน)</span><input type="number" min={7} max={365} value={f.backupRetentionDays} onChange={(e) => setF({ ...f, backupRetentionDays: e.target.value })} /></label>
             <label className="field wide"><span>ข้อความแจ้งบนหน้าสาธารณะ</span><textarea value={f.publicNotice} onChange={(e) => setF({ ...f, publicNotice: e.target.value })} /></label>

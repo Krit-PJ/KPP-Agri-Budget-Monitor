@@ -128,7 +128,8 @@ export interface PublicSummary {
    * annualPct = เป้าเบิกจ่ายทั้งปี (รายจ่ายประจำ ≥ 98% ตามมติ ครม. 29 ก.ย. 2569)
    * meetingDeadline = วันสุดท้ายของไตรมาส 3 ที่ค่าใช้จ่ายฝึกอบรม/ประชุม/สัมมนาต้องดำเนินการให้เสร็จ
    */
-  targets: { annualPct: number; meetingDeadline: string; spend?: SpendTarget };
+  /** fullMonth = เดือนที่ต้องเบิกครบ 100% (1 = ต.ค. … 12 = ก.ย.) จากเป้าหมายการเบิกจ่ายที่ตั้งไว้ */
+  targets: { annualPct: number; meetingDeadline: string; spend?: SpendTarget; fullMonth?: number };
   /** กิจกรรมประเภทอบรม/ประชุม/สัมมนา/เวที ที่ยังมีงบเหลือ (ต้องเสร็จภายในไตรมาส 3) */
   meetings: { activities: number; remaining: number; budget: number };
   risks: Array<{ projectId: string; name: string; flags: RiskFlag[] }>;

@@ -26,21 +26,27 @@ describe('แผนรายไตรมาสและการแบ่งง�
 });
 
 describe('spend targets', () => {
-  it('builds a monthly curve from quarters or from a deadline month', async () => {
-    const { targetCurve, dueCurve, effectiveDueMonth, parseSpendTarget, validateSpendTarget, planAt } = await import('../src/budget');
-    expect(targetCurve({ mode: 'quarter', quarters: [30, 55, 80, 100], month: 12, pct: 100 }).filter((_, i) => i % 3 === 2)).toEqual([30, 55, 80, 100]);
-    const d = targetCurve({ mode: 'deadline', quarters: [], month: 11, pct: 100 });
-    expect(d[10]).toBe(100);
-    expect(d[11]).toBe(100);
-    const p = targetCurve({ mode: 'deadline', quarters: [], month: 6, pct: 80 });
-    expect([p[5], p[11]]).toEqual([80, 100]);
+  it('builds the monthly curve from quarters or 12 free monthly values; the year ends at 100%', async () => {
+    const { targetCurve, dueCurve, effectiveDueMonth, parseSpendTarget, validateSpendTarget, planAt, linearMonths, fullMonthOf } = await import('../src/budget');
+    expect(targetCurve({ mode: 'quarter', quarters: [30, 55, 80, 100], months: [] }).filter((_, i) => i % 3 === 2)).toEqual([30, 55, 80, 100]);
+    const m = linearMonths(11);
+    expect(m.slice(9)).toEqual([91, 100, 100]);
+    expect(fullMonthOf(m)).toBe(11);
+    const free = [5, 12, 30, 35, 40, 55, 60, 70, 85, 95, 100, 100];
+    expect(targetCurve({ mode: 'monthly', quarters: [], months: free })).toEqual(free);
+    expect(validateSpendTarget({ mode: 'monthly', quarters: [], months: free })).toBeNull();
+    expect(validateSpendTarget({ mode: 'monthly', quarters: [], months: [...free.slice(0, 10), 96, 99] })).toContain('100%');
+    expect(validateSpendTarget({ mode: 'monthly', quarters: [], months: [5, 4, ...free.slice(2)] })).toContain('ต้องไม่น้อยกว่า');
+    expect(validateSpendTarget({ mode: 'quarter', quarters: [30, 55, 80, 98], months: [] })).toContain('100%');
+    // รูปแบบเดิม deadline → รายเดือน
+    const legacy = parseSpendTarget(JSON.stringify({ mode: 'deadline', month: 11, pct: 100 }));
+    expect(legacy.mode).toBe('monthly');
+    expect(legacy.months[10]).toBe(100);
+    expect(parseSpendTarget('not json', '25,50,75,100').quarters).toEqual([25, 50, 75, 100]);
     expect(dueCurve(3)).toEqual([33.33, 66.67, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100]);
     expect(effectiveDueMonth({ name: 'ประชุมคณะกรรมการ' })).toBe(9);
     expect(effectiveDueMonth({ name: 'ประชุมคณะกรรมการ', dueMonth: -1 })).toBe(0);
-    expect(effectiveDueMonth({ name: 'จัดซื้อวัสดุ', dueMonth: 5 })).toBe(5);
-    expect(validateSpendTarget({ mode: 'quarter', quarters: [30, 20, 80, 100], month: 12, pct: 100 })).toContain('ไตรมาส 2');
-    expect(parseSpendTarget('not json', '25,50,75,100').quarters).toEqual([25, 50, 75, 100]);
-    expect(planAt(1000, d, 0, 0)).toBe(0);
-    expect(planAt(1200, dueCurve(3), 3, 1)).toBe(400);
+    expect(planAt(1000, m, 0, 0)).toBe(0);
+    expect(planAt(1000, free, 0, 3)).toBe(300);
   });
 });

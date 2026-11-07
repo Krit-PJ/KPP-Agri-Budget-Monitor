@@ -19,7 +19,7 @@ function Tracking({ d, fy }: { d: PublicSummary; fy: number }) {
       <div className="grid grid-2 section">
         <section className="panel" aria-labelledby="plan">
           <h2 id="plan">เบิกจ่ายสะสมเทียบแผน</h2>
-          <PlanVsActual cumulative={d.monthly.disbursedCumulative} targetPct={d.monthly.targetPct} budget={d.totals.currentBudget} upToMonth={m} annualPct={d.targets.annualPct} markMonth={8} />
+          <PlanVsActual cumulative={d.monthly.disbursedCumulative} targetPct={d.monthly.targetPct} budget={d.totals.currentBudget} upToMonth={m} annualPct={100} markMonth={8} />
         </section>
         <section className="panel" aria-labelledby="risk">
           <h2 id="risk">โครงการที่ต้องติดตาม</h2>

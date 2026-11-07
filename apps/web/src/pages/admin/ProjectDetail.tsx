@@ -87,7 +87,7 @@ function OverviewTab({ d, reload }: { d: Detail; reload: () => void }) {
             <dt>กลุ่มงาน</dt><dd>{n.group(d.project.workgroupId)}</dd>
             <dt>ผู้รับผิดชอบ</dt><dd>{d.project.ownerName || '–'}</dd>
             <dt>ระยะเวลา</dt><dd>{formatThaiDate(d.project.startDate)} ถึง {formatThaiDate(d.project.endDate)}</dd>
-            <dt>เป้าหมายการเบิกจ่าย</dt><dd>ตามเป้าของปีงบประมาณ (เมนู &ldquo;เป้าการเบิกจ่าย&rdquo;) หรือเดือนที่ต้องเบิกครบของแต่ละกิจกรรม</dd>
+            <dt>เป้าหมายการเบิกจ่าย</dt><dd>ตามเป้าของปีงบประมาณ (เมนู &ldquo;เป้าหมายการเบิกจ่าย&rdquo;)</dd>
             <dt>หน้าสาธารณะ</dt><dd>{d.project.published ? 'เผยแพร่' : 'ไม่เผยแพร่'}</dd>
           </dl>
         </section>

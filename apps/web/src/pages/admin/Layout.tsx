@@ -36,7 +36,7 @@ export default function AdminLayout({ user }: { user: SessionUser }) {
         <NavLink to="/admin/plans">แผนและผู้รับผิดชอบ</NavLink>
         <NavLink to="/admin/projects">บันทึกการเบิกจ่าย</NavLink>
         <NavLink to="/admin/import">นำเข้าจากไฟล์</NavLink>
-        <NavLink to="/admin/targets">เป้าการเบิกจ่าย</NavLink>
+        <NavLink to="/admin/targets">เป้าหมายการเบิกจ่าย</NavLink>
         <NavLink to="/admin/reports">รายงาน</NavLink>
         {canManageUsers && <NavLink to="/admin/users">ผู้ใช้งาน</NavLink>}
         {isSuper && <NavLink to="/admin/system">ตั้งค่าระบบ</NavLink>}

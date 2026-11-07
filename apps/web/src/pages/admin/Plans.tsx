@@ -7,7 +7,7 @@ import {
 } from '@kpp/domain';
 import { ApiError, call } from '../../api/client';
 import { Async, Empty, ErrorBox, bahtInputToSatang, useApi, useLookups, useNames, useSubmit, useToast } from '../../components/ui';
-import { FiscalYearPicker } from '../public/Home';
+import { FiscalYearPicker, monthsElapsed } from '../public/Home';
 import PlanImport from './PlanImport';
 import { FISCAL_MONTHS, monthYear } from './Targets';
 
@@ -103,7 +103,7 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
   const visibleProjects = projects.filter((p) => shown.some((i) => i.planIndex === p.planIndex && i.projectSeq === p.seq));
   const setDue = (i: PlanItem, dueMonth: number) => void run(async () => {
     await call('activities.setDue', { activityId: i.activityId, dueMonth });
-    toast(dueMonth > 0 ? `กำหนดให้เบิกครบภายใน ${FISCAL_MONTHS[dueMonth - 1]} แล้ว` : 'ใช้เป้าการเบิกจ่ายของปีแล้ว');
+    toast(dueMonth > 0 ? `กำหนดเบิกครบภายใน ${FISCAL_MONTHS[dueMonth - 1]} แล้ว (ใช้เตือน)` : 'ยกเลิกกำหนดเบิกครบแล้ว');
     reload();
   });
   const assigned = leaves.filter((i) => i.workgroupId).length;
@@ -230,7 +230,7 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
                             {canEdit && st && !isOpen && <button className="btn btn-ghost btn-sm" onClick={() => setEditing(i.id)}>กำหนดพื้นที่</button>}
                             {mine(i) && i.projectId && <Link className="xs" to={`/admin/projects/${i.projectId}`}>บันทึกเบิกจ่าย</Link>}
                           </span>
-                          {st && <DueSelect name={i.name} fy={d.doc.fiscalYear} value={st.dueMonth} disabled={!canEdit || busy} onChange={(v) => setDue(i, v)} />}
+                          {st && <DueSelect name={i.name} fy={d.doc.fiscalYear} value={st.dueMonth} st={st} disabled={!canEdit || busy} onChange={(v) => setDue(i, v)} />}
                         </>
                       )}
                     </div>
@@ -278,18 +278,30 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
   );
 }
 
-/** เดือนที่กิจกรรมต้องเบิกครบ 100% — ค่าเริ่มต้น: ตามเป้าของปี (อบรม/ประชุม/สัมมนา = มิ.ย.) */
-function DueSelect({ name, fy, value, disabled, onChange }: { name: string; fy: number; value: number; disabled: boolean; onChange: (v: number) => void }) {
+/**
+ * กำหนดเบิกครบของกิจกรรม (ใช้เตือน ไม่เปลี่ยนเป้าบนแถบ) — ค่าเริ่มต้น: อบรม/ประชุม/สัมมนา = มิ.ย. ตามมาตรการเร่งรัดฯ
+ * ขึ้นเตือนเมื่อเหลือไม่เกิน 1 เดือน หรือเลยกำหนดแล้วยังเบิกไม่ครบ
+ */
+function DueSelect({ name, fy, value, st, disabled, onChange }: { name: string; fy: number; value: number; st: PlanActivityState; disabled: boolean; onChange: (v: number) => void }) {
   const meeting = MEETING_RE.test(name);
+  const due = value > 0 ? value : value === 0 && meeting ? 9 : 0;
+  const now = monthsElapsed(fy);
+  const left = st.budget - st.disbursed;
+  const alert = due && left > 0 && now >= due - 1
+    ? <span className={`due-alert ${now > due ? 'is-late' : ''}`}>{now > due ? 'เลยกำหนด' : 'ใกล้ครบกำหนด'} ยังไม่เบิก {formatBaht(left)} บาท</span>
+    : null;
   return (
-    <label className="due-select">
-      <span>เบิกครบภายใน</span>
-      <select value={value} disabled={disabled} onChange={(e) => onChange(Number(e.target.value))}>
-        <option value={0}>{meeting ? 'มิ.ย. (อบรม/ประชุม ค่าเริ่มต้น)' : 'ตามเป้าของปี'}</option>
-        {meeting && <option value={-1}>ตามเป้าของปี</option>}
-        {FISCAL_MONTHS.map((m, k) => <option key={m} value={k + 1}>{m} {String(monthYear(fy, k + 1)).slice(2)}</option>)}
-      </select>
-    </label>
+    <span className="due-wrap">
+      <label className="due-select">
+        <span>กำหนดเบิกครบ</span>
+        <select value={value} disabled={disabled} onChange={(e) => onChange(Number(e.target.value))}>
+          <option value={0}>{meeting ? 'มิ.ย. (อบรม/ประชุม ค่าเริ่มต้น)' : 'ไม่กำหนด'}</option>
+          {meeting && <option value={-1}>ไม่กำหนด</option>}
+          {FISCAL_MONTHS.map((m, k) => <option key={m} value={k + 1}>{m} {String(monthYear(fy, k + 1)).slice(2)}</option>)}
+        </select>
+      </label>
+      {alert}
+    </span>
   );
 }
 

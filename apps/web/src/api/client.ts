@@ -189,6 +189,15 @@ export function prefetch<A extends ActionName>(action: A, body: ActionRequest<A>
   load(action, body).catch(() => undefined);
 }
 
+/** ล้างข้อมูลสาธารณะที่จำไว้ (หลังเปลี่ยนเป้าหมาย) — หน้าภาพรวม/รายงานดึงใหม่ ไม่แสดงตัวเลขเก่าแม้ชั่วครู่ */
+export function purgePublicCache(): void {
+  for (const k of [...mem.keys()]) if (isPublic(k.split(':')[0])) mem.delete(k);
+  try {
+    const ls = localStorage;
+    for (let i = ls.length - 1; i >= 0; i--) { const k = ls.key(i); if (k?.startsWith(LS_PREFIX)) ls.removeItem(k); }
+  } catch { /* storage ไม่พร้อม */ }
+}
+
 function markAllStale(): void {
   for (const e of mem.values()) e.at = 0;
 }

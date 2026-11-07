@@ -425,72 +425,54 @@ var KPP = (() => {
     return parts;
   }
   var MEETING_RE = /อบรม|ประชุม|สัมมนา|ถ่ายทอดความรู้|เวที|ศึกษาดูงาน|Field Day|Workshop/i;
-  function parsePlanQuarters(s) {
-    if (!s) return null;
-    const q = String(s).split(",").map((x) => Number(x.trim()));
-    if (q.length !== 4 || q.some((n) => !Number.isInteger(n) || n < 0)) return null;
-    return q;
-  }
-  function planToDate(budget, planQuarters, quarterTargets, m) {
-    if (m <= 0 || budget <= 0) return 0;
-    const month = Math.min(12, m);
-    const q = parsePlanQuarters(planQuarters);
-    const total = q ? q[0] + q[1] + q[2] + q[3] : 0;
-    if (q && total > 0) {
-      const cum = [q[0], q[0] + q[1], q[0] + q[1] + q[2], total];
-      const k = Math.ceil(month / 3);
-      const prev = k > 1 ? cum[k - 2] : 0;
-      const v = prev + (cum[k - 1] - prev) * (month - 3 * (k - 1)) / 3;
-      return Math.round(v / total * budget);
-    }
-    return Math.round(budget * monthlyTargetPct(quarterTargets)[month - 1] / 100);
-  }
+  var r2 = (v) => Math.round(v * 100) / 100;
   function parseSpendTarget(json2, fallbackQuarters = DEFAULT_QUARTER_TARGETS) {
-    const base = { mode: "quarter", quarters: [...parseQuarterTargets(fallbackQuarters)], month: 12, pct: 100 };
+    const fq = [...parseQuarterTargets(fallbackQuarters)];
+    if (fq[3] !== 100) fq[3] = 100;
+    const base = { mode: "quarter", quarters: fq, months: [] };
     if (!json2) return base;
     try {
       const t2 = JSON.parse(json2);
-      const out = {
-        mode: t2.mode === "deadline" ? "deadline" : "quarter",
-        quarters: Array.isArray(t2.quarters) ? t2.quarters.map(Number) : base.quarters,
-        month: Number(t2.month) || 12,
-        pct: Number(t2.pct) || 100
-      };
+      let out;
+      if (t2.mode === "deadline") {
+        const m = Math.min(12, Math.max(1, Number(t2.month) || 12));
+        const pct2 = Math.min(100, Math.max(1, Number(t2.pct) || 100));
+        out = { mode: "monthly", quarters: [], months: Array.from({ length: 12 }, (_, i) => i + 1 <= m ? Math.round(pct2 * (i + 1) / m) : Math.round(pct2 + (100 - pct2) * (i + 1 - m) / (12 - m))) };
+      } else if (t2.mode === "monthly") {
+        out = { mode: "monthly", quarters: [], months: Array.isArray(t2.months) ? t2.months.map(Number) : [] };
+      } else {
+        out = { mode: "quarter", quarters: Array.isArray(t2.quarters) ? t2.quarters.map(Number) : fq, months: [] };
+      }
       return validateSpendTarget(out) ? base : out;
     } catch {
       return base;
     }
   }
   function validateSpendTarget(t2) {
-    if (t2.mode === "quarter") {
-      const q = t2.quarters;
-      if (!Array.isArray(q) || q.length !== 4 || q.some((v) => !Number.isFinite(v) || v < 0 || v > 100)) return "\u0E40\u0E1B\u0E49\u0E32\u0E23\u0E32\u0E22\u0E44\u0E15\u0E23\u0E21\u0E32\u0E2A\u0E15\u0E49\u0E2D\u0E07\u0E21\u0E35 4 \u0E04\u0E48\u0E32 \u0E04\u0E48\u0E32\u0E25\u0E30 0\u2013100";
-      for (let i = 1; i < 4; i++) if (q[i] < q[i - 1]) return `\u0E40\u0E1B\u0E49\u0E32\u0E44\u0E15\u0E23\u0E21\u0E32\u0E2A ${i + 1} \u0E15\u0E49\u0E2D\u0E07\u0E44\u0E21\u0E48\u0E19\u0E49\u0E2D\u0E22\u0E01\u0E27\u0E48\u0E32\u0E44\u0E15\u0E23\u0E21\u0E32\u0E2A ${i} (\u0E40\u0E1B\u0E47\u0E19\u0E23\u0E49\u0E2D\u0E22\u0E25\u0E30\u0E2A\u0E30\u0E2A\u0E21)`;
+    const check = (v, n, name) => {
+      if (!Array.isArray(v) || v.length !== n || v.some((x) => !Number.isFinite(x))) return `\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E23\u0E2D\u0E01\u0E40\u0E1B\u0E49\u0E32\u0E43\u0E2B\u0E49\u0E04\u0E23\u0E1A ${n} \u0E0A\u0E48\u0E2D\u0E07`;
+      for (let i = 0; i < n; i++) {
+        if (v[i] < 0 || v[i] > 100) return `\u0E40\u0E1B\u0E49\u0E32${name(i)} \u0E15\u0E49\u0E2D\u0E07\u0E2D\u0E22\u0E39\u0E48\u0E23\u0E30\u0E2B\u0E27\u0E48\u0E32\u0E07 0\u2013100%`;
+        if (i > 0 && v[i] < v[i - 1]) return `\u0E40\u0E1B\u0E49\u0E32${name(i)} \u0E15\u0E49\u0E2D\u0E07\u0E44\u0E21\u0E48\u0E19\u0E49\u0E2D\u0E22\u0E01\u0E27\u0E48\u0E32${name(i - 1)} (\u0E40\u0E1B\u0E47\u0E19\u0E23\u0E49\u0E2D\u0E22\u0E25\u0E30\u0E2A\u0E30\u0E2A\u0E21)`;
+      }
+      if (v[n - 1] !== 100) return `\u0E40\u0E1B\u0E49\u0E32\u0E17\u0E31\u0E49\u0E07\u0E1B\u0E35\u0E04\u0E37\u0E2D 100% \u2014 ${name(n - 1)}\u0E15\u0E49\u0E2D\u0E07\u0E40\u0E1B\u0E47\u0E19 100%`;
       return null;
-    }
-    if (!Number.isInteger(t2.month) || t2.month < 1 || t2.month > 12) return "\u0E40\u0E14\u0E37\u0E2D\u0E19\u0E17\u0E35\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E40\u0E1A\u0E34\u0E01\u0E43\u0E2B\u0E49\u0E04\u0E23\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07";
-    if (!Number.isFinite(t2.pct) || t2.pct <= 0 || t2.pct > 100) return "\u0E23\u0E49\u0E2D\u0E22\u0E25\u0E30\u0E17\u0E35\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E40\u0E1A\u0E34\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E2D\u0E22\u0E39\u0E48\u0E23\u0E30\u0E2B\u0E27\u0E48\u0E32\u0E07 1\u2013100";
-    return null;
+    };
+    if (t2.mode === "monthly") return check(t2.months, 12, (i) => `\u0E40\u0E14\u0E37\u0E2D\u0E19${FISCAL_MONTH_NAMES[i]}`);
+    return check(t2.quarters, 4, (i) => `\u0E44\u0E15\u0E23\u0E21\u0E32\u0E2A ${i + 1}`);
   }
-  var r2 = (v) => Math.round(v * 100) / 100;
+  var FISCAL_MONTH_NAMES = ["\u0E15.\u0E04.", "\u0E1E.\u0E22.", "\u0E18.\u0E04.", "\u0E21.\u0E04.", "\u0E01.\u0E1E.", "\u0E21\u0E35.\u0E04.", "\u0E40\u0E21.\u0E22.", "\u0E1E.\u0E04.", "\u0E21\u0E34.\u0E22.", "\u0E01.\u0E04.", "\u0E2A.\u0E04.", "\u0E01.\u0E22."];
   function targetCurve(t2) {
-    if (t2.mode === "quarter") return monthlyTargetPct(t2.quarters.join(","));
-    const out = [];
-    for (let m = 1; m <= 12; m++) {
-      out.push(r2(m <= t2.month ? t2.pct * m / t2.month : t2.pct + (100 - t2.pct) * (m - t2.month) / (12 - t2.month)));
-    }
-    return out;
+    if (t2.mode === "monthly") return t2.months.map(r2);
+    return monthlyTargetPct(t2.quarters.join(","));
+  }
+  function fullMonthOf(curve) {
+    const i = curve.findIndex((v) => v >= 100);
+    return i < 0 ? 12 : i + 1;
   }
   function dueCurve(dueMonth) {
     return Array.from({ length: 12 }, (_, i) => r2(Math.min(1, (i + 1) / dueMonth) * 100));
   }
-  function effectiveDueMonth(a) {
-    const d = Number(a.dueMonth) || 0;
-    if (d >= 1 && d <= 12) return d;
-    if (d < 0) return 0;
-    return MEETING_RE.test(a.name) ? MEETING_DUE_MONTH : 0;
-  }
-  var MEETING_DUE_MONTH = 9;
   function planAt(budget, curve, dueMonth, m) {
     if (m <= 0 || budget <= 0) return 0;
     const c = dueMonth > 0 ? dueCurve(dueMonth) : curve;
@@ -2236,11 +2218,8 @@ var KPP = (() => {
       dueMonth: Number(a.dueMonth) || 0
     };
   }
-  function activityPlan(budget, a, curve, m) {
-    const d = Number(a?.dueMonth) || 0;
-    if (d >= 1 && d <= 12) return planAt(budget, curve, d, m);
-    if (a && parsePlanQuarters(a.planQuarters)) return planToDate(budget, a.planQuarters, "", m);
-    return planAt(budget, curve, a ? effectiveDueMonth(a) : 0, m);
+  function activityPlan(budget, _a, curve, m) {
+    return planAt(budget, curve, 0, m);
   }
   function setActivityDue(ctx, b) {
     const a = findById(ctx, "Activities", String(b.activityId), "\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21");
@@ -3059,7 +3038,9 @@ var KPP = (() => {
       })(),
       byPlan: group(planKey, (k) => k),
       targets: {
-        annualPct: Math.min(100, Math.max(0, Number(settings.annualTargetPct) || 98)),
+        // เป้าทั้งปี = 100% ภายในเดือนแรกที่เป้าหมายรายเดือนถึง 100
+        annualPct: 100,
+        fullMonth: fullMonthOf(curve),
         meetingDeadline: `${fy - 543}-06-30`,
         spend: spendTargetFor(ctx, fy)
       },
@@ -4123,17 +4104,9 @@ var KPP = (() => {
     requireRole(ctx, "minisuper", "superadmin");
     const fy = fyOf2(b.fiscalYear);
     const t2 = b.target ?? {};
-    const clean = {
-      mode: t2.mode === "deadline" ? "deadline" : "quarter",
-      quarters: Array.isArray(t2.quarters) ? t2.quarters.slice(0, 4).map(Number) : [],
-      month: Number(t2.month),
-      pct: Number(t2.pct)
-    };
-    if (clean.mode === "quarter") {
-      clean.month = 12;
-      clean.pct = 100;
-    } else clean.quarters = [];
-    const err = validateSpendTarget(clean.mode === "deadline" ? { ...clean, quarters: [0, 0, 0, 0] } : clean);
+    const nums = (v, n) => Array.isArray(v) ? v.slice(0, n).map((x) => Math.round(Number(x) * 100) / 100) : [];
+    const clean = t2.mode === "monthly" ? { mode: "monthly", quarters: [], months: nums(t2.months, 12) } : { mode: "quarter", quarters: nums(t2.quarters, 4), months: [] };
+    const err = validateSpendTarget(clean);
     if (err) throw new AppError("VALIDATION_FAILED", err);
     const before = spendTargetFor(ctx, fy);
     setSetting(ctx, `spendTarget:${fy}`, JSON.stringify(clean));
