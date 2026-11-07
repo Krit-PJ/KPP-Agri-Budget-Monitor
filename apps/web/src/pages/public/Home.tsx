@@ -112,7 +112,7 @@ export default function Home() {
                   <span className="key"><i style={{ background: t.remaining < 0 ? 'var(--clay)' : 'var(--paddy)' }} />เบิกจ่ายแล้ว <b><Baht v={t.disbursed} short /></b> ({pct1(t.spendingPct)}%)</span>
                   <span className="key"><i style={{ background: 'var(--commit)' }} />ผูกพัน <b><Baht v={t.committed} short /></b></span>
                   <span className="key"><i style={{ background: '#e3e9e4', border: '1px solid #cfd8d1' }} />คงเหลือ <b><Baht v={t.remaining} short /></b> ({pct1(remPct)}%)</span>
-                  {curQ > 0 && gapPct > 0 && <span className="key"><i className="gap" />ยังขาดจากเป้าไตรมาสนี้ <b>{pct1(gapPct)}%</b> (<Baht v={gapBaht} short /> บาท)</span>}
+                  {curQ > 0 && gapPct > 0 && <span className="key"><i className="gap" />ยังขาดจากเป้าไตรมาสนี้ <b>{pct1(gapPct)}%</b> หรือ <b><Baht v={gapBaht} whole /></b> บาท</span>}
                   <span className="key"><i className="tick" />เป้าสะสมสิ้นไตรมาสนี้ (เส้นประ = ไตรมาสอื่น)</span>
                 </div>
                 <div className="qtargets" aria-label="เป้าเบิกจ่ายสะสมรายไตรมาส">
