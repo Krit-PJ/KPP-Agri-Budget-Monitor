@@ -4,7 +4,7 @@ import globals from 'globals';
 import reactHooks from 'eslint-plugin-react-hooks';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/dist-artifact/**', '.demo-dist/**', '**/node_modules/**', 'apps/gas/static/**'] },
+  { ignores: ['**/dist/**', '**/dist-artifact/**', '**/dist-demo/**', '.demo-dist/**', '**/node_modules/**', 'apps/gas/static/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
