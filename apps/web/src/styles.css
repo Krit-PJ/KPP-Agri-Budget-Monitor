@@ -453,6 +453,14 @@ input.is-edited { border-color: var(--straw); }
   .area-table { max-width: none; }
   .area-table input { width: 6.5em; }
 }
+@media (max-width: 560px) {
+  .area-editor { padding: var(--s3); }
+  .area-table { width: 100%; table-layout: fixed; }
+  .area-table th, .area-table td { padding-left: 4px; padding-right: 4px; }
+  .area-table th:first-child, .area-table td:first-child { width: 34%; }
+  .area-table input { width: 100%; min-width: 0; }
+  .area-table tfoot td { white-space: normal; }
+}
 
 /* ===== รายงานสรุปสำหรับผู้บริหาร: ตัวใหญ่ อ่านง่าย พิมพ์ขาวดำได้ ===== */
 .report.exec { color: #000; }
