@@ -1,10 +1,14 @@
+/* ---------- ฟอนต์ราชการ TH Sarabun New (ติดตั้งกับระบบ — ไม่ต้องลงในเครื่อง) ---------- */
+@font-face { font-family: 'TH Sarabun New'; src: url('../assets/fonts/THSarabunNew.woff') format('woff'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'TH Sarabun New'; src: url('../assets/fonts/THSarabunNew-Bold.woff') format('woff'); font-weight: 700; font-style: normal; font-display: swap; }
+
 /* ---------- บันทึกข้อความ: หน้า A4 ตามระเบียบงานสารบรรณ ---------- */
 .memo-page {
   --m-body: 11pt; --m-label: 13.5pt; --m-title: 20pt;
   width: 210mm; min-height: 297mm; box-sizing: border-box;
   padding: 15mm 20mm 15mm 30mm;
   background: #fff; color: #000;
-  font-family: 'Sarabun', 'TH Sarabun New', 'Noto Sans Thai', sans-serif;
+  font-family: 'TH Sarabun New', 'Sarabun', 'Noto Sans Thai', sans-serif;
   font-size: var(--m-body); line-height: 1.6; font-weight: 400;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 8px 24px rgba(0, 0, 0, 0.08);
   text-align: left;
@@ -14,7 +18,7 @@
 .memo-page .jsp { font-size: 0; }
 .m-head { position: relative; height: 1.5cm; margin-bottom: 4pt; display: flex; align-items: center; justify-content: center; }
 .m-garuda { position: absolute; left: 0; top: 0; width: 1.5cm; height: 1.5cm; }
-.memo-page h1.m-title { margin: 0; font: 700 var(--m-title)/1 'Sarabun', sans-serif; color: #000; letter-spacing: 0; }
+.memo-page h1.m-title { margin: 0; font: 700 var(--m-title)/1 'TH Sarabun New', 'Sarabun', sans-serif; color: #000; letter-spacing: 0; }
 .m-label { font-size: var(--m-label); font-weight: 700; margin-right: 0.35em; }
 .m-line { overflow-wrap: anywhere; }
 .m-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1em; }
@@ -72,7 +76,7 @@
 .memo-checks { display: flex; flex-direction: column; gap: var(--s2); }
 .memo-checks label { display: flex; align-items: center; gap: var(--s2); min-height: 44px; padding: 4px 10px; border-radius: var(--r-sm); background: #fff4bf; border: 1px solid #d8b93a; cursor: pointer; }
 .memo-checks input[type='checkbox'] { width: 22px; height: 22px; min-height: 22px; accent-color: var(--forest); flex: none; }
-.memo-body-edit textarea { width: 100%; min-height: 220px; font-family: 'Sarabun', var(--font-body); font-size: 1rem; line-height: 1.6; }
+.memo-body-edit textarea { width: 100%; min-height: 220px; font-family: var(--font-body); font-size: 1rem; line-height: 1.6; }
 .memo-actions { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; }
 .memo-warn { color: var(--clay); font-size: var(--fs-sm); }
 .memo-ok-card { border: 1px solid var(--paddy); background: var(--paddy-soft); border-radius: var(--r-md); padding: var(--s4); }

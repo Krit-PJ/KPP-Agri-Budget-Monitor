@@ -173,10 +173,15 @@ function Editor({ ctx, e, user, existing, onSaved, onClose }: {
             {field('กิจกรรมย่อย', <div className="auto-v">{d.subActivityName}</div>, 'auto', { wide: true })}
             {field('แหล่งงบประมาณ', <div className="auto-v">{d.fund || '–'}</div>, 'auto')}
             {ctx.codesSaved
-              ? field('รหัสงบประมาณ / รหัสกิจกรรมหลัก', <div className="auto-v num">{d.budgetCode} <small>/</small> {d.mainActivityCode}</div>, 'auto', { hint: 'บันทึกไว้กับกิจกรรมแล้ว' })
+              ? (
+                <>
+                  {field('รหัสงบประมาณ (20 หลัก)', <div className="auto-v num">{d.budgetCode}</div>, 'auto')}
+                  {field('รหัสกิจกรรมหลัก (17 หลัก)', <div className="auto-v num">{d.mainActivityCode}</div>, 'auto', { hint: ctx.codesRef === 'บันทึกไว้กับกิจกรรม' ? 'บันทึกไว้กับกิจกรรมแล้ว' : `ดึงจากฐานข้อมูลรหัสงบประมาณ · ${ctx.codesRef}` })}
+                </>
+              )
               : (
                 <>
-                  {field('รหัสงบประมาณ (20 หลัก)', <input value={d.budgetCode} onChange={(ev) => set('budgetCode', ev.target.value.replace(/\D/g, '').slice(0, 20))} inputMode="numeric" placeholder="07011152034002000000" />, 'staff', { hint: `${d.budgetCode.length}/20 หลัก · กรอกครั้งแรกครั้งเดียว ระบบจำไว้` })}
+                  {field('รหัสงบประมาณ (20 หลัก) — ไม่พบในฐานข้อมูล', <input value={d.budgetCode} onChange={(ev) => set('budgetCode', ev.target.value.replace(/\D/g, '').slice(0, 20))} inputMode="numeric" placeholder="07011152034002000000" />, 'staff', { hint: `${d.budgetCode.length}/20 หลัก · กรอกครั้งแรกครั้งเดียว ระบบจำไว้` })}
                   {field('รหัสกิจกรรมหลัก (17 หลัก)', <input value={d.mainActivityCode} onChange={(ev) => set('mainActivityCode', ev.target.value.replace(/\D/g, '').slice(0, 17))} inputMode="numeric" placeholder="07011690009900000" />, 'staff', { hint: `${d.mainActivityCode.length}/17 หลัก` })}
                 </>
               )}
@@ -207,7 +212,7 @@ function Editor({ ctx, e, user, existing, onSaved, onClose }: {
               <button type="button" aria-pressed={d.align === 'justify'} onClick={() => set('align', 'justify')}>ชิดขอบทั้งสองด้าน</button>
             </div>
             <label className="small" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-              <input type="checkbox" checked={d.thaiNumerals} onChange={(ev) => set('thaiNumerals', ev.target.checked)} style={{ width: 20, minHeight: 20 }} /> ใช้เลขไทย
+              <input type="checkbox" checked={d.thaiNumerals} onChange={(ev) => set('thaiNumerals', ev.target.checked)} style={{ width: 20, minHeight: 20 }} /> ใช้เลขไทย (ตามแบบหนังสือราชการ)
             </label>
           </div>
           {editBody ? (

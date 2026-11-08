@@ -2,7 +2,7 @@
  * Schema ของตารางใน Google Sheets (versioned) — header แถวที่ 1 ของแต่ละแท็บ
  * เปลี่ยน schema: เพิ่มคอลัมน์ต่อท้ายเท่านั้น แล้วเพิ่ม SCHEMA_VERSION; provisioning เติมหัวคอลัมน์ให้เอง
  */
-export const SCHEMA_VERSION = '2026.11.08-1';
+export const SCHEMA_VERSION = '2026.11.08-2';
 
 export type ColType = 'string' | 'number' | 'boolean' | 'json';
 export type FileKey = 'IDENTITY' | 'CORE' | 'STAGING' | 'REPORTING';
@@ -71,6 +71,12 @@ export const TABLES = {
     ['projectId', 'string'], ['activityId', 'string'], ['disbursementId', 'string'], ['unitId', 'string'], ['docNo', 'string'],
     ['date', 'string'], ['amountSatang', 'number'], ['data', 'string'], ['revision', 'number'], ['docFileId', 'string'],
     ['pdfFileId', 'string'], ['renderStatus', 'string'], ['renderError', 'string'],
+  ]),
+  /** รหัสงบประมาณ (20 หลัก) / รหัสกิจกรรมหลัก (17 หลัก) ตามเอกสาร NEW GFMIS THAI ของกรมฯ แยกปีงบประมาณ */
+  BudgetCodes: t('CORE', [
+    ['fiscalYear', 'number'], ['section', 'string'], ['planName', 'string'], ['projectNo', 'string'], ['projectName', 'string'],
+    ['activityNo', 'string'], ['activityName', 'string'], ['mainActivityCode', 'string'], ['itemName', 'string'], ['budgetCode', 'string'],
+    ['source', 'string'],
   ]),
   ProgressReports: t('CORE', [
     ['projectId', 'string'], ['activityId', 'string'], ['reportDate', 'string'], ['progressPct', 'number'], ['detail', 'string'],

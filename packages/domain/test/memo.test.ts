@@ -86,3 +86,11 @@ describe('memo body', () => {
     expect(validateMemo({ ...base, checks: { ok: true, returnFix: true, returnReason: '', forward: false } }).length).toBe(2);
   });
 });
+
+describe('font sizes', () => {
+  it('match TH Sarabun 16/20/29 pt on paper', async () => {
+    const { MEMO_FONT_PT, MEMO_WEB_FONT_PT } = await import('../src/index');
+    expect(MEMO_FONT_PT).toEqual({ body: 11, label: 13.5, title: 20 });
+    expect(MEMO_WEB_FONT_PT).toEqual({ body: 10.5, label: 13, title: 19 });
+  });
+});

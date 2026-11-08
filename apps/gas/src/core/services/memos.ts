@@ -5,7 +5,7 @@
  * - ระบบไม่ออกเลขหนังสือ: เจ้าหน้าที่กรอกเลขเอง ต่อท้าย prefix ของกลุ่ม
  */
 import {
-  AppError, MEMO_DEFAULT_TO, MEMO_SUBJECT, areaName, cleanText, computeBudget, memoDocNo, memoOverrideStale, validateMemo, withTitle,
+  AppError, MEMO_DEFAULT_TO, matchBudgetCodes, type BudgetCodeEntry, type BudgetCodeMatch, MEMO_SUBJECT, areaName, cleanText, computeBudget, memoDocNo, memoOverrideStale, validateMemo, withTitle,
   type Activity, type Allocation, type Disbursement, type FundingSource, type Memo, type MemoContext, type MemoData,
   type MemoRecord, type MyProfile, type PlanItem, type Project, type User, type Workgroup, type WorkgroupMemoSettings,
 } from '@kpp/domain';
@@ -94,6 +94,8 @@ export function saveGroupSettings(ctx: Ctx, b: WorkgroupMemoSettings): Workgroup
 interface Facts {
   project: Project; activity: Activity; group: Workgroup | undefined; fund: FundingSource | undefined;
   mainActivityName: string; budget: number; previous: number;
+  /** รหัสจากฐานข้อมูลรหัสงบประมาณ (ตรงกับแผน) — มาก่อนรหัสที่เคยกรอกไว้กับกิจกรรม */
+  codes: { budgetCode: string; mainActivityCode: string; source: 'CODEBOOK' | 'ACTIVITY' | ''; ref: string };
 }
 
 /** ข้อมูลจริงจากฐานข้อมูล; previous = ยอดเบิก (ไม่รวม VOID) ทุกอำเภอ — ฉบับแก้ไขนับเฉพาะรายการก่อนบันทึกฉบับแรก */
@@ -112,14 +114,26 @@ function facts(ctx: Ctx, projectId: string, activityId: string, before?: { id: s
   const previous = prior.reduce((s, x) => s + Number(x.amountSatang), 0);
   // ชื่อกิจกรรม (ระดับ "กิจกรรม" ในแผน) จากเส้นทางของรายการย่อย
   let mainActivityName = '';
+  let match: BudgetCodeMatch | null = null;
   if (activity.planItemId) {
     const items = live(ctx.env.db.list<PlanItem>('PlanItems'));
     const leaf = items.find((i) => i.id === activity.planItemId);
     const node = leaf && items.find((i) => i.planDocId === leaf.planDocId && i.seq === leaf.activitySeq && i.id !== leaf.id);
     mainActivityName = node?.name ?? '';
+    if (leaf) {
+      const bySeq = new Map(items.filter((i) => i.planDocId === leaf.planDocId).map((i) => [Number(i.seq), i]));
+      const chain: Array<{ kind: string; name: string }> = [];
+      for (let n: PlanItem | undefined = leaf; n && chain.length < 20; n = Number(n.parentSeq) ? bySeq.get(Number(n.parentSeq)) : undefined) chain.unshift({ kind: n.kind, name: n.name });
+      match = matchBudgetCodes(live(ctx.env.db.list<BudgetCodeEntry & { isDeleted?: boolean }>('BudgetCodes')), Number(project.fiscalYear), chain);
+    }
   }
+  const codes: Facts['codes'] = match
+    ? { budgetCode: match.budgetCode, mainActivityCode: match.mainActivityCode, source: 'CODEBOOK', ref: match.ref }
+    : activity.budgetCode || activity.mainActivityCode
+      ? { budgetCode: activity.budgetCode ?? '', mainActivityCode: activity.mainActivityCode ?? '', source: 'ACTIVITY', ref: 'บันทึกไว้กับกิจกรรม' }
+      : { budgetCode: '', mainActivityCode: '', source: '', ref: '' };
   return {
-    project, activity, mainActivityName, budget, previous,
+    project, activity, mainActivityName, budget, previous, codes,
     group: live(ctx.env.db.list<Workgroup>('Workgroups')).find((g) => g.id === project.workgroupId),
     fund: live(ctx.env.db.list<FundingSource>('FundingSources')).find((f) => f.id === project.fundingSourceId),
   };
@@ -165,12 +179,12 @@ export function memoContext(ctx: Ctx, b: { projectId: string; activityId: string
     orgLine: g?.memoOrg || `${g?.name ?? ''} สำนักงานเกษตรจังหวัดกำแพงเพชร`.trim(),
     fax: g?.memoFax ?? '', docPrefix: g?.memoPrefix ?? '', docNumber: '', date: today(ctx), to: MEMO_DEFAULT_TO, subject: MEMO_SUBJECT,
     refNo: '', refDate: '', refFrom: unitRefName(ctx, unitId), expense: '',
-    projectName: '', mainActivityName: '', fund: '', budgetCode: f.activity.budgetCode ?? '', mainActivityCode: f.activity.mainActivityCode ?? '',
+    projectName: '', mainActivityName: '', fund: '', budgetCode: f.codes.budgetCode, mainActivityCode: f.codes.mainActivityCode,
     subActivityName: '', budgetSatang: 0, previousSatang: 0, requestSatang: 0,
     checks: { ok: false, returnFix: false, returnReason: '', forward: false },
     signer: { name: '', position: '' },
     head: { name: g?.headName ?? '', position: g?.headPosition ?? '', line2: g?.headLine2 ?? '' },
-    align: 'left', thaiNumerals: false,
+    align: 'left', thaiNumerals: true,
     ...autoFields(ctx, f),
   };
   const mine = live(ctx.env.db.list<Memo>('Memos')).slice(-200);
@@ -178,7 +192,8 @@ export function memoContext(ctx: Ctx, b: { projectId: string; activityId: string
   const profile = getProfile(ctx);
   return {
     draft,
-    codesSaved: !!(f.activity.budgetCode && f.activity.mainActivityCode),
+    codesSaved: !!(f.codes.budgetCode && f.codes.mainActivityCode),
+    codesRef: f.codes.ref,
     expenseSuggestions: [...new Set([...used.reverse(), ...DEFAULT_EXPENSES])].slice(0, 30),
     units: units.map((u) => ({ id: u.id, name: u.kind === 'PROVINCE' ? 'ระดับจังหวัด (สนง.เกษตรจังหวัด)' : `อำเภอ${areaName(u)}` })),
     profileComplete: profile.complete,
@@ -201,7 +216,7 @@ function sanitize(ctx: Ctx, input: MemoData, f: Facts, keepSigner?: MemoData['si
     date: ISO.test(String(i.date)) ? String(i.date) : '', to: s(i.to, 120) || MEMO_DEFAULT_TO, subject: MEMO_SUBJECT,
     refNo: s(i.refNo, 80), refDate: ISO.test(String(i.refDate)) ? String(i.refDate) : '', refFrom: s(i.refFrom, 120),
     expense: s(i.expense, 200), projectName: '', mainActivityName: '', fund: '',
-    budgetCode: f.activity.budgetCode || code(i.budgetCode), mainActivityCode: f.activity.mainActivityCode || code(i.mainActivityCode),
+    budgetCode: f.codes.budgetCode || code(i.budgetCode), mainActivityCode: f.codes.mainActivityCode || code(i.mainActivityCode),
     subActivityName: '', budgetSatang: 0, previousSatang: 0, requestSatang: Math.round(Number(i.requestSatang) || 0),
     checks: {
       ok: !!i.checks?.ok, returnFix: !!i.checks?.returnFix, returnReason: s(i.checks?.returnReason, 300), forward: !!i.checks?.forward,
@@ -337,4 +352,15 @@ export function rerenderMemo(ctx: Ctx, b: { id: string }): MemoRecord {
   const p = findById<Project>(ctx, 'Projects', m.projectId, 'โครงการ');
   requireWorkgroup(ctx, p.workgroupId);
   return toRecord(ctx, render(ctx, m, JSON.parse(m.data) as MemoData, p));
+}
+
+/** ฐานข้อมูลรหัสงบประมาณของปี (อ่านอย่างเดียว — แก้ไขในชีต BudgetCodes ได้โดยผู้ดูแลระบบ) */
+export function listBudgetCodes(ctx: Ctx, b: { fiscalYear: number }): Array<BudgetCodeEntry & { id: string; source: string }> {
+  requireRole(ctx, 'admin', 'minisuper', 'superadmin');
+  const order: Record<string, number> = { REGULAR: 0, OTHER: 1, SUBSIDY: 2, INVESTMENT: 3 };
+  const num = (s: string) => s.split('.').map((x) => x.padStart(3, '0')).join('.');
+  return live(ctx.env.db.list<BudgetCodeEntry & { id: string; source: string; isDeleted?: boolean }>('BudgetCodes'))
+    .filter((r) => Number(r.fiscalYear) === Number(b.fiscalYear))
+    .map(({ isDeleted: _d, ...r }) => ({ ...r, fiscalYear: Number(r.fiscalYear) }))
+    .sort((a, c) => (order[a.section] ?? 9) - (order[c.section] ?? 9) || num(a.activityNo).localeCompare(num(c.activityNo)));
 }

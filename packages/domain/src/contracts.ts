@@ -10,6 +10,7 @@ import type {
 import type { Satang } from './money';
 import type { CoverLetterResult } from './coverLetter';
 import type { MemoData } from './memo';
+import type { BudgetCodeEntry } from './budgetCodes';
 import type { StagedRow } from './importer';
 import type { ParsedPlan, PlanMeta } from './plan';
 import type { ApiEnvelope, PlanDoc, PlanItem } from './types';
@@ -77,6 +78,8 @@ export interface MemoContext {
   draft: MemoData;
   /** รหัสงบ/รหัสกิจกรรมหลักถูกบันทึกไว้กับกิจกรรมแล้ว */
   codesSaved: boolean;
+  /** ที่มาของรหัส เช่น "งบรายจ่ายอื่น 1.2.1" (ฐานข้อมูลรหัสงบประมาณ) หรือ "บันทึกไว้กับกิจกรรม" */
+  codesRef: string;
   /** รายการค่าใช้จ่ายที่เคยใช้ (ช่วยพิมพ์) */
   expenseSuggestions: string[];
   /** ชื่ออำเภอ/หน่วยดำเนินการที่เลือกได้ */
@@ -253,6 +256,8 @@ export interface Actions {
   /** สร้างไฟล์ Doc/PDF ใหม่อีกครั้ง (กรณีครั้งก่อนไม่สำเร็จ) */
   'memos.render': [{ id: string }, MemoRecord];
   'memos.groupSettings': [Record<string, never>, WorkgroupMemoSettings[]];
+  /** ฐานข้อมูลรหัสงบประมาณ / รหัสกิจกรรมหลัก ของปีงบประมาณ */
+  'budgetCodes.list': [{ fiscalYear: number }, Array<BudgetCodeEntry & { id: string; source: string }>];
   'memos.saveGroupSettings': [WorkgroupMemoSettings, WorkgroupMemoSettings];
   // admin
   'admin.overview': [{ fiscalYear?: number }, OverviewData];
@@ -332,5 +337,5 @@ export const READ_ACTIONS: ReadonlySet<ActionName> = new Set<ActionName>([
   'public.lookups', 'public.summary', 'public.projects', 'public.project', 'public.report', 'auth.me', 'targets.get',
   'admin.overview', 'projects.list', 'projects.get', 'disbursements.entryList', 'imports.get', 'imports.list', 'plans.check', 'plans.list', 'plans.get', 'reports.data',
   'admin.requests', 'admin.users', 'admin.loginReport', 'admin.audit', 'admin.health',
-  'profile.get', 'memos.context', 'memos.get', 'memos.groupSettings',
+  'profile.get', 'memos.context', 'memos.get', 'memos.groupSettings', 'budgetCodes.list',
 ]);

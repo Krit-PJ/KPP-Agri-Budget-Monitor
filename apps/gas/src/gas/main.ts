@@ -154,7 +154,7 @@ export function testMemoRender(): string {
     checks: { ok: true, returnFix: false, returnReason: '', forward: true },
     signer: { name: 'ชื่อ-สกุล ผู้ตรวจสอบ', position: 'นักวิชาการส่งเสริมการเกษตรชำนาญการ' },
     head: { name: 'ชื่อ-สกุล หัวหน้ากลุ่ม', position: 'นักวิชาการส่งเสริมการเกษตรชำนาญการ', line2: 'รักษาการหัวหน้ากลุ่มอารักขาพืช' },
-    align: 'left', thaiNumerals: false,
+    align: 'left', thaiNumerals: true,
   };
   const left = files.renderMemo(`${FOLDERS.system}/tmp`, 'ทดสอบบันทึกข้อความ_ชิดซ้าย', sample);
   const just = files.renderMemo(`${FOLDERS.system}/tmp`, 'ทดสอบบันทึกข้อความ_ชิดขอบ', { ...sample, align: 'justify' });

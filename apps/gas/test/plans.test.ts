@@ -440,7 +440,10 @@ describe('บันทึกข้อความตรวจสอบเอก�
 
     const c = ok<Ctx2>('memos.context', { projectId: item.projectId, activityId: item.activityId }, staff);
     expect(c.profileComplete && c.groupConfigured).toBe(true);
-    expect(c.codesSaved).toBe(false);
+    // รหัสงบ/รหัสกิจกรรมหลักมาจากฐานข้อมูลรหัสงบประมาณ 2570 อัตโนมัติ
+    expect(c.codesSaved).toBe(true);
+    expect(c.draft).toMatchObject({ budgetCode: '07011422029002000000', mainActivityCode: '07011700006100000', thaiNumerals: true });
+    expect((c as unknown as { codesRef: string }).codesRef).toContain('5.5.1');
     expect(c.draft).toMatchObject({ budgetSatang: item.amountSatang, previousSatang: 0, docPrefix: 'กพ 0009.3', signer: { name: 'นายกิตติ โพธิ์จวง' }, align: 'left' });
     expect(c.draft.subActivityName).toBe(item.name);
     expect(c.draft.mainActivityName).toContain('กิจกรรมสร้างความเข้มแข็งกลุ่มการผลิต');
@@ -456,6 +459,10 @@ describe('บันทึกข้อความตรวจสอบเอก�
     expect(m).toMatchObject({ docNo: 'กพ 0009.3/101', amountSatang: 1000_00, status: 'APPROVED', revision: 1, renderStatus: 'OK' });
     expect(m.data.budgetSatang).toBe(item.amountSatang);
     expect(m.data.signer.name).toBe('นายกิตติ โพธิ์จวง');
+    // รหัสที่หน้าเว็บส่งมาไม่ตรงฐานข้อมูล → ใช้ของฐานข้อมูล
+    expect(m.data.budgetCode).toBe('07011422029002000000');
+    const codes = ok<Array<{ activityName: string }>>('budgetCodes.list', { fiscalYear: 2570 }, staff);
+    expect(codes.length).toBeGreaterThan(40);
     // ส่งซ้ำ (กดสองครั้ง) ได้ผลเดิม ไม่เบิกซ้ำ
     expect(ok<MemoRecord>('memos.create', { projectId: item.projectId, activityId: item.activityId, data, idempotencyKey: 'm1' }, staff).id).toBe(m.id);
     // ไฟล์ Doc + PDF อยู่ในโฟลเดอร์หลักฐานของโครงการ
@@ -470,7 +477,7 @@ describe('บันทึกข้อความตรวจสอบเอก�
     // ครั้งถัดไป: รหัสถูกจำไว้ ยอดเบิกมาแล้วรวมครั้งก่อน
     const c2 = ok<Ctx2>('memos.context', { projectId: item.projectId, activityId: item.activityId }, staff);
     expect(c2.codesSaved).toBe(true);
-    expect(c2.draft).toMatchObject({ previousSatang: 1000_00, budgetCode: '07011152034002000000' });
+    expect(c2.draft).toMatchObject({ previousSatang: 1000_00, budgetCode: '07011422029002000000' });
     // เลขที่ซ้ำ / เกินงบ ถูกปฏิเสธ
     const base2 = { ...c2.draft, docNumber: '101', expense: 'ค่าวัสดุ', requestSatang: 100_00 };
     expect(call('memos.create', { projectId: item.projectId, activityId: item.activityId, data: base2, idempotencyKey: 'm2' }, staff).error?.message).toContain('ถูกใช้แล้ว');

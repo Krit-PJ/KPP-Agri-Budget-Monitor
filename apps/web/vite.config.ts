@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 // GitHub Pages project site: https://<user>.github.io/KPP-Agri-Budget-Monitor/
 // CSP ใส่เฉพาะตอน build (dev server ของ Vite ใช้ inline script)
 const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-  "font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; " +
+  "font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; " +
   "base-uri 'self'; form-action 'none'; object-src 'none'";
 
 export default defineConfig({

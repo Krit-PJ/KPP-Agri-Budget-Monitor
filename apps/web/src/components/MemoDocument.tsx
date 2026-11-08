@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import {
-  GARUDA_JPEG_BASE64, MEMO_FONT_PT, formatThaiDateLong, memoBody, memoDocNo, memoText, wrapSegments, type MemoData,
+  GARUDA_JPEG_BASE64, MEMO_WEB_FONT_PT, formatThaiDateLong, memoBody, memoDocNo, memoText, wrapSegments, type MemoData,
 } from '@kpp/domain';
 import './memo.css';
 
@@ -48,7 +48,7 @@ export function MemoDocument({ d, onToggle }: { d: MemoData; onToggle?: (k: 'ok'
   const tx = (s: string) => memoText(d, s);
   const T = ({ s }: { s: string }) => <ThaiText text={tx(s)} />;
   const body = memoBody(d);
-  const style = { '--m-body': `${MEMO_FONT_PT.body}pt`, '--m-label': `${MEMO_FONT_PT.label}pt`, '--m-title': `${MEMO_FONT_PT.title}pt` } as React.CSSProperties;
+  const style = { '--m-body': `${MEMO_WEB_FONT_PT.body}pt`, '--m-label': `${MEMO_WEB_FONT_PT.label}pt`, '--m-title': `${MEMO_WEB_FONT_PT.title}pt` } as React.CSSProperties;
   return (
     <article className={`memo-page align-${d.align}`} style={style} lang="th" aria-label="บันทึกข้อความ">
       <header className="m-head">

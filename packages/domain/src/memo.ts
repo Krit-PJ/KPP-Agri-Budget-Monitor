@@ -203,8 +203,14 @@ export interface MemoData {
  * (เนื้อหา 16pt / หัวข้อ 20pt / "บันทึกข้อความ" 29pt): พยัญชนะ Sarabun สูง 586 หน่วย/em ส่วน TH Sarabun 400
  */
 export const SARABUN_SCALE = 400 / 586;
-const sz = (thPt: number) => Math.round(thPt * SARABUN_SCALE * 2) / 2;
-export const MEMO_FONT_PT = { body: sz(16), label: sz(20), title: sz(29) } as const;
+const sizes = (scale: number) => {
+  const sz = (thPt: number) => Math.round(thPt * scale * 2) / 2;
+  return { body: sz(16), label: sz(20), title: sz(29) } as const;
+};
+/** Google Docs (ฟอนต์ Sarabun ของ Google) */
+export const MEMO_FONT_PT = sizes(SARABUN_SCALE);
+/** หน้าเว็บ/พิมพ์ (เว็บฟอนต์ TH Sarabun New ที่ติดตั้งกับระบบ — พยัญชนะสูง 1253/2048 em) */
+export const MEMO_WEB_FONT_PT = sizes(0.4 / (1253 / 2048));
 
 export const MEMO_SUBJECT = 'ตรวจสอบเอกสารเพื่อขอเบิกเงินราชการ';
 export const MEMO_DEFAULT_TO = 'เกษตรจังหวัดกำแพงเพชร';

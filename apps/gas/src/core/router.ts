@@ -46,6 +46,7 @@ export const ROUTES: Record<Exclude<ActionName, 'batch'>, Route> = {
   'memos.render': r(memosSvc.rerenderMemo, true, 'admin'),
   'memos.groupSettings': r((c) => memosSvc.listGroupSettings(c), false, 'admin'),
   'memos.saveGroupSettings': r(memosSvc.saveGroupSettings, true, 'admin'),
+  'budgetCodes.list': r(memosSvc.listBudgetCodes, false, 'admin'),
   'admin.overview': r(adminSvc.overview, false, 'admin'),
   'projects.list': r(projectsSvc.listProjects, false, 'admin'),
   'projects.get': r(projectsSvc.getProject, false, 'admin'),

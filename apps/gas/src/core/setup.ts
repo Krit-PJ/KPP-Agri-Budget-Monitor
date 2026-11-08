@@ -1,5 +1,5 @@
 /** ข้อมูลตั้งต้น (master data) + ข้อมูลสาธิต (ใช้เฉพาะโหมดสาธิต/ทดสอบ — ไม่มี PII จริง) */
-import { currentFiscalYear, type AccessRequest, type FundingSource, type Organization, type Project, type Unit, type User, type Workgroup } from '@kpp/domain';
+import { BUDGET_CODES_2570, currentFiscalYear, type AccessRequest, type BudgetCodeEntry, type FundingSource, type Organization, type Project, type Unit, type User, type Workgroup } from '@kpp/domain';
 import { live, newMeta, nowIso, type Ctx } from './context';
 import { activityUnitsOf, listUnits, setActivityUnitsBulk } from './services/units';
 import { createAllocation, createActivity, createDisbursement, createProgress, createProject } from './services/projects';
@@ -31,6 +31,16 @@ export const SEED_UNITS: Array<{ code: string; name: string; shortName: string; 
     .map((n, i) => ({ code: `62${String(i + 1).padStart(2, '0')}`, name: `สำนักงานเกษตรอำเภอ${n}`, shortName: `อ.${n}`, kind: 'DISTRICT' as const })),
 ];
 
+export const BUDGET_CODE_SOURCE_2570 = 'รหัสงบประมาณ รหัสกิจกรรมหลัก งบประมาณรายจ่ายประจำปี พ.ศ. 2570 กรมส่งเสริมการเกษตร (NEW GFMIS THAI)';
+
+/** ตั้งต้นตารางรหัสงบประมาณของปี 2570 — ใส่ครั้งเดียว (ถ้ามีแถวของปีนั้นแล้ว ไม่ทับ เพื่อเก็บการแก้ไขในชีต) */
+export function seedBudgetCodes(ctx: Ctx): number {
+  const rows = live(ctx.env.db.list<BudgetCodeEntry & { id: string; isDeleted?: boolean }>('BudgetCodes'));
+  if (rows.some((r) => Number(r.fiscalYear) === 2570)) return 0;
+  ctx.env.db.insert('BudgetCodes', BUDGET_CODES_2570.map((e) => ({ ...newMeta(ctx), ...e, source: BUDGET_CODE_SOURCE_2570 })));
+  return BUDGET_CODES_2570.length;
+}
+
 /** idempotent: เติมเฉพาะรายการที่ยังไม่มี (ตรวจจาก code) */
 export function seedMasterData(ctx: Ctx): void {
   const fs = live(ctx.env.db.list<FundingSource>('FundingSources'));
@@ -55,6 +65,7 @@ export function seedMasterData(ctx: Ctx): void {
   for (const g of live(ctx.env.db.list<Workgroup>('Workgroups')).filter((x) => x.code === 'ADMIN' && !x.noActivities)) {
     ctx.env.db.update('Workgroups', g.id, { ...g, noActivities: true, version: g.version + 1, updatedAt: nowIso(ctx), updatedBy: 'system' });
   }
+  seedBudgetCodes(ctx);
 }
 
 /**
