@@ -221,7 +221,6 @@ export function memoRemaining(d: Pick<MemoData, 'budgetSatang' | 'previousSatang
 }
 
 const money = (s: Satang) => `${formatMoneyPlain(s)} บาท (${bahtText(s)})`;
-const joinNonEmpty = (...parts: Array<string | false | undefined>) => parts.filter(Boolean).join(' ');
 
 /** "อำเภอเมืองกำแพงเพชร" — เติม "อำเภอ" ให้ถ้ายังไม่มีคำนำหน้าหน่วยงาน */
 function fromUnit(s: string): string {
@@ -230,30 +229,50 @@ function fromUnit(s: string): string {
   return /^(อำเภอ|สำนักงาน|กลุ่ม|ศูนย์|ฝ่าย)/.test(t) ? t : `อำเภอ${t}`;
 }
 
-/** ข้อความเนื้อหาที่ระบบสร้าง — ย่อหน้าแรกย่อหน้า (indent) ที่เหลือชิดขอบ */
-export function memoParagraphs(d: MemoData): string[] {
-  const ref = joinNonEmpty(
-    d.refNo && `ตามหนังสือที่ ${d.refNo.trim()}`,
-    d.refDate && `ลงวันที่ ${formatThaiDateLong(d.refDate)}`,
-    d.refFrom && `ของ${fromUnit(d.refFrom)}`,
-  );
-  const first = joinNonEmpty(
-    ref ? `${ref} ได้ส่งเอกสารหลักฐานเพื่อขอเบิกเงิน${d.expense.trim()}` : `ขอส่งเอกสารหลักฐานเพื่อขอเบิกเงิน${d.expense.trim()}`,
-    d.projectName && (d.projectName.startsWith('โครงการ') ? d.projectName : `โครงการ${d.projectName}`),
-    d.mainActivityName && (d.mainActivityName.startsWith('กิจกรรม') ? d.mainActivityName : `กิจกรรม${d.mainActivityName}`),
-    d.fund && `(${d.fund})`,
-    d.budgetCode && `(${d.budgetCode})`,
-  );
-  const lines = [first];
-  if (d.mainActivityCode) lines.push(`รหัสกิจกรรมหลัก ${d.mainActivityCode}`);
-  if (d.subActivityName) lines.push(`กิจกรรมย่อย ${d.subActivityName}`);
+/** ช่องของบันทึกข้อความ (ใช้เชื่อมตัวอย่างหน้าเอกสาร ↔ ช่องในฟอร์ม) */
+export type MemoField =
+  | 'orgLine' | 'fax' | 'docNumber' | 'date' | 'to' | 'refNo' | 'refDate' | 'refFrom' | 'expense'
+  | 'projectName' | 'mainActivityName' | 'fund' | 'budgetCode' | 'mainActivityCode' | 'subActivityName'
+  | 'budget' | 'previous' | 'request' | 'remaining' | 'checks' | 'signer' | 'head';
+/** ช่องที่เจ้าหน้าที่กรอก (ที่เหลือระบบเติมให้) */
+export const MEMO_STAFF_FIELDS: ReadonlySet<MemoField> = new Set<MemoField>(['docNumber', 'date', 'refNo', 'refDate', 'refFrom', 'expense', 'request', 'checks']);
+/** ชิ้นข้อความ: f = ช่องที่มาของข้อความ (ว่าง = ข้อความคงที่) */
+export interface MemoPart { t: string; f?: MemoField }
+
+/** ข้อความเนื้อหาที่ระบบสร้างแบบแยกชิ้นตามช่อง — ย่อหน้าแรกย่อหน้า (indent) ที่เหลือชิดขอบ */
+export function memoParagraphParts(d: MemoData, opts: { keepEmpty?: boolean } = {}): MemoPart[][] {
+  const k = !!opts.keepEmpty;
+  const P = (t: string, f?: MemoField): MemoPart => ({ t, f });
+  const sp = P(' ');
+  const join = (groups: MemoPart[][]): MemoPart[] => groups.filter((g) => g.length).flatMap((g, i) => (i ? [sp, ...g] : g));
+  const moneyParts = (s: Satang, f: MemoField) => [P(money(s), f)];
+  const ref = join([
+    d.refNo || k ? [P('ตามหนังสือที่ '), P(d.refNo.trim(), 'refNo')] : [],
+    d.refDate || k ? [P('ลงวันที่ '), P(d.refDate ? formatThaiDateLong(d.refDate) : '', 'refDate')] : [],
+    d.refFrom || k ? [P('ของ'), P(fromUnit(d.refFrom), 'refFrom')] : [],
+  ]);
+  const first = join([
+    ref.length ? [...ref, P(' ได้ส่งเอกสารหลักฐานเพื่อขอเบิกเงิน'), P(d.expense.trim(), 'expense')] : [P('ขอส่งเอกสารหลักฐานเพื่อขอเบิกเงิน'), P(d.expense.trim(), 'expense')],
+    d.projectName ? [P(d.projectName.startsWith('โครงการ') ? d.projectName : `โครงการ${d.projectName}`, 'projectName')] : [],
+    d.mainActivityName ? [P(d.mainActivityName.startsWith('กิจกรรม') ? d.mainActivityName : `กิจกรรม${d.mainActivityName}`, 'mainActivityName')] : [],
+    d.fund ? [P('('), P(d.fund, 'fund'), P(')')] : [],
+    d.budgetCode ? [P('('), P(d.budgetCode, 'budgetCode'), P(')')] : [],
+  ]);
+  const lines: MemoPart[][] = [first];
+  if (d.mainActivityCode) lines.push([P('รหัสกิจกรรมหลัก '), P(d.mainActivityCode, 'mainActivityCode')]);
+  if (d.subActivityName) lines.push([P('กิจกรรมย่อย '), P(d.subActivityName, 'subActivityName')]);
   lines.push(
-    `ยอดเงินงบประมาณ ${money(d.budgetSatang)} (รวมทั้งหมดของกิจกรรมนี้)`,
-    `ขอเบิกเงิน/ยืมเงินราชการมาแล้ว เป็นจำนวนเงิน ${money(d.previousSatang)} (รวมทุกครั้งทุกอำเภอ)`,
-    `ขอเบิกเงินราชการครั้งนี้ เป็นจำนวนเงิน ${money(d.requestSatang)} (เฉพาะครั้งนี้)`,
-    `งบประมาณคงเหลือ ${money(memoRemaining(d))} (คงเหลือทั้งหมดของกิจกรรมนี้)`,
+    [P('ยอดเงินงบประมาณ '), ...moneyParts(d.budgetSatang, 'budget'), P(' (รวมทั้งหมดของกิจกรรมนี้)')],
+    [P('ขอเบิกเงิน/ยืมเงินราชการมาแล้ว เป็นจำนวนเงิน '), ...moneyParts(d.previousSatang, 'previous'), P(' (รวมทุกครั้งทุกอำเภอ)')],
+    [P('ขอเบิกเงินราชการครั้งนี้ เป็นจำนวนเงิน '), ...moneyParts(d.requestSatang, 'request'), P(' (เฉพาะครั้งนี้)')],
+    [P('งบประมาณคงเหลือ '), ...moneyParts(memoRemaining(d), 'remaining'), P(' (คงเหลือทั้งหมดของกิจกรรมนี้)')],
   );
   return lines;
+}
+
+/** ข้อความเนื้อหาที่ระบบสร้าง (สตริงต่อย่อหน้า) */
+export function memoParagraphs(d: MemoData): string[] {
+  return memoParagraphParts(d).map((ps) => ps.map((p) => p.t).join(''));
 }
 
 /** เนื้อหาที่จะใช้จริง (ข้อความที่ผู้ใช้แก้ หรือข้อความอัตโนมัติ) */

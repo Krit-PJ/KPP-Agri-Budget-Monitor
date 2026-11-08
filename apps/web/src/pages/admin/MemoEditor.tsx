@@ -1,12 +1,13 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import {
   areaName, bahtText, formatMoneyPlain, formatThaiDate, formatThaiDateLong, memoDocNo, memoOverrideStale, memoParagraphs, memoRemaining,
-  todayBangkok, validateMemo, type EntryActivity, type MemoContext, type MemoData, type MemoRecord, type SessionUser,
+  todayBangkok, validateMemo, type EntryActivity, type MemoContext, type MemoData, type MemoField, type MemoRecord, type SessionUser,
 } from '@kpp/domain';
 import { ApiError, call, newKey } from '../../api/client';
 import { Async, ErrorBox, Sheet, bahtInputToSatang, useApi, useLookups, useSubmit, useToast } from '../../components/ui';
 import { ThaiDatePicker } from '../../components/ThaiDatePicker';
-import { A4Fit, MemoDocument, printMemo } from '../../components/MemoDocument';
+import { MemoDocument, printMemo } from '../../components/MemoDocument';
+import { DocViewer } from '../../components/DocViewer';
 import { Link } from 'react-router-dom';
 
 /**
@@ -14,20 +15,24 @@ import { Link } from 'react-router-dom';
  * ช่องสีเหลือง = เจ้าหน้าที่กรอก · ช่องสีฟ้า = ระบบเติมให้ (คำนวณจากงบของกิจกรรม)
  */
 export function MemoEditor({ e, user, existing, onSaved, onClose }: {
-  e: EntryActivity; user: SessionUser; existing?: MemoRecord; onSaved: (m: MemoRecord) => void; onClose?: () => void;
+  e: EntryActivity; user: SessionUser; existing?: MemoRecord; onSaved: (m: MemoRecord) => void; onClose: () => void;
 }) {
   const s = useApi('memos.context', { projectId: e.projectId, activityId: e.activityId }, [e.activityId]);
-  return (
-    <Async s={s} lines={8}>
-      {(ctx) => <Editor ctx={ctx} e={e} user={user} existing={existing} onSaved={onSaved} onClose={onClose} />}
-    </Async>
-  );
+  if (!s.data) {
+    return (
+      <div className="memo-ws" role="dialog" aria-modal="true" aria-label="จัดทำบันทึกข้อความ">
+        <header className="ws-head"><div className="ws-title"><strong>จัดทำบันทึกข้อความ</strong></div><button type="button" className="btn btn-ghost btn-sm ws-close" onClick={onClose}>ปิด</button></header>
+        <div style={{ padding: 'var(--s5)' }}><Async s={s} lines={8}>{() => null}</Async></div>
+      </div>
+    );
+  }
+  return <Editor ctx={s.data} e={e} user={user} existing={existing} onSaved={onSaved} onClose={onClose} />;
 }
 
 type CheckKey = 'ok' | 'returnFix' | 'forward';
 
 function Editor({ ctx, e, user, existing, onSaved, onClose }: {
-  ctx: MemoContext; e: EntryActivity; user: SessionUser; existing?: MemoRecord; onSaved: (m: MemoRecord) => void; onClose?: () => void;
+  ctx: MemoContext; e: EntryActivity; user: SessionUser; existing?: MemoRecord; onSaved: (m: MemoRecord) => void; onClose: () => void;
 }) {
   const l = useLookups();
   const toast = useToast();
@@ -36,11 +41,16 @@ function Editor({ ctx, e, user, existing, onSaved, onClose }: {
   const refNameOf = (unitId: string) => ctx.units.find((u) => u.id === unitId)?.name.replace(/^ระดับจังหวัด.*/, '') ?? '';
   const [unitId, setUnitId] = useState(existing?.unitId ?? (e.units.length === 1 ? e.units[0].unitId : ''));
   const [d, setD] = useState<MemoData>(() => existing ? { ...existing.data } : { ...ctx.draft, refFrom: refNameOf(e.units.length === 1 ? e.units[0].unitId : '') });
-  const [amt, setAmt] = useState(existing ? formatMoneyPlain(existing.amountSatang) : '');
+  const [amt, setAmtRaw] = useState(existing ? formatMoneyPlain(existing.amountSatang) : '');
   const [editBody, setEditBody] = useState(!!existing?.data.bodyOverride?.length);
   const [confirm, setConfirm] = useState(false);
+  const [tab, setTab] = useState<'form' | 'view'>('form');
+  const [hideForm, setHideForm] = useState(false);
+  const [guide, setGuide] = useState(true);
+  const [dirty, setDirty] = useState(false);
   const [reason, setReason] = useState('');
   const [key] = useState(() => newKey('memo'));
+  const setAmt = (v: string) => { setDirty(true); setAmtRaw(v); };
   const { busy, error, run, setError } = useSubmit();
   const isSuper = user.role === 'superadmin';
 
@@ -51,9 +61,22 @@ function Editor({ ctx, e, user, existing, onSaved, onClose }: {
   const unitLeft = unit ? unit.budget - unit.used + (existing && existing.unitId === unitId ? existing.amountSatang : 0) : 0;
   const stale = memoOverrideStale(data);
   const lockedMoney = !!existing && !isSuper;
-  const set = <K extends keyof MemoData>(k: K, v: MemoData[K]) => setD((c) => ({ ...c, [k]: v }));
-  const setHead = (k: keyof MemoData['head'], v: string) => setD((c) => ({ ...c, head: { ...c.head, [k]: v } }));
-  const toggle = (k: CheckKey) => setD((c) => {
+  const setDirtyD: typeof setD = (u) => { setDirty(true); setD(u); };
+  const set = <K extends keyof MemoData>(k: K, v: MemoData[K]) => { setDirty(true); setD((c) => ({ ...c, [k]: v })); };
+  const close = () => { if (!dirty || window.confirm('ปิดโดยไม่บันทึก? ข้อมูลที่กรอกจะหายไป')) onClose(); };
+  // ล็อกการเลื่อนหน้าหลังขณะเปิด + Esc เพื่อปิด
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => { if (ev.key === 'Escape' && !confirm && !document.querySelector('.tdp-pop')) close(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  });
+  const setHead = (k: keyof MemoData['head'], v: string) => setDirtyD((c) => ({ ...c, head: { ...c.head, [k]: v } }));
+  const toggle = (k: CheckKey) => setDirtyD((c) => {
     const on = !c.checks[k];
     const checks = { ...c.checks, [k]: on };
     // ถูกต้องตามคู่มือ กับ ส่งคืนแก้ไข เลือกได้อย่างใดอย่างหนึ่ง
@@ -72,6 +95,7 @@ function Editor({ ctx, e, user, existing, onSaved, onClose }: {
   const problems = (): string[] => {
     const p = validateMemo(data);
     if (!unitId) p.unshift('เลือกอำเภอ/พื้นที่ที่ใช้งบ');
+    if (!data.checks.ok && !data.checks.returnFix) p.push('เลือกผลการตรวจสอบ: ถูกต้องตามคู่มือโครงการ หรือ ส่งคืนแก้ไข');
     if (data.budgetCode && !/^\d{20}$/.test(data.budgetCode)) p.push('รหัสงบประมาณต้องเป็นตัวเลข 20 หลัก');
     if (data.mainActivityCode && !/^\d{17}$/.test(data.mainActivityCode)) p.push('รหัสกิจกรรมหลักต้องเป็นตัวเลข 17 หลัก');
     if (stale) p.push('ข้อความที่แก้เองมียอดเงินไม่ตรงกับยอดล่าสุด — กด "ใช้ข้อความอัตโนมัติ" หรือแก้ตัวเลข');
@@ -80,7 +104,7 @@ function Editor({ ctx, e, user, existing, onSaved, onClose }: {
 
   const review = () => {
     const p = problems();
-    if (p.length) return setError(new ApiError('VALIDATION_FAILED', p.join(' · ')));
+    if (p.length) { setTab('form'); return setError(new ApiError('VALIDATION_FAILED', p.join(' · '))); }
     setError(null);
     setConfirm(true);
   };
@@ -95,18 +119,47 @@ function Editor({ ctx, e, user, existing, onSaved, onClose }: {
   });
 
   const bodyText = (data.bodyOverride?.length ? data.bodyOverride : memoParagraphs(data)).join('\n');
-  const field = (label: string, node: React.ReactNode, kind: 'staff' | 'auto', opts: { req?: boolean; wide?: boolean; hint?: string } = {}) => (
-    <label className={`field fld-${kind} ${opts.wide ? 'wide' : ''}`}>
+  const field = (label: string, node: React.ReactNode, kind: 'staff' | 'auto', opts: { req?: boolean; wide?: boolean; hint?: string; f?: MemoField } = {}) => (
+    <label className={`field fld-${kind} ${opts.wide ? 'wide' : ''}`} id={opts.f ? `mf-${opts.f}` : undefined}>
       <span className={opts.req ? 'req' : ''}>{label}</span>{node}{opts.hint && <span className="hint">{opts.hint}</span>}
     </label>
   );
+  /** คลิกช่องบนหน้าเอกสาร → ไปที่ช่องในฟอร์ม (มือถือสลับไปแท็บกรอกข้อมูล) */
+  const goField = (f: MemoField) => {
+    const target = f === 'budget' || f === 'previous' || f === 'remaining' ? 'request' : f === 'fund' || f === 'projectName' || f === 'mainActivityName' || f === 'subActivityName' ? 'projectName' : f;
+    setTab('form');
+    setHideForm(false);
+    setTimeout(() => {
+      const el = document.getElementById(`mf-${target}`) ?? document.getElementById(`mf-${f}`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.remove('is-flash');
+      void el.offsetWidth;
+      el.classList.add('is-flash');
+      el.querySelector<HTMLElement>('input:not([readonly]), select, textarea, button')?.focus({ preventScroll: true });
+    }, 60);
+  };
 
+  const title = existing ? `แก้ไขบันทึกข้อความ ที่ ${existing.docNo}` : 'จัดทำบันทึกข้อความ';
   return (
-    <div className="memo-editor">
-      <div className="memo-form">
+    <div className="memo-ws" role="dialog" aria-modal="true" aria-label={title}>
+      <header className="ws-head">
+        <div className="ws-title">
+          <strong>{title}</strong>
+          <span className="xs muted">{e.activityName} · {e.projectName}</span>
+        </div>
+        <div className="segmented ws-tabs" role="tablist" aria-label="มุมมอง">
+          <button type="button" role="tab" aria-selected={tab === 'form'} aria-pressed={tab === 'form'} onClick={() => setTab('form')}>กรอกข้อมูล</button>
+          <button type="button" role="tab" aria-selected={tab === 'view'} aria-pressed={tab === 'view'} onClick={() => setTab('view')}>ดูเอกสาร</button>
+        </div>
+        <button type="button" className="btn btn-ghost btn-sm ws-close" onClick={close}>ปิด</button>
+      </header>
+      <div className={`ws-body tab-${tab} ${hideForm ? 'no-form' : ''}`}>
+      <aside className="ws-form memo-form" aria-label="ฟอร์มกรอกข้อมูล">
         <p className="memo-legend" aria-label="ความหมายของสีช่อง">
           <span><i className="lg-staff" /> เจ้าหน้าที่กรอก</span>
-          <span><i className="lg-auto" /> ระบบเติมให้ (แก้ได้บางช่อง)</span>
+          <span><i className="lg-auto" /> ระบบเติมให้</span>
+          <span className="hint">คลิกข้อความบนหน้าเอกสารเพื่อไปที่ช่องนั้น</span>
         </p>
         {!ctx.profileComplete && (
           <p className="notice notice-warn">ข้อมูลผู้ลงนามยังไม่ครบ — <Link to="/admin/profile">กรอกคำนำหน้าและตำแหน่งที่ "ข้อมูลของฉัน"</Link></p>
@@ -119,22 +172,22 @@ function Editor({ ctx, e, user, existing, onSaved, onClose }: {
         )}
 
         <fieldset>
-          <legend>หัวบันทึก</legend>
+          <legend><b className="step">1</b> หัวบันทึก</legend>
           <div className="form-grid">
-            {field('ส่วนราชการ', <input value={d.orgLine} onChange={(ev) => set('orgLine', ev.target.value)} />, 'auto', { wide: true })}
-            {field('โทรสาร', <input value={d.fax} onChange={(ev) => set('fax', ev.target.value)} />, 'auto')}
-            {field('เรียน', <input value={d.to} onChange={(ev) => set('to', ev.target.value)} />, 'auto')}
+            {field('ส่วนราชการ', <input value={d.orgLine} onChange={(ev) => set('orgLine', ev.target.value)} />, 'auto', { wide: true, f: 'orgLine' })}
+            {field('โทรสาร', <input value={d.fax} onChange={(ev) => set('fax', ev.target.value)} />, 'auto', { f: 'fax' })}
+            {field('เรียน', <input value={d.to} onChange={(ev) => set('to', ev.target.value)} />, 'auto', { f: 'to' })}
             {field('ส่วนหน้าเลขที่', <input value={d.docPrefix} onChange={(ev) => set('docPrefix', ev.target.value)} placeholder="เช่น กพ 0009.3" readOnly={lockedMoney} />, 'auto')}
-            {field('เลขที่หนังสือ', <input value={d.docNumber} onChange={(ev) => set('docNumber', ev.target.value.replace(/^\//, ''))} inputMode="numeric" placeholder="เลขที่ลงทะเบียนส่ง" required readOnly={lockedMoney} />, 'staff', { req: true, hint: `จะแสดงเป็น "ที่ ${memoDocNo(d) || '…'}"` })}
+            {field('เลขที่หนังสือ', <input value={d.docNumber} onChange={(ev) => set('docNumber', ev.target.value.replace(/^\//, ''))} inputMode="numeric" placeholder="เลขที่ลงทะเบียนส่ง" required readOnly={lockedMoney} />, 'staff', { req: true, hint: `จะแสดงเป็น "ที่ ${memoDocNo(d) || '…'}"`, f: 'docNumber' })}
             {field('วันที่', (
               <ThaiDatePicker value={d.date} min="2020-01-01" max={todayBangkok()} today={todayBangkok()} disabled={lockedMoney}
                 onPick={(v) => set('date', v)} buttonText={formatThaiDateLong(d.date) || 'เลือกวันที่'} />
-            ), 'staff', { req: true })}
+            ), 'staff', { req: true, f: 'date' })}
           </div>
         </fieldset>
 
         <fieldset>
-          <legend>หนังสือที่ส่งเอกสารมา</legend>
+          <legend><b className="step">2</b> หนังสือที่ส่งเอกสารมา</legend>
           <div className="form-grid">
             {field('อำเภอ / พื้นที่ที่ใช้งบ', e.units.length === 1
               ? <input value={unitName(e.units[0].unitId)} readOnly />
@@ -144,58 +197,58 @@ function Editor({ ctx, e, user, existing, onSaved, onClose }: {
                   {e.units.map((u) => <option key={u.unitId} value={u.unitId}>{unitName(u.unitId)} (คงเหลือ {formatMoneyPlain(u.budget - u.used)})</option>)}
                 </select>
               ), 'staff', { req: true })}
-            {field('ตามหนังสือที่', <input value={d.refNo} onChange={(ev) => set('refNo', ev.target.value)} placeholder="เช่น กพ 0109/2269" />, 'staff')}
+            {field('ตามหนังสือที่', <input value={d.refNo} onChange={(ev) => set('refNo', ev.target.value)} placeholder="เช่น กพ 0109/2269" />, 'staff', { f: 'refNo' })}
             {field('ลงวันที่', (
               <ThaiDatePicker value={d.refDate} min="2020-01-01" max={todayBangkok()} today={todayBangkok()}
                 onPick={(v) => set('refDate', v)} buttonText={d.refDate ? formatThaiDateLong(d.refDate) : 'เลือกวันที่'}
                 footer={(close) => <button type="button" className="btn btn-ghost btn-sm" onClick={() => { set('refDate', ''); close(); }}>ไม่ระบุ</button>} />
-            ), 'staff')}
+            ), 'staff', { f: 'refDate' })}
             {field('ของ', (
               <>
                 <input value={d.refFrom} onChange={(ev) => set('refFrom', ev.target.value)} list={`${ids}-units`} placeholder="เช่น อำเภอเมืองกำแพงเพชร" />
                 <datalist id={`${ids}-units`}>{ctx.units.map((u) => <option key={u.id} value={u.name} />)}</datalist>
               </>
-            ), 'staff')}
+            ), 'staff', { f: 'refFrom' })}
             {field('ขอเบิกเงินค่า', (
               <>
                 <input value={d.expense} onChange={(ev) => set('expense', ev.target.value)} list={`${ids}-exp`} placeholder="พิมพ์หรือเลือก เช่น ค่าจัดซื้อวัสดุสนับสนุน" required />
                 <datalist id={`${ids}-exp`}>{ctx.expenseSuggestions.map((x) => <option key={x} value={x} />)}</datalist>
               </>
-            ), 'staff', { req: true, wide: true })}
+            ), 'staff', { req: true, wide: true, f: 'expense' })}
           </div>
         </fieldset>
 
         <fieldset>
-          <legend>โครงการ / กิจกรรม</legend>
+          <legend><b className="step">3</b> โครงการ / กิจกรรม <small className="muted">(ระบบเติมให้)</small></legend>
           <div className="form-grid">
-            {field('โครงการ', <div className="auto-v">{d.projectName}</div>, 'auto', { wide: true })}
+            {field('โครงการ', <div className="auto-v">{d.projectName}</div>, 'auto', { wide: true, f: 'projectName' })}
             {d.mainActivityName && field('กิจกรรม', <div className="auto-v">{d.mainActivityName}</div>, 'auto', { wide: true })}
             {field('กิจกรรมย่อย', <div className="auto-v">{d.subActivityName}</div>, 'auto', { wide: true })}
             {field('แหล่งงบประมาณ', <div className="auto-v">{d.fund || '–'}</div>, 'auto')}
             {ctx.codesSaved
               ? (
                 <>
-                  {field('รหัสงบประมาณ (20 หลัก)', <div className="auto-v num">{d.budgetCode}</div>, 'auto')}
-                  {field('รหัสกิจกรรมหลัก (17 หลัก)', <div className="auto-v num">{d.mainActivityCode}</div>, 'auto', { hint: ctx.codesRef === 'บันทึกไว้กับกิจกรรม' ? 'บันทึกไว้กับกิจกรรมแล้ว' : `ดึงจากฐานข้อมูลรหัสงบประมาณ · ${ctx.codesRef}` })}
+                  {field('รหัสงบประมาณ (20 หลัก)', <div className="auto-v num">{d.budgetCode}</div>, 'auto', { f: 'budgetCode' })}
+                  {field('รหัสกิจกรรมหลัก (17 หลัก)', <div className="auto-v num">{d.mainActivityCode}</div>, 'auto', { f: 'mainActivityCode', hint: ctx.codesRef === 'บันทึกไว้กับกิจกรรม' ? 'บันทึกไว้กับกิจกรรมแล้ว' : `ดึงจากฐานข้อมูลรหัสงบประมาณ · ${ctx.codesRef}` })}
                 </>
               )
               : (
                 <>
-                  {field('รหัสงบประมาณ (20 หลัก) — ไม่พบในฐานข้อมูล', <input value={d.budgetCode} onChange={(ev) => set('budgetCode', ev.target.value.replace(/\D/g, '').slice(0, 20))} inputMode="numeric" placeholder="07011152034002000000" />, 'staff', { hint: `${d.budgetCode.length}/20 หลัก · กรอกครั้งแรกครั้งเดียว ระบบจำไว้` })}
-                  {field('รหัสกิจกรรมหลัก (17 หลัก)', <input value={d.mainActivityCode} onChange={(ev) => set('mainActivityCode', ev.target.value.replace(/\D/g, '').slice(0, 17))} inputMode="numeric" placeholder="07011690009900000" />, 'staff', { hint: `${d.mainActivityCode.length}/17 หลัก` })}
+                  {field('รหัสงบประมาณ (20 หลัก) — ไม่พบในฐานข้อมูล', <input value={d.budgetCode} onChange={(ev) => set('budgetCode', ev.target.value.replace(/\D/g, '').slice(0, 20))} inputMode="numeric" placeholder="07011152034002000000" />, 'staff', { f: 'budgetCode', hint: `${d.budgetCode.length}/20 หลัก · กรอกครั้งแรกครั้งเดียว ระบบจำไว้` })}
+                  {field('รหัสกิจกรรมหลัก (17 หลัก)', <input value={d.mainActivityCode} onChange={(ev) => set('mainActivityCode', ev.target.value.replace(/\D/g, '').slice(0, 17))} inputMode="numeric" placeholder="07011690009900000" />, 'staff', { f: 'mainActivityCode', hint: `${d.mainActivityCode.length}/17 หลัก` })}
                 </>
               )}
           </div>
         </fieldset>
 
         <fieldset>
-          <legend>ยอดเงิน (เชื่อมกับงบประมาณของกิจกรรม)</legend>
+          <legend><b className="step">4</b> ยอดเงิน <small className="muted">(เชื่อมกับงบของกิจกรรม)</small></legend>
           <div className="money-grid">
             {field('ยอดเงินงบประมาณ (รวมทั้งหมดของกิจกรรม)', <div className="auto-v num">{formatMoneyPlain(d.budgetSatang)} บาท <small>({bahtText(d.budgetSatang)})</small></div>, 'auto')}
             {field('ขอเบิก/ยืมมาแล้ว (รวมทุกครั้งทุกอำเภอ)', <div className="auto-v num">{formatMoneyPlain(d.previousSatang)} บาท <small>({bahtText(d.previousSatang)})</small></div>, 'auto')}
             {field('ขอเบิกครั้งนี้ (บาท)', (
               <input className="big num" inputMode="decimal" value={amt} onChange={(ev) => setAmt(ev.target.value)} placeholder="เช่น 4,000" required readOnly={lockedMoney} aria-describedby={`${ids}-amt`} />
-            ), 'staff', { req: true })}
+            ), 'staff', { req: true, f: 'request' })}
             {field('งบประมาณคงเหลือ (หลังครั้งนี้)', <div className={`auto-v num ${remaining < 0 ? 'neg' : ''}`}>{formatMoneyPlain(remaining)} บาท <small>({bahtText(remaining)})</small></div>, 'auto')}
           </div>
           <p id={`${ids}-amt`} className="hint" style={remaining < 0 || (unit && satang > unitLeft) ? { color: 'var(--clay)' } : undefined}>
@@ -205,7 +258,7 @@ function Editor({ ctx, e, user, existing, onSaved, onClose }: {
         </fieldset>
 
         <fieldset className="memo-body-edit">
-          <legend>ข้อความเนื้อหา</legend>
+          <legend><b className="step">5</b> ข้อความเนื้อหา</legend>
           <div className="memo-actions" style={{ marginBottom: 'var(--s2)' }}>
             <div className="segmented" role="group" aria-label="การจัดข้อความ">
               <button type="button" aria-pressed={d.align === 'left'} onClick={() => set('align', 'left')}>ชิดซ้าย</button>
@@ -234,8 +287,8 @@ function Editor({ ctx, e, user, existing, onSaved, onClose }: {
         </fieldset>
 
         <fieldset>
-          <legend>ผลการตรวจสอบ (เจ้าหน้าที่กลุ่มเป็นผู้เลือก)</legend>
-          <div className="memo-checks">
+          <legend><b className="step">6</b> ผลการตรวจสอบ</legend>
+          <div className="memo-checks" id="mf-checks">
             <label><input type="checkbox" checked={d.checks.ok} onChange={() => toggle('ok')} /> ถูกต้องตามคู่มือโครงการ</label>
             <label><input type="checkbox" checked={d.checks.returnFix} onChange={() => toggle('returnFix')} /> ส่งคืนแก้ไข</label>
             {d.checks.returnFix && field('เนื่องจาก', <input value={d.checks.returnReason} onChange={(ev) => setD((c) => ({ ...c, checks: { ...c.checks, returnReason: ev.target.value } }))} required />, 'staff', { req: true })}
@@ -244,42 +297,59 @@ function Editor({ ctx, e, user, existing, onSaved, onClose }: {
         </fieldset>
 
         <fieldset>
-          <legend>ผู้ลงนาม</legend>
+          <legend><b className="step">7</b> ผู้ลงนาม</legend>
           <div className="form-grid">
-            {field('ผู้ตรวจสอบ (ข้อมูลของฉัน)', <div className="auto-v">{d.signer.name || '–'}<small>{d.signer.position}</small></div>, 'auto', { hint: existing ? 'คงผู้จัดทำเดิม' : undefined })}
-            {field('หัวหน้ากลุ่ม / ผู้รักษาการ', <input value={d.head.name} onChange={(ev) => setHead('name', ev.target.value)} placeholder="ชื่อพร้อมคำนำหน้า" />, 'auto')}
+            {field('ผู้ตรวจสอบ (ข้อมูลของฉัน)', <div className="auto-v">{d.signer.name || '–'}<small>{d.signer.position}</small></div>, 'auto', { f: 'signer', hint: existing ? 'คงผู้จัดทำเดิม' : undefined })}
+            {field('หัวหน้ากลุ่ม / ผู้รักษาการ', <input value={d.head.name} onChange={(ev) => setHead('name', ev.target.value)} placeholder="ชื่อพร้อมคำนำหน้า" />, 'auto', { f: 'head' })}
             {field('ตำแหน่ง', <input value={d.head.position} onChange={(ev) => setHead('position', ev.target.value)} />, 'auto')}
             {field('บรรทัดที่สอง', <input value={d.head.line2 ?? ''} onChange={(ev) => setHead('line2', ev.target.value)} placeholder="เช่น รักษาการหัวหน้ากลุ่มอารักขาพืช" />, 'auto')}
           </div>
         </fieldset>
 
-        {error && <ErrorBox error={error} />}
-        <div className="memo-actions">
-          <button type="button" className="btn btn-lg" onClick={review} disabled={busy}>ตรวจทานก่อนบันทึก</button>
-          <button type="button" className="btn btn-ghost" onClick={() => printMemo(data)}>พิมพ์ฉบับร่าง</button>
-          {onClose && <button type="button" className="btn btn-ghost" onClick={onClose}>ยกเลิก</button>}
-        </div>
-      </div>
+      </aside>
 
-      <section className="memo-preview" aria-label="ตัวอย่างหน้าเอกสาร">
-        <h3 className="rec-h3">ตัวอย่างหน้าเอกสาร (A4)</h3>
-        <A4Fit><MemoDocument d={data} onToggle={toggle} /></A4Fit>
+      <section className="ws-view" aria-label="ตัวอย่างหน้าเอกสาร">
+        <DocViewer
+          label="ตัวอย่างบันทึกข้อความ (A4)"
+          left={(
+            <button type="button" className="dv-btn dv-hide-sm" onClick={() => setHideForm((h) => !h)} aria-pressed={hideForm}>{hideForm ? 'แสดงฟอร์ม' : 'ซ่อนฟอร์ม'}</button>
+          )}
+          right={(
+            <>
+              <label className="dv-check"><input type="checkbox" checked={guide} onChange={(ev) => setGuide(ev.target.checked)} /> แสดงช่องกรอก</label>
+              <button type="button" className="dv-btn dv-primary" onClick={() => printMemo(data)}>พิมพ์</button>
+            </>
+          )}
+        >
+          <MemoDocument d={data} onToggle={toggle} guide={guide ? { onField: goField } : null} />
+        </DocViewer>
       </section>
 
-      <Sheet open={confirm} title="ยืนยันบันทึกข้อความ" onClose={() => setConfirm(false)} className="memo-confirm">
-        <p className="small">
-          ตรวจทานหน้าเอกสาร — เมื่อกด <b>ยืนยันและบันทึก</b> ระบบจะบันทึกการเบิกจ่าย <b className="num">{formatMoneyPlain(satang)} บาท</b>
-          {' '}(นับเป็นเบิกจ่ายแล้วทันที) วันที่ {formatThaiDate(data.date)} และเก็บไฟล์ Google Doc + PDF ไว้ใน Google Drive ของโครงการ
-        </p>
+      <footer className="ws-actions">
+        {error && <ErrorBox error={error} />}
+        <div className="ws-actions-row">
+          <button type="button" className="btn btn-lg" onClick={review} disabled={busy}>ตรวจทานและบันทึก</button>
+          <span className="ws-sum num" aria-live="polite">{satang > 0 ? <>ขอเบิก <b>{formatMoneyPlain(satang)}</b> · คงเหลือ <b className={remaining < 0 ? 'neg' : ''}>{formatMoneyPlain(remaining)}</b> บาท</> : 'กรอกยอดขอเบิกครั้งนี้'}</span>
+        </div>
+      </footer>
+      </div>
+
+      <Sheet open={confirm} title="ยืนยันบันทึกข้อความ" onClose={() => setConfirm(false)}>
+        <dl className="confirm-dl">
+          <dt>ที่</dt><dd>{memoDocNo(data)}</dd>
+          <dt>วันที่</dt><dd>{formatThaiDateLong(data.date)}</dd>
+          <dt>ขอเบิกครั้งนี้</dt><dd className="num"><b>{formatMoneyPlain(satang)}</b> บาท ({bahtText(satang)})</dd>
+          <dt>คงเหลือหลังเบิก</dt><dd className="num">{formatMoneyPlain(remaining)} บาท</dd>
+          <dt>ผลการตรวจสอบ</dt><dd>{[data.checks.ok && 'ถูกต้องตามคู่มือ', data.checks.returnFix && `ส่งคืนแก้ไข (${data.checks.returnReason})`, data.checks.forward && 'ส่งฝ่ายบริหารทั่วไป'].filter(Boolean).join(' · ') || 'ยังไม่ได้เลือก'}</dd>
+        </dl>
+        <p className="small">เมื่อกด <b>ยืนยันและบันทึก</b> ระบบจะนับเป็นเบิกจ่ายแล้วทันที วันที่ {formatThaiDate(data.date)} และเก็บ Google Doc + PDF ไว้ใน Google Drive ของโครงการ</p>
         {existing && isSuper && (existing.amountSatang !== satang || existing.date !== data.date || existing.docNo !== memoDocNo(data)) && (
           <label className="field"><span>เหตุผลที่แก้ยอดเงิน/วันที่/เลขที่</span><input value={reason} onChange={(ev) => setReason(ev.target.value)} placeholder="ระบบจะยกเลิกรายการเดิมและบันทึกรายการใหม่แทน" /></label>
         )}
-        <A4Fit><MemoDocument d={data} onToggle={toggle} /></A4Fit>
         {error && <ErrorBox error={error} />}
-        <div className="memo-confirm-bar">
-          <button type="button" className="btn btn-ghost" onClick={() => setConfirm(false)}>กลับไปแก้ไข</button>
-          <button type="button" className="btn btn-ghost" onClick={() => printMemo(data)}>พิมพ์</button>
+        <div className="row-gap">
           <button type="button" className="btn btn-lg" onClick={save} disabled={busy}>{busy ? 'กำลังบันทึกและสร้างไฟล์…' : 'ยืนยันและบันทึก'}</button>
+          <button type="button" className="btn btn-ghost" onClick={() => setConfirm(false)}>กลับไปแก้ไข</button>
         </div>
       </Sheet>
     </div>

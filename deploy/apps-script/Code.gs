@@ -1689,35 +1689,42 @@ var KPP = (() => {
     return d.budgetSatang - d.previousSatang - d.requestSatang;
   }
   var money = (s) => `${formatMoneyPlain(s)} \u0E1A\u0E32\u0E17 (${bahtText2(s)})`;
-  var joinNonEmpty = (...parts) => parts.filter(Boolean).join(" ");
   function fromUnit(s) {
     const t2 = s.trim();
     if (!t2) return "";
     return /^(อำเภอ|สำนักงาน|กลุ่ม|ศูนย์|ฝ่าย)/.test(t2) ? t2 : `\u0E2D\u0E33\u0E40\u0E20\u0E2D${t2}`;
   }
-  function memoParagraphs(d) {
-    const ref = joinNonEmpty(
-      d.refNo && `\u0E15\u0E32\u0E21\u0E2B\u0E19\u0E31\u0E07\u0E2A\u0E37\u0E2D\u0E17\u0E35\u0E48 ${d.refNo.trim()}`,
-      d.refDate && `\u0E25\u0E07\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48 ${formatThaiDateLong(d.refDate)}`,
-      d.refFrom && `\u0E02\u0E2D\u0E07${fromUnit(d.refFrom)}`
-    );
-    const first = joinNonEmpty(
-      ref ? `${ref} \u0E44\u0E14\u0E49\u0E2A\u0E48\u0E07\u0E40\u0E2D\u0E01\u0E2A\u0E32\u0E23\u0E2B\u0E25\u0E31\u0E01\u0E10\u0E32\u0E19\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E02\u0E2D\u0E40\u0E1A\u0E34\u0E01\u0E40\u0E07\u0E34\u0E19${d.expense.trim()}` : `\u0E02\u0E2D\u0E2A\u0E48\u0E07\u0E40\u0E2D\u0E01\u0E2A\u0E32\u0E23\u0E2B\u0E25\u0E31\u0E01\u0E10\u0E32\u0E19\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E02\u0E2D\u0E40\u0E1A\u0E34\u0E01\u0E40\u0E07\u0E34\u0E19${d.expense.trim()}`,
-      d.projectName && (d.projectName.startsWith("\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23") ? d.projectName : `\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23${d.projectName}`),
-      d.mainActivityName && (d.mainActivityName.startsWith("\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21") ? d.mainActivityName : `\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21${d.mainActivityName}`),
-      d.fund && `(${d.fund})`,
-      d.budgetCode && `(${d.budgetCode})`
-    );
+  function memoParagraphParts(d, opts = {}) {
+    const k = !!opts.keepEmpty;
+    const P = (t2, f) => ({ t: t2, f });
+    const sp = P(" ");
+    const join = (groups) => groups.filter((g) => g.length).flatMap((g, i) => i ? [sp, ...g] : g);
+    const moneyParts = (s, f) => [P(money(s), f)];
+    const ref = join([
+      d.refNo || k ? [P("\u0E15\u0E32\u0E21\u0E2B\u0E19\u0E31\u0E07\u0E2A\u0E37\u0E2D\u0E17\u0E35\u0E48 "), P(d.refNo.trim(), "refNo")] : [],
+      d.refDate || k ? [P("\u0E25\u0E07\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48 "), P(d.refDate ? formatThaiDateLong(d.refDate) : "", "refDate")] : [],
+      d.refFrom || k ? [P("\u0E02\u0E2D\u0E07"), P(fromUnit(d.refFrom), "refFrom")] : []
+    ]);
+    const first = join([
+      ref.length ? [...ref, P(" \u0E44\u0E14\u0E49\u0E2A\u0E48\u0E07\u0E40\u0E2D\u0E01\u0E2A\u0E32\u0E23\u0E2B\u0E25\u0E31\u0E01\u0E10\u0E32\u0E19\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E02\u0E2D\u0E40\u0E1A\u0E34\u0E01\u0E40\u0E07\u0E34\u0E19"), P(d.expense.trim(), "expense")] : [P("\u0E02\u0E2D\u0E2A\u0E48\u0E07\u0E40\u0E2D\u0E01\u0E2A\u0E32\u0E23\u0E2B\u0E25\u0E31\u0E01\u0E10\u0E32\u0E19\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E02\u0E2D\u0E40\u0E1A\u0E34\u0E01\u0E40\u0E07\u0E34\u0E19"), P(d.expense.trim(), "expense")],
+      d.projectName ? [P(d.projectName.startsWith("\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23") ? d.projectName : `\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23${d.projectName}`, "projectName")] : [],
+      d.mainActivityName ? [P(d.mainActivityName.startsWith("\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21") ? d.mainActivityName : `\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21${d.mainActivityName}`, "mainActivityName")] : [],
+      d.fund ? [P("("), P(d.fund, "fund"), P(")")] : [],
+      d.budgetCode ? [P("("), P(d.budgetCode, "budgetCode"), P(")")] : []
+    ]);
     const lines = [first];
-    if (d.mainActivityCode) lines.push(`\u0E23\u0E2B\u0E31\u0E2A\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E2B\u0E25\u0E31\u0E01 ${d.mainActivityCode}`);
-    if (d.subActivityName) lines.push(`\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E22\u0E48\u0E2D\u0E22 ${d.subActivityName}`);
+    if (d.mainActivityCode) lines.push([P("\u0E23\u0E2B\u0E31\u0E2A\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E2B\u0E25\u0E31\u0E01 "), P(d.mainActivityCode, "mainActivityCode")]);
+    if (d.subActivityName) lines.push([P("\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E22\u0E48\u0E2D\u0E22 "), P(d.subActivityName, "subActivityName")]);
     lines.push(
-      `\u0E22\u0E2D\u0E14\u0E40\u0E07\u0E34\u0E19\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13 ${money(d.budgetSatang)} (\u0E23\u0E27\u0E21\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14\u0E02\u0E2D\u0E07\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E19\u0E35\u0E49)`,
-      `\u0E02\u0E2D\u0E40\u0E1A\u0E34\u0E01\u0E40\u0E07\u0E34\u0E19/\u0E22\u0E37\u0E21\u0E40\u0E07\u0E34\u0E19\u0E23\u0E32\u0E0A\u0E01\u0E32\u0E23\u0E21\u0E32\u0E41\u0E25\u0E49\u0E27 \u0E40\u0E1B\u0E47\u0E19\u0E08\u0E33\u0E19\u0E27\u0E19\u0E40\u0E07\u0E34\u0E19 ${money(d.previousSatang)} (\u0E23\u0E27\u0E21\u0E17\u0E38\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07\u0E17\u0E38\u0E01\u0E2D\u0E33\u0E40\u0E20\u0E2D)`,
-      `\u0E02\u0E2D\u0E40\u0E1A\u0E34\u0E01\u0E40\u0E07\u0E34\u0E19\u0E23\u0E32\u0E0A\u0E01\u0E32\u0E23\u0E04\u0E23\u0E31\u0E49\u0E07\u0E19\u0E35\u0E49 \u0E40\u0E1B\u0E47\u0E19\u0E08\u0E33\u0E19\u0E27\u0E19\u0E40\u0E07\u0E34\u0E19 ${money(d.requestSatang)} (\u0E40\u0E09\u0E1E\u0E32\u0E30\u0E04\u0E23\u0E31\u0E49\u0E07\u0E19\u0E35\u0E49)`,
-      `\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13\u0E04\u0E07\u0E40\u0E2B\u0E25\u0E37\u0E2D ${money(memoRemaining(d))} (\u0E04\u0E07\u0E40\u0E2B\u0E25\u0E37\u0E2D\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14\u0E02\u0E2D\u0E07\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E19\u0E35\u0E49)`
+      [P("\u0E22\u0E2D\u0E14\u0E40\u0E07\u0E34\u0E19\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13 "), ...moneyParts(d.budgetSatang, "budget"), P(" (\u0E23\u0E27\u0E21\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14\u0E02\u0E2D\u0E07\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E19\u0E35\u0E49)")],
+      [P("\u0E02\u0E2D\u0E40\u0E1A\u0E34\u0E01\u0E40\u0E07\u0E34\u0E19/\u0E22\u0E37\u0E21\u0E40\u0E07\u0E34\u0E19\u0E23\u0E32\u0E0A\u0E01\u0E32\u0E23\u0E21\u0E32\u0E41\u0E25\u0E49\u0E27 \u0E40\u0E1B\u0E47\u0E19\u0E08\u0E33\u0E19\u0E27\u0E19\u0E40\u0E07\u0E34\u0E19 "), ...moneyParts(d.previousSatang, "previous"), P(" (\u0E23\u0E27\u0E21\u0E17\u0E38\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07\u0E17\u0E38\u0E01\u0E2D\u0E33\u0E40\u0E20\u0E2D)")],
+      [P("\u0E02\u0E2D\u0E40\u0E1A\u0E34\u0E01\u0E40\u0E07\u0E34\u0E19\u0E23\u0E32\u0E0A\u0E01\u0E32\u0E23\u0E04\u0E23\u0E31\u0E49\u0E07\u0E19\u0E35\u0E49 \u0E40\u0E1B\u0E47\u0E19\u0E08\u0E33\u0E19\u0E27\u0E19\u0E40\u0E07\u0E34\u0E19 "), ...moneyParts(d.requestSatang, "request"), P(" (\u0E40\u0E09\u0E1E\u0E32\u0E30\u0E04\u0E23\u0E31\u0E49\u0E07\u0E19\u0E35\u0E49)")],
+      [P("\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13\u0E04\u0E07\u0E40\u0E2B\u0E25\u0E37\u0E2D "), ...moneyParts(memoRemaining(d), "remaining"), P(" (\u0E04\u0E07\u0E40\u0E2B\u0E25\u0E37\u0E2D\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14\u0E02\u0E2D\u0E07\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E19\u0E35\u0E49)")]
     );
     return lines;
+  }
+  function memoParagraphs(d) {
+    return memoParagraphParts(d).map((ps) => ps.map((p) => p.t).join(""));
   }
   function memoBody(d) {
     const o = (d.bodyOverride ?? []).map((s) => s.trim()).filter(Boolean);

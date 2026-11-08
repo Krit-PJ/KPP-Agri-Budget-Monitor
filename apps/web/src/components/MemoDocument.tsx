@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import {
-  GARUDA_JPEG_BASE64, MEMO_WEB_FONT_PT, formatThaiDateLong, memoBody, memoDocNo, memoText, wrapSegments, type MemoData,
+  GARUDA_JPEG_BASE64, MEMO_STAFF_FIELDS, MEMO_WEB_FONT_PT, formatThaiDateLong, memoBody, memoParagraphParts, memoText, wrapSegments,
+  type MemoData, type MemoField, type MemoPart,
 } from '@kpp/domain';
 import './memo.css';
 
@@ -42,40 +43,72 @@ function Box({ on, label, onToggle }: { on: boolean; label: string; onToggle?: (
   return <button type="button" className={`m-box is-btn ${on ? 'is-on' : ''}`} role="checkbox" aria-checked={on} aria-label={label} onClick={onToggle} />;
 }
 
-/** หน้า A4 ของบันทึกข้อความ (ขนาดจริง) — ใช้ทั้งตัวอย่างบนจอ ยืนยันก่อนบันทึก และพิมพ์ */
-export function MemoDocument({ d, onToggle }: { d: MemoData; onToggle?: (k: 'ok' | 'returnFix' | 'forward') => void }) {
+/** โหมดนำทาง: ไฮไลต์ช่องบนหน้าเอกสาร (เหลือง = เจ้าหน้าที่กรอก, ฟ้า = ระบบเติม) และคลิกเพื่อไปที่ช่องในฟอร์ม */
+export interface MemoGuide { onField?: (f: MemoField) => void }
+
+const FIELD_LABEL: Record<MemoField, string> = {
+  orgLine: 'ส่วนราชการ', fax: 'โทรสาร', docNumber: 'เลขที่หนังสือ', date: 'วันที่', to: 'เรียน', refNo: 'เลขที่หนังสืออ้างถึง',
+  refDate: 'วันที่หนังสืออ้างถึง', refFrom: 'หน่วยที่ส่งมา', expense: 'รายการค่าใช้จ่าย', projectName: 'โครงการ', mainActivityName: 'กิจกรรม',
+  fund: 'แหล่งงบ', budgetCode: 'รหัสงบประมาณ', mainActivityCode: 'รหัสกิจกรรมหลัก', subActivityName: 'กิจกรรมย่อย', budget: 'งบประมาณ',
+  previous: 'เบิกมาแล้ว', request: 'ขอเบิกครั้งนี้', remaining: 'คงเหลือ', checks: 'ผลการตรวจสอบ', signer: 'ผู้ตรวจสอบ', head: 'หัวหน้ากลุ่ม',
+};
+
+/** หน้า A4 ของบันทึกข้อความ (ขนาดจริง) — ใช้ทั้งตัวอย่างบนจอ ยืนยันก่อนบันทึก และพิมพ์ (พิมพ์ไม่มีไฮไลต์) */
+export function MemoDocument({ d, onToggle, guide }: { d: MemoData; onToggle?: (k: 'ok' | 'returnFix' | 'forward') => void; guide?: MemoGuide | null }) {
   useSarabun();
   const tx = (s: string) => memoText(d, s);
+  const justify = d.align === 'justify';
+  /** ค่าในช่อง f — โหมดนำทางห่อด้วยไฮไลต์ที่คลิกได้; ค่าว่างแสดงชื่อช่องแทนจุดไข่ปลา */
+  const F = ({ f, s, nowrap }: { f: MemoField; s: string; nowrap?: boolean }) => {
+    const text = tx(s);
+    const content = text ? (nowrap ? <span className="nw">{text}</span> : <ThaiText text={text} justify={justify} />) : null;
+    if (!guide) return content ?? <>{DOTS}</>;
+    const kind = MEMO_STAFF_FIELDS.has(f) ? 'staff' : 'auto';
+    const label = FIELD_LABEL[f];
+    return (
+      <span className={`g-fld g-${kind} ${text ? '' : 'is-empty'}`} data-f={f} title={`${label} — ${kind === 'staff' ? 'เจ้าหน้าที่กรอก' : 'ระบบเติมให้'} (คลิกเพื่อแก้ไข)`}
+        role={guide.onField ? 'button' : undefined} tabIndex={guide.onField ? 0 : undefined}
+        onClick={guide.onField ? () => guide.onField!(f) : undefined}
+        onKeyDown={guide.onField ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); guide.onField!(f); } } : undefined}>
+        {content ?? `[${label}]`}
+      </span>
+    );
+  };
   const T = ({ s }: { s: string }) => <ThaiText text={tx(s)} />;
-  const body = memoBody(d);
+  const override = (d.bodyOverride ?? []).some((x) => x.trim());
+  const body = override ? memoBody(d).map((t) => [{ t } as MemoPart]) : memoParagraphParts(d, { keepEmpty: !!guide });
   const style = { '--m-body': `${MEMO_WEB_FONT_PT.body}pt`, '--m-label': `${MEMO_WEB_FONT_PT.label}pt`, '--m-title': `${MEMO_WEB_FONT_PT.title}pt` } as React.CSSProperties;
   return (
-    <article className={`memo-page align-${d.align}`} style={style} lang="th" aria-label="บันทึกข้อความ">
+    <article className={`memo-page align-${d.align} ${guide ? 'is-guide' : ''}`} style={style} lang="th" aria-label="บันทึกข้อความ">
       <header className="m-head">
         <img src={GARUDA} alt="ตราครุฑ" className="m-garuda" />
         <h1 className="m-title">บันทึกข้อความ</h1>
       </header>
-      <p className="m-line"><b className="m-label">ส่วนราชการ</b> <T s={d.orgLine} />{d.fax && <> <span className="nw">โทรสาร {tx(d.fax)}</span></>}</p>
+      <p className="m-line"><b className="m-label">ส่วนราชการ</b> <F f="orgLine" s={d.orgLine} />{(d.fax || guide) && <> <span className="nw">โทรสาร</span> <F f="fax" s={d.fax} nowrap /></>}</p>
       <div className="m-row">
-        <p className="m-line"><b className="m-label">ที่</b> <span className="nw">{tx(memoDocNo(d)) || DOTS}</span></p>
-        <p className="m-line"><b className="m-label">วันที่</b> <span className="nw">{tx(formatThaiDateLong(d.date)) || DOTS}</span></p>
+        <p className="m-line"><b className="m-label">ที่</b> {d.docPrefix && <span className="nw">{tx(d.docPrefix.replace(/\/$/, ''))}/</span>}<F f="docNumber" s={d.docNumber} nowrap /></p>
+        <p className="m-line"><b className="m-label">วันที่</b> <F f="date" s={formatThaiDateLong(d.date)} nowrap /></p>
       </div>
       <p className="m-line"><b className="m-label">เรื่อง</b> <T s={d.subject} /></p>
-      <p className="m-line m-gap">เรียน&nbsp;&nbsp;<T s={d.to} /></p>
+      <p className="m-line m-gap">เรียน&nbsp;&nbsp;<F f="to" s={d.to} /></p>
       <div className="m-body">
-        {body.map((p, i) => <p key={i} className={i === 0 ? 'm-first' : ''}><ThaiText text={tx(p)} justify={d.align === 'justify'} /></p>)}
+        {body.map((parts, i) => (
+          <p key={i} className={i === 0 ? 'm-first' : ''}>
+            {parts.map((x, j) => (x.f ? <F key={j} f={x.f} s={x.t} /> : <ThaiText key={j} text={tx(x.t)} justify={justify} />))}
+          </p>
+        ))}
       </div>
-      <div className="m-checks">
+      <div className={`m-checks ${guide ? 'g-zone g-staff-zone' : ''}`}>
         <p>ตรวจสอบแล้ว</p>
         <p className="m-check"><Box on={d.checks.ok} label="ถูกต้องตามคู่มือโครงการ" onToggle={onToggle && (() => onToggle('ok'))} /> ถูกต้องตามคู่มือโครงการ</p>
         <p className="m-check"><Box on={d.checks.returnFix} label="ส่งคืนแก้ไข" onToggle={onToggle && (() => onToggle('returnFix'))} /> ส่งคืนแก้ไข เนื่องจาก {d.checks.returnFix && d.checks.returnReason.trim() ? <T s={d.checks.returnReason.trim()} /> : DOTS}</p>
         <p className="m-check"><Box on={d.checks.forward} label="ส่งฝ่ายบริหารทั่วไปเพื่อดำเนินการต่อไป" onToggle={onToggle && (() => onToggle('forward'))} /> ส่งฝ่ายบริหารทั่วไปเพื่อดำเนินการต่อไป</p>
       </div>
       <div className="m-sigs">
-        {[d.signer, d.head].map((p, i) => (
-          <div key={i} className="m-sig">
+        {([['signer', d.signer], ['head', d.head]] as const).map(([f, p]) => (
+          <div key={f} className="m-sig">
             <p>(ลงชื่อ)........................................................</p>
-            <p>({p.name ? tx(p.name) : DOTS})</p>
+            <p>(<F f={f} s={p.name} nowrap />)</p>
             <p>ตำแหน่ง {p.position ? <T s={p.position} /> : DOTS}</p>
             {p.line2 && <p><T s={p.line2} /></p>}
           </div>

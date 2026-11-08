@@ -158,6 +158,7 @@ function Entry({ e, user, onChange }: { e: EntryActivity; user: SessionUser; onC
   const [saved, setSaved] = useState<MemoRecord | null>(null);
   const [editing, setEditing] = useState<MemoRecord | undefined>(undefined);
   const [formKey, setFormKey] = useState(0);
+  const [wsOpen, setWsOpen] = useState(false);
   const { error, run } = useSubmit();
   const openMemo = (id: string) => void run(async () => {
     const m = await call('memos.get', { id });
@@ -177,13 +178,23 @@ function Entry({ e, user, onChange }: { e: EntryActivity; user: SessionUser; onC
       )}
       {error && <ErrorBox error={error} />}
       {mode === 'memo' && e.activityId ? (
-        saved && !editing
-          ? <MemoSaved key={`${saved.id}-${saved.revision}`} m={saved} onNew={() => { setSaved(null); setFormKey((k) => k + 1); }} onEdit={() => setEditing(saved)} />
-          : (
+        <>
+          {saved && <MemoSaved key={`${saved.id}-${saved.revision}`} m={saved} onNew={() => { setSaved(null); setFormKey((k) => k + 1); setWsOpen(true); }} onEdit={() => { setEditing(saved); setWsOpen(true); }} />}
+          {!saved && (
+            <div className="memo-launch">
+              <div>
+                <h3 className="rec-h3">บันทึกข้อความตรวจสอบเอกสารเพื่อขอเบิกเงินราชการ</h3>
+                <p className="small muted" style={{ margin: 0 }}>กรอกเฉพาะช่องสีเหลือง ระบบเติมงบ ยอดเบิก รหัส และผู้ลงนามให้ · ดูหน้าเอกสารจริงขณะกรอก · บันทึกแล้วนับเป็นเบิกจ่ายทันที</p>
+              </div>
+              <button type="button" className="btn btn-lg" onClick={() => { setEditing(undefined); setWsOpen(true); }}>เริ่มจัดทำบันทึกข้อความ</button>
+            </div>
+          )}
+          {wsOpen && (
             <MemoEditor key={editing ? `edit-${editing.id}-${editing.version}` : `new-${formKey}`} e={e} user={user} existing={editing}
-              onClose={editing ? () => setEditing(undefined) : undefined}
-              onSaved={(m) => { setSaved(m); setEditing(undefined); onChange(); }} />
-          )
+              onClose={() => { setWsOpen(false); setEditing(undefined); }}
+              onSaved={(m) => { setSaved(m); setEditing(undefined); setWsOpen(false); onChange(); }} />
+          )}
+        </>
       ) : <QuickEntry e={e} user={user} onChange={onChange} />}
       <History e={e} user={user} unitName={unitName} onChange={onChange} onOpenMemo={openMemo} />
     </>
