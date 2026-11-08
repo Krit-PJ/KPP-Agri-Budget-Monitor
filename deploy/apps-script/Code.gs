@@ -31,7 +31,8 @@ var KPP = (() => {
     doPost: () => doPost,
     installTriggers: () => installTriggers,
     setSuperAdmin: () => setSuperAdmin2,
-    setup: () => setup
+    setup: () => setup,
+    testMemoRender: () => testMemoRender
   });
 
   // ../../packages/domain/src/thai.ts
@@ -684,12 +685,12 @@ var KPP = (() => {
       const projectCode = cleanText(get(row, "projectCode"), 60);
       if (isTotalRow(projectName) || isTotalRow(projectCode)) continue;
       const issues = [];
-      const money = {};
+      const money2 = {};
       for (const f of MONEY_FIELDS) {
         if (m[f] === void 0) continue;
         const p = parseMoney(get(row, f));
         if (!p.ok) issues.push(`${FIELD_LABEL[f]}: \u0E2D\u0E48\u0E32\u0E19\u0E08\u0E33\u0E19\u0E27\u0E19\u0E40\u0E07\u0E34\u0E19\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49 "${cleanText(get(row, f), 40)}"`);
-        else if (!p.empty) money[f] = p.satang;
+        else if (!p.empty) money2[f] = p.satang;
       }
       const dateOf = (f) => {
         const v = get(row, f);
@@ -714,7 +715,7 @@ var KPP = (() => {
         workgroup: cleanText(get(row, "workgroup"), 120),
         fundingSource: cleanText(get(row, "fundingSource"), 120),
         fiscalYear,
-        money,
+        money: money2,
         startDate: dateOf("startDate"),
         endDate: dateOf("endDate"),
         ownerName: cleanText(get(row, "ownerName"), 120),
@@ -1206,7 +1207,11 @@ var KPP = (() => {
     "admin.users",
     "admin.loginReport",
     "admin.audit",
-    "admin.health"
+    "admin.health",
+    "profile.get",
+    "memos.context",
+    "memos.get",
+    "memos.groupSettings"
   ]);
 
   // ../../packages/domain/src/plan.ts
@@ -1283,9 +1288,9 @@ var KPP = (() => {
       const text = cleanText(r3.text, 1e3);
       if (!text) continue;
       const c = classifyPlanLine(text);
-      const money = parseMoney(r3.amount);
-      if (!money.ok) issues.push({ rowNo: r3.rowNo, level: "ERROR", message: `\u0E2D\u0E48\u0E32\u0E19\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49: "${cleanText(r3.amount, 30)}"` });
-      const amount = money.ok && !money.empty ? money.satang : null;
+      const money2 = parseMoney(r3.amount);
+      if (!money2.ok) issues.push({ rowNo: r3.rowNo, level: "ERROR", message: `\u0E2D\u0E48\u0E32\u0E19\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49: "${cleanText(r3.amount, 30)}"` });
+      const amount = money2.ok && !money2.empty ? money2.satang : null;
       if (c.kind === "TOTAL") {
         declaredTotal = amount;
         totalRowNo = r3.rowNo;
@@ -1406,8 +1411,8 @@ var KPP = (() => {
       const byStyle = /* @__PURE__ */ new Map();
       for (const k of kids) {
         if (!/\d/.test(k.number)) continue;
-        const style = k.number.replace(/\d+/g, "#");
-        (byStyle.get(style) ?? byStyle.set(style, []).get(style)).push(k);
+        const style2 = k.number.replace(/\d+/g, "#");
+        (byStyle.get(style2) ?? byStyle.set(style2, []).get(style2)).push(k);
       }
       for (const list of byStyle.values()) {
         const lastNums = list.map((k) => Number(k.number.match(/(\d+)\D*$/)?.[1] ?? 0));
@@ -1592,6 +1597,161 @@ var KPP = (() => {
     }
     return out;
   }
+
+  // ../../packages/domain/src/memo.ts
+  var TH_DIGIT = ["\u0E28\u0E39\u0E19\u0E22\u0E4C", "\u0E2B\u0E19\u0E36\u0E48\u0E07", "\u0E2A\u0E2D\u0E07", "\u0E2A\u0E32\u0E21", "\u0E2A\u0E35\u0E48", "\u0E2B\u0E49\u0E32", "\u0E2B\u0E01", "\u0E40\u0E08\u0E47\u0E14", "\u0E41\u0E1B\u0E14", "\u0E40\u0E01\u0E49\u0E32"];
+  var TH_UNIT = ["", "\u0E2A\u0E34\u0E1A", "\u0E23\u0E49\u0E2D\u0E22", "\u0E1E\u0E31\u0E19", "\u0E2B\u0E21\u0E37\u0E48\u0E19", "\u0E41\u0E2A\u0E19"];
+  function readGroup(n) {
+    const s = String(n);
+    let out = "";
+    for (let i = 0; i < s.length; i++) {
+      const d = Number(s[i]);
+      const pos = s.length - 1 - i;
+      if (d === 0) continue;
+      if (pos === 1) {
+        out += (d === 1 ? "" : d === 2 ? "\u0E22\u0E35\u0E48" : TH_DIGIT[d]) + "\u0E2A\u0E34\u0E1A";
+      } else if (pos === 0) {
+        out += d === 1 && s.length > 1 && Number(s.slice(0, -1)) > 0 ? "\u0E40\u0E2D\u0E47\u0E14" : TH_DIGIT[d];
+      } else {
+        out += TH_DIGIT[d] + TH_UNIT[pos];
+      }
+    }
+    return out;
+  }
+  function thaiNumberWords(n) {
+    if (!Number.isFinite(n) || n < 0) return "";
+    n = Math.floor(n);
+    if (n === 0) return TH_DIGIT[0];
+    const groups = [];
+    while (n > 0) {
+      groups.unshift(n % 1e6);
+      n = Math.floor(n / 1e6);
+    }
+    return groups.map((g, i) => (g ? readGroup(g) : "") + (i < groups.length - 1 ? "\u0E25\u0E49\u0E32\u0E19" : "")).join("");
+  }
+  function bahtText2(satang) {
+    const neg = satang < 0;
+    const abs = Math.round(Math.abs(satang));
+    const baht = Math.floor(abs / 100);
+    const st = abs % 100;
+    let out;
+    if (st === 0) out = `${thaiNumberWords(baht)}\u0E1A\u0E32\u0E17\u0E16\u0E49\u0E27\u0E19`;
+    else if (baht === 0) out = `${thaiNumberWords(st)}\u0E2A\u0E15\u0E32\u0E07\u0E04\u0E4C`;
+    else out = `${thaiNumberWords(baht)}\u0E1A\u0E32\u0E17${thaiNumberWords(st)}\u0E2A\u0E15\u0E32\u0E07\u0E04\u0E4C`;
+    return neg ? `\u0E25\u0E1A${out}` : out;
+  }
+  var THAI_NUM = "\u0E50\u0E51\u0E52\u0E53\u0E54\u0E55\u0E56\u0E57\u0E58\u0E59";
+  function thaiDigits(input) {
+    return input.replace(/[0-9]/g, (c) => THAI_NUM[Number(c)]);
+  }
+  function formatMoneyPlain(satang) {
+    const neg = satang < 0;
+    const abs = Math.round(Math.abs(satang));
+    const i = String(Math.floor(abs / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    const f = abs % 100;
+    return `${neg ? "-" : ""}${i}${f ? `.${String(f).padStart(2, "0")}` : ""}`;
+  }
+  function formatThaiDateLong(iso) {
+    if (!iso) return "";
+    const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+    if (!isValidYmd(y, m, d)) return "";
+    return `${d} ${THAI_MONTHS[m - 1].full} ${y + BE_OFFSET}`;
+  }
+  var KEEP_RE = new RegExp(
+    [
+      "\\([^()\\n]{1,40}\\)",
+      // (สี่หมื่นสี่พันบาทถ้วน), (ศดปช.), (นายกิตติ โพธิ์จวง)
+      "[0-9\u0E50-\u0E59][0-9\u0E50-\u0E59,.]*\\s?\u0E1A\u0E32\u0E17",
+      // 44,000 บาท
+      "[0-9\u0E50-\u0E59][0-9\u0E50-\u0E59/.\\-]*",
+      // รหัส เลขที่ วันที่
+      "[\u0E01-\u0E2E]{1,4}\\.(?:[\u0E01-\u0E2E]{1,4}\\.)*",
+      // อ. จ. ศดปช.
+      "[A-Za-z][A-Za-z0-9 ]*[A-Za-z0-9]"
+      // Service Provider
+    ].join("|"),
+    "g"
+  );
+  function protectGroups(text) {
+    return text.replace(KEEP_RE, (g) => g.replace(/ /g, "\xA0"));
+  }
+  var SARABUN_SCALE = 400 / 586;
+  var sz = (thPt) => Math.round(thPt * SARABUN_SCALE * 2) / 2;
+  var MEMO_FONT_PT = { body: sz(16), label: sz(20), title: sz(29) };
+  var MEMO_SUBJECT = "\u0E15\u0E23\u0E27\u0E08\u0E2A\u0E2D\u0E1A\u0E40\u0E2D\u0E01\u0E2A\u0E32\u0E23\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E02\u0E2D\u0E40\u0E1A\u0E34\u0E01\u0E40\u0E07\u0E34\u0E19\u0E23\u0E32\u0E0A\u0E01\u0E32\u0E23";
+  var MEMO_DEFAULT_TO = "\u0E40\u0E01\u0E29\u0E15\u0E23\u0E08\u0E31\u0E07\u0E2B\u0E27\u0E31\u0E14\u0E01\u0E33\u0E41\u0E1E\u0E07\u0E40\u0E1E\u0E0A\u0E23";
+  function memoRemaining(d) {
+    return d.budgetSatang - d.previousSatang - d.requestSatang;
+  }
+  var money = (s) => `${formatMoneyPlain(s)} \u0E1A\u0E32\u0E17 (${bahtText2(s)})`;
+  var joinNonEmpty = (...parts) => parts.filter(Boolean).join(" ");
+  function fromUnit(s) {
+    const t2 = s.trim();
+    if (!t2) return "";
+    return /^(อำเภอ|สำนักงาน|กลุ่ม|ศูนย์|ฝ่าย)/.test(t2) ? t2 : `\u0E2D\u0E33\u0E40\u0E20\u0E2D${t2}`;
+  }
+  function memoParagraphs(d) {
+    const ref = joinNonEmpty(
+      d.refNo && `\u0E15\u0E32\u0E21\u0E2B\u0E19\u0E31\u0E07\u0E2A\u0E37\u0E2D\u0E17\u0E35\u0E48 ${d.refNo.trim()}`,
+      d.refDate && `\u0E25\u0E07\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48 ${formatThaiDateLong(d.refDate)}`,
+      d.refFrom && `\u0E02\u0E2D\u0E07${fromUnit(d.refFrom)}`
+    );
+    const first = joinNonEmpty(
+      ref ? `${ref} \u0E44\u0E14\u0E49\u0E2A\u0E48\u0E07\u0E40\u0E2D\u0E01\u0E2A\u0E32\u0E23\u0E2B\u0E25\u0E31\u0E01\u0E10\u0E32\u0E19\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E02\u0E2D\u0E40\u0E1A\u0E34\u0E01\u0E40\u0E07\u0E34\u0E19${d.expense.trim()}` : `\u0E02\u0E2D\u0E2A\u0E48\u0E07\u0E40\u0E2D\u0E01\u0E2A\u0E32\u0E23\u0E2B\u0E25\u0E31\u0E01\u0E10\u0E32\u0E19\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E02\u0E2D\u0E40\u0E1A\u0E34\u0E01\u0E40\u0E07\u0E34\u0E19${d.expense.trim()}`,
+      d.projectName && (d.projectName.startsWith("\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23") ? d.projectName : `\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23${d.projectName}`),
+      d.mainActivityName && (d.mainActivityName.startsWith("\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21") ? d.mainActivityName : `\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21${d.mainActivityName}`),
+      d.fund && `(${d.fund})`,
+      d.budgetCode && `(${d.budgetCode})`
+    );
+    const lines = [first];
+    if (d.mainActivityCode) lines.push(`\u0E23\u0E2B\u0E31\u0E2A\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E2B\u0E25\u0E31\u0E01 ${d.mainActivityCode}`);
+    if (d.subActivityName) lines.push(`\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E22\u0E48\u0E2D\u0E22 ${d.subActivityName}`);
+    lines.push(
+      `\u0E22\u0E2D\u0E14\u0E40\u0E07\u0E34\u0E19\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13 ${money(d.budgetSatang)} (\u0E23\u0E27\u0E21\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14\u0E02\u0E2D\u0E07\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E19\u0E35\u0E49)`,
+      `\u0E02\u0E2D\u0E40\u0E1A\u0E34\u0E01\u0E40\u0E07\u0E34\u0E19/\u0E22\u0E37\u0E21\u0E40\u0E07\u0E34\u0E19\u0E23\u0E32\u0E0A\u0E01\u0E32\u0E23\u0E21\u0E32\u0E41\u0E25\u0E49\u0E27 \u0E40\u0E1B\u0E47\u0E19\u0E08\u0E33\u0E19\u0E27\u0E19\u0E40\u0E07\u0E34\u0E19 ${money(d.previousSatang)} (\u0E23\u0E27\u0E21\u0E17\u0E38\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07\u0E17\u0E38\u0E01\u0E2D\u0E33\u0E40\u0E20\u0E2D)`,
+      `\u0E02\u0E2D\u0E40\u0E1A\u0E34\u0E01\u0E40\u0E07\u0E34\u0E19\u0E23\u0E32\u0E0A\u0E01\u0E32\u0E23\u0E04\u0E23\u0E31\u0E49\u0E07\u0E19\u0E35\u0E49 \u0E40\u0E1B\u0E47\u0E19\u0E08\u0E33\u0E19\u0E27\u0E19\u0E40\u0E07\u0E34\u0E19 ${money(d.requestSatang)} (\u0E40\u0E09\u0E1E\u0E32\u0E30\u0E04\u0E23\u0E31\u0E49\u0E07\u0E19\u0E35\u0E49)`,
+      `\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13\u0E04\u0E07\u0E40\u0E2B\u0E25\u0E37\u0E2D ${money(memoRemaining(d))} (\u0E04\u0E07\u0E40\u0E2B\u0E25\u0E37\u0E2D\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14\u0E02\u0E2D\u0E07\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E19\u0E35\u0E49)`
+    );
+    return lines;
+  }
+  function memoBody(d) {
+    const o = (d.bodyOverride ?? []).map((s) => s.trim()).filter(Boolean);
+    return o.length ? o : memoParagraphs(d);
+  }
+  function memoOverrideStale(d) {
+    if (!d.bodyOverride?.length) return false;
+    const text = d.bodyOverride.join("\n");
+    return [d.budgetSatang, d.previousSatang, d.requestSatang, memoRemaining(d)].some((s) => !text.includes(formatMoneyPlain(s)));
+  }
+  function validateMemo(d) {
+    const e = [];
+    if (!d.docNumber.trim()) e.push("\u0E01\u0E23\u0E38\u0E13\u0E32\u0E01\u0E23\u0E2D\u0E01\u0E40\u0E25\u0E02\u0E17\u0E35\u0E48\u0E2B\u0E19\u0E31\u0E07\u0E2A\u0E37\u0E2D");
+    if (!d.date) e.push("\u0E01\u0E23\u0E38\u0E13\u0E32\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48");
+    if (!d.expense.trim()) e.push("\u0E01\u0E23\u0E38\u0E13\u0E32\u0E23\u0E30\u0E1A\u0E38\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E04\u0E48\u0E32\u0E43\u0E0A\u0E49\u0E08\u0E48\u0E32\u0E22\u0E17\u0E35\u0E48\u0E02\u0E2D\u0E40\u0E1A\u0E34\u0E01");
+    if (!(d.requestSatang > 0)) e.push("\u0E22\u0E2D\u0E14\u0E02\u0E2D\u0E40\u0E1A\u0E34\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07\u0E19\u0E35\u0E49\u0E15\u0E49\u0E2D\u0E07\u0E21\u0E32\u0E01\u0E01\u0E27\u0E48\u0E32 0");
+    if (memoRemaining(d) < 0) e.push("\u0E22\u0E2D\u0E14\u0E02\u0E2D\u0E40\u0E1A\u0E34\u0E01\u0E40\u0E01\u0E34\u0E19\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13\u0E04\u0E07\u0E40\u0E2B\u0E25\u0E37\u0E2D\u0E02\u0E2D\u0E07\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21");
+    if (d.checks.ok && d.checks.returnFix) e.push("\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E44\u0E14\u0E49\u0E2D\u0E22\u0E48\u0E32\u0E07\u0E43\u0E14\u0E2D\u0E22\u0E48\u0E32\u0E07\u0E2B\u0E19\u0E36\u0E48\u0E07: \u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E15\u0E32\u0E21\u0E04\u0E39\u0E48\u0E21\u0E37\u0E2D \u0E2B\u0E23\u0E37\u0E2D \u0E2A\u0E48\u0E07\u0E04\u0E37\u0E19\u0E41\u0E01\u0E49\u0E44\u0E02");
+    if (d.checks.returnFix && !d.checks.returnReason.trim()) e.push("\u0E01\u0E23\u0E38\u0E13\u0E32\u0E23\u0E30\u0E1A\u0E38\u0E40\u0E2B\u0E15\u0E38\u0E1C\u0E25\u0E17\u0E35\u0E48\u0E2A\u0E48\u0E07\u0E04\u0E37\u0E19\u0E41\u0E01\u0E49\u0E44\u0E02");
+    if (!d.signer.name.trim()) e.push("\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E0A\u0E37\u0E48\u0E2D\u0E1C\u0E39\u0E49\u0E25\u0E07\u0E19\u0E32\u0E21 \u2014 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E01\u0E23\u0E2D\u0E01\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E02\u0E2D\u0E07\u0E09\u0E31\u0E19\u0E43\u0E2B\u0E49\u0E04\u0E23\u0E1A");
+    return e;
+  }
+  function memoText(d, s) {
+    return d.thaiNumerals ? thaiDigits(s) : s;
+  }
+  function memoDocNo(d) {
+    const p = d.docPrefix.trim().replace(/\/$/, "");
+    const n = d.docNumber.trim();
+    return p ? `${p}/${n}` : n;
+  }
+  function withTitle(title, fullName) {
+    const t2 = (title ?? "").trim();
+    const n = fullName.trim();
+    if (!t2 || n.startsWith(t2)) return n;
+    return `${t2}${n}`;
+  }
+
+  // ../../packages/domain/src/garuda.ts
+  var GARUDA_JPEG_BASE64 = "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";
 
   // src/core/context.ts
   var SYSTEM_USER = { sub: "SYSTEM", name: "\u0E23\u0E30\u0E1A\u0E1A\u0E2D\u0E31\u0E15\u0E42\u0E19\u0E21\u0E31\u0E15\u0E34", role: "superadmin", workgroupIds: null, workgroupName: "\u0E17\u0E38\u0E01\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19" };
@@ -1885,6 +2045,7 @@ var KPP = (() => {
     if (!isValidPhone(phone)) throw new AppError("VALIDATION_FAILED", "\u0E23\u0E39\u0E1B\u0E41\u0E1A\u0E1A\u0E40\u0E1A\u0E2D\u0E23\u0E4C\u0E42\u0E17\u0E23\u0E28\u0E31\u0E1E\u0E17\u0E4C\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07 (\u0E15\u0E31\u0E27\u0E2D\u0E22\u0E48\u0E32\u0E07 0812345678)");
     const fullName = cleanText(b.fullName, 120);
     const position = cleanText(b.position, 120);
+    const title = cleanText(b.title, 40);
     const affiliation = cleanText(b.affiliation, 160);
     const workgroupId = cleanText(b.workgroupId, 60);
     if (fullName.length < 4) throw new AppError("VALIDATION_FAILED", "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E01\u0E23\u0E2D\u0E01\u0E0A\u0E37\u0E48\u0E2D-\u0E2A\u0E01\u0E38\u0E25");
@@ -1915,7 +2076,8 @@ var KPP = (() => {
       status: "pending",
       decidedAt: "",
       decidedBy: "",
-      reason: ""
+      reason: "",
+      title
     };
     ctx.env.db.insert("AccessRequests", [row]);
     audit(ctx, "request_access", "AccessRequest", row.id, { after: { fullName, workgroupId } });
@@ -1937,7 +2099,7 @@ var KPP = (() => {
   }
 
   // src/core/schema.ts
-  var SCHEMA_VERSION = "2026.11.07-6";
+  var SCHEMA_VERSION = "2026.11.08-1";
   var META = [
     ["id", "string"],
     ["createdAt", "string"],
@@ -1966,7 +2128,8 @@ var KPP = (() => {
       ["approvedAt", "string"],
       ["approvedBy", "string"],
       ["lastLoginAt", "string"],
-      ["knownDevices", "string"]
+      ["knownDevices", "string"],
+      ["title", "string"]
     ]),
     AccessRequests: t("IDENTITY", [
       ["phone", "string"],
@@ -1978,7 +2141,8 @@ var KPP = (() => {
       ["status", "string"],
       ["decidedAt", "string"],
       ["decidedBy", "string"],
-      ["reason", "string"]
+      ["reason", "string"],
+      ["title", "string"]
     ]),
     LoginAttempts: t("IDENTITY", [
       ["id", "string"],
@@ -1991,7 +2155,19 @@ var KPP = (() => {
       ["newDevice", "boolean"]
     ], false),
     Organizations: t("CORE", [["code", "string"], ["name", "string"]]),
-    Workgroups: t("CORE", [["orgId", "string"], ["code", "string"], ["name", "string"], ["noActivities", "boolean"]]),
+    Workgroups: t("CORE", [
+      ["orgId", "string"],
+      ["code", "string"],
+      ["name", "string"],
+      ["noActivities", "boolean"],
+      // ค่าหัวบันทึกข้อความของกลุ่ม
+      ["memoOrg", "string"],
+      ["memoFax", "string"],
+      ["memoPrefix", "string"],
+      ["headName", "string"],
+      ["headPosition", "string"],
+      ["headLine2", "string"]
+    ]),
     FundingSources: t("CORE", [["code", "string"], ["name", "string"], ["shortName", "string"]]),
     Units: t("CORE", [["code", "string"], ["name", "string"], ["shortName", "string"], ["kind", "string"], ["sortOrder", "number"]]),
     ActivityUnits: t("CORE", [["projectId", "string"], ["activityId", "string"], ["unitId", "string"], ["budgetSatang", "number"], ["targetQty", "number"]]),
@@ -2028,7 +2204,9 @@ var KPP = (() => {
       ["targetQty", "number"],
       ["planQuarters", "string"],
       ["dueMonth", "number"],
-      ["dueDate", "string"]
+      ["dueDate", "string"],
+      ["budgetCode", "string"],
+      ["mainActivityCode", "string"]
     ]),
     Allocations: t("CORE", [
       ["projectId", "string"],
@@ -2055,6 +2233,22 @@ var KPP = (() => {
       ["replacesId", "string"],
       ["attachmentId", "string"],
       ["unitId", "string"]
+    ]),
+    /** บันทึกข้อความตรวจสอบเอกสารเพื่อขอเบิกเงิน — 1 แถวต่อ 1 การเบิก; แก้ไขแล้วเพิ่ม revision */
+    Memos: t("CORE", [
+      ["projectId", "string"],
+      ["activityId", "string"],
+      ["disbursementId", "string"],
+      ["unitId", "string"],
+      ["docNo", "string"],
+      ["date", "string"],
+      ["amountSatang", "number"],
+      ["data", "string"],
+      ["revision", "number"],
+      ["docFileId", "string"],
+      ["pdfFileId", "string"],
+      ["renderStatus", "string"],
+      ["renderError", "string"]
     ]),
     ProgressReports: t("CORE", [
       ["projectId", "string"],
@@ -2467,6 +2661,7 @@ var KPP = (() => {
     const disbs = live(ctx.env.db.list("Disbursements")).filter((x) => pids.has(x.projectId));
     const shares = activityUnitsOf(ctx);
     const pao = provinceUnitId(listUnits(ctx));
+    const memoOf = new Map(live(ctx.env.db.list("Memos")).map((m) => [m.disbursementId, m.id]));
     const out = [];
     const emit = (p, a) => {
       const aid = a?.id ?? "";
@@ -2489,7 +2684,7 @@ var KPP = (() => {
         committed: bud.committed,
         hasAreas: unitShares.length > 0,
         units,
-        history: live_.map((x, i) => ({ id: x.id, no: i + 1, date: x.date, amountSatang: x.amountSatang, docNo: x.docNo, unitId: x.unitId || pao, status: x.status, hasFile: !!x.attachmentId }))
+        history: live_.map((x, i) => ({ id: x.id, no: i + 1, date: x.date, amountSatang: x.amountSatang, docNo: x.docNo, unitId: x.unitId || pao, status: x.status, hasFile: !!x.attachmentId, memoId: memoOf.get(x.id) }))
       });
     };
     for (const p of projects) {
@@ -3220,6 +3415,7 @@ var KPP = (() => {
           phoneHash: h,
           fullName: req.fullName,
           position: req.position,
+          title: req.title ?? "",
           workgroupId: req.workgroupId,
           affiliation: req.affiliation,
           role,
@@ -3256,6 +3452,7 @@ var KPP = (() => {
     const fields = {
       phone,
       phoneHash: h,
+      title: cleanText(b.title, 40),
       fullName: cleanText(b.fullName, 120),
       position: cleanText(b.position, 120),
       workgroupId: b.workgroupId,
@@ -3268,7 +3465,8 @@ var KPP = (() => {
       const cur = findById(ctx, "Users", b.id, "\u0E1C\u0E39\u0E49\u0E43\u0E0A\u0E49");
       if ((cur.role === "minisuper" || role === "minisuper") && u.role !== "superadmin") throw new AppError("FORBIDDEN_SCOPE", "\u0E08\u0E31\u0E14\u0E01\u0E32\u0E23 Mini Super Admin \u0E44\u0E14\u0E49\u0E40\u0E09\u0E1E\u0E32\u0E30 Super Admin");
       if (cur.id === u.sub && cur.role !== role) throw new AppError("VALIDATION_FAILED", "\u0E44\u0E21\u0E48\u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E40\u0E1B\u0E25\u0E35\u0E48\u0E22\u0E19\u0E1A\u0E17\u0E1A\u0E32\u0E17\u0E02\u0E2D\u0E07\u0E15\u0E19\u0E40\u0E2D\u0E07\u0E44\u0E14\u0E49");
-      const next = { ...cur, ...fields, tokenVersion: Number(cur.tokenVersion) + 1, version: cur.version + 1, updatedAt: nowIso(ctx), updatedBy: u.sub };
+      const authChanged = cur.phoneHash !== fields.phoneHash || cur.role !== role || cur.workgroupId !== fields.workgroupId || (cur.scopeWorkgroups || "[]") !== fields.scopeWorkgroups;
+      const next = { ...cur, ...fields, tokenVersion: Number(cur.tokenVersion) + (authChanged ? 1 : 0), version: cur.version + 1, updatedAt: nowIso(ctx), updatedBy: u.sub };
       ctx.env.db.update("Users", cur.id, next);
       audit(ctx, "user.update", "User", cur.id, { before: cur, after: next });
       return { id: cur.id };
@@ -4171,6 +4369,403 @@ var KPP = (() => {
     return { fiscalYear: fy, target: clean, curve: targetCurve(clean) };
   }
 
+  // src/core/services/memos.ts
+  var DEFAULT_EXPENSES = [
+    "\u0E04\u0E48\u0E32\u0E08\u0E31\u0E14\u0E0B\u0E37\u0E49\u0E2D\u0E27\u0E31\u0E2A\u0E14\u0E38\u0E2A\u0E19\u0E31\u0E1A\u0E2A\u0E19\u0E38\u0E19",
+    "\u0E04\u0E48\u0E32\u0E43\u0E0A\u0E49\u0E08\u0E48\u0E32\u0E22\u0E43\u0E19\u0E01\u0E32\u0E23\u0E08\u0E31\u0E14\u0E2D\u0E1A\u0E23\u0E21",
+    "\u0E04\u0E48\u0E32\u0E43\u0E0A\u0E49\u0E08\u0E48\u0E32\u0E22\u0E43\u0E19\u0E01\u0E32\u0E23\u0E08\u0E31\u0E14\u0E1B\u0E23\u0E30\u0E0A\u0E38\u0E21",
+    "\u0E04\u0E48\u0E32\u0E43\u0E0A\u0E49\u0E08\u0E48\u0E32\u0E22\u0E43\u0E19\u0E01\u0E32\u0E23\u0E08\u0E31\u0E14\u0E07\u0E32\u0E19\u0E27\u0E31\u0E19\u0E16\u0E48\u0E32\u0E22\u0E17\u0E2D\u0E14\u0E40\u0E17\u0E04\u0E42\u0E19\u0E42\u0E25\u0E22\u0E35",
+    "\u0E04\u0E48\u0E32\u0E43\u0E0A\u0E49\u0E08\u0E48\u0E32\u0E22\u0E43\u0E19\u0E01\u0E32\u0E23\u0E40\u0E14\u0E34\u0E19\u0E17\u0E32\u0E07\u0E44\u0E1B\u0E23\u0E32\u0E0A\u0E01\u0E32\u0E23",
+    "\u0E04\u0E48\u0E32\u0E08\u0E49\u0E32\u0E07\u0E40\u0E2B\u0E21\u0E32\u0E1A\u0E23\u0E34\u0E01\u0E32\u0E23",
+    "\u0E04\u0E48\u0E32\u0E27\u0E31\u0E2A\u0E14\u0E38\u0E01\u0E32\u0E23\u0E40\u0E01\u0E29\u0E15\u0E23",
+    "\u0E04\u0E48\u0E32\u0E27\u0E31\u0E2A\u0E14\u0E38\u0E2A\u0E33\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19"
+  ];
+  function superProfile(ctx) {
+    try {
+      return { title: "", fullName: "", position: "", ...JSON.parse(ctx.env.props.get("SUPER_PROFILE") || "{}") };
+    } catch {
+      return { title: "", fullName: "", position: "" };
+    }
+  }
+  function getProfile(ctx) {
+    const u = requireRole(ctx, "admin", "minisuper", "superadmin");
+    const groups = live(ctx.env.db.list("Workgroups"));
+    if (u.role === "superadmin") {
+      const p = superProfile(ctx);
+      return { ...p, workgroupId: "", workgroupName: "\u0E17\u0E38\u0E01\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19", complete: !!(p.fullName && p.position) };
+    }
+    const row = findById(ctx, "Users", u.sub, "\u0E1C\u0E39\u0E49\u0E43\u0E0A\u0E49");
+    return {
+      title: row.title ?? "",
+      fullName: row.fullName,
+      position: row.position,
+      workgroupId: row.workgroupId,
+      workgroupName: groups.find((g) => g.id === row.workgroupId)?.name ?? "",
+      complete: !!((row.title || /^(นาย|นาง|นางสาว|ว่าที่|ดร\.)/.test(row.fullName)) && row.fullName && row.position)
+    };
+  }
+  function saveProfile(ctx, b) {
+    const u = requireRole(ctx, "admin", "minisuper", "superadmin");
+    const next = { title: cleanText(b.title, 40), fullName: cleanText(b.fullName, 120), position: cleanText(b.position, 120) };
+    if (next.fullName.length < 4) throw new AppError("VALIDATION_FAILED", "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E01\u0E23\u0E2D\u0E01\u0E0A\u0E37\u0E48\u0E2D-\u0E2A\u0E01\u0E38\u0E25");
+    if (!next.position) throw new AppError("VALIDATION_FAILED", "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E01\u0E23\u0E2D\u0E01\u0E15\u0E33\u0E41\u0E2B\u0E19\u0E48\u0E07");
+    if (u.role === "superadmin") {
+      ctx.env.props.set("SUPER_PROFILE", JSON.stringify(next));
+      audit(ctx, "profile.update", "User", u.sub, { after: next });
+      return getProfile(ctx);
+    }
+    const cur = findById(ctx, "Users", u.sub, "\u0E1C\u0E39\u0E49\u0E43\u0E0A\u0E49");
+    ctx.env.db.update("Users", cur.id, { ...cur, ...next, version: cur.version + 1, updatedAt: nowIso(ctx), updatedBy: u.sub });
+    audit(ctx, "profile.update", "User", cur.id, { before: { title: cur.title, fullName: cur.fullName, position: cur.position }, after: next });
+    return getProfile(ctx);
+  }
+  function toSettings(g) {
+    return {
+      id: g.id,
+      code: g.code,
+      name: g.name,
+      memoOrg: g.memoOrg ?? "",
+      memoFax: g.memoFax ?? "",
+      memoPrefix: g.memoPrefix ?? "",
+      headName: g.headName ?? "",
+      headPosition: g.headPosition ?? "",
+      headLine2: g.headLine2 ?? ""
+    };
+  }
+  function listGroupSettings(ctx) {
+    const u = requireRole(ctx, "admin", "minisuper", "superadmin");
+    return live(ctx.env.db.list("Workgroups")).filter((g) => !g.noActivities && canAccessWorkgroup(u, g.id)).map(toSettings);
+  }
+  function saveGroupSettings(ctx, b) {
+    const u = requireRole(ctx, "minisuper", "superadmin");
+    const cur = findById(ctx, "Workgroups", String(b.id), "\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19");
+    const patch = {
+      memoOrg: cleanText(b.memoOrg, 200),
+      memoFax: cleanText(b.memoFax, 40),
+      memoPrefix: cleanText(b.memoPrefix, 40),
+      headName: cleanText(b.headName, 120),
+      headPosition: cleanText(b.headPosition, 120),
+      headLine2: cleanText(b.headLine2, 160)
+    };
+    const next = { ...cur, ...patch, version: cur.version + 1, updatedAt: nowIso(ctx), updatedBy: u.sub };
+    ctx.env.db.update("Workgroups", cur.id, next);
+    audit(ctx, "workgroup.memoSettings", "Workgroup", cur.id, { before: toSettings(cur), after: patch });
+    return toSettings(next);
+  }
+  function facts(ctx, projectId, activityId, before) {
+    const project = findById(ctx, "Projects", String(projectId), "\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23");
+    requireWorkgroup(ctx, project.workgroupId);
+    if (!activityId) throw new AppError("VALIDATION_FAILED", "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21\u0E15\u0E49\u0E2D\u0E07\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21");
+    const activity = findById(ctx, "Activities", String(activityId), "\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21");
+    if (activity.projectId !== project.id) throw new AppError("VALIDATION_FAILED", "\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E44\u0E21\u0E48\u0E2D\u0E22\u0E39\u0E48\u0E43\u0E19\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23\u0E19\u0E35\u0E49");
+    const allocs = live(ctx.env.db.list("Allocations")).filter((x) => x.projectId === project.id && x.activityId === activity.id);
+    const disbs = live(ctx.env.db.list("Disbursements")).filter((x) => x.projectId === project.id && x.activityId === activity.id);
+    const budget = computeBudget(allocs, disbs).currentBudget;
+    const prior = before ? disbs.filter((x) => x.id !== before.id && x.status !== "VOID" && x.createdAt < before.at) : disbs.filter((x) => x.status !== "VOID");
+    const previous = prior.reduce((s, x) => s + Number(x.amountSatang), 0);
+    let mainActivityName = "";
+    if (activity.planItemId) {
+      const items = live(ctx.env.db.list("PlanItems"));
+      const leaf = items.find((i) => i.id === activity.planItemId);
+      const node = leaf && items.find((i) => i.planDocId === leaf.planDocId && i.seq === leaf.activitySeq && i.id !== leaf.id);
+      mainActivityName = node?.name ?? "";
+    }
+    return {
+      project,
+      activity,
+      mainActivityName,
+      budget,
+      previous,
+      group: live(ctx.env.db.list("Workgroups")).find((g) => g.id === project.workgroupId),
+      fund: live(ctx.env.db.list("FundingSources")).find((f) => f.id === project.fundingSourceId)
+    };
+  }
+  function fundLabel(f) {
+    const n = (f?.name || f?.shortName || "").trim();
+    if (!n) return "";
+    return n.startsWith("\u0E07\u0E1A") ? n : `\u0E07\u0E1A${n}`;
+  }
+  function signerOf(ctx) {
+    const p = getProfile(ctx);
+    return { name: withTitle(p.title, p.fullName), position: p.position };
+  }
+  function autoFields(ctx, f) {
+    return {
+      subject: MEMO_SUBJECT,
+      projectName: f.project.name,
+      mainActivityName: f.mainActivityName,
+      subActivityName: f.activity.name,
+      fund: fundLabel(f.fund),
+      budgetSatang: f.budget,
+      previousSatang: f.previous,
+      signer: signerOf(ctx)
+    };
+  }
+  function unitRefName(ctx, unitId) {
+    const u = listUnits(ctx).find((x) => x.id === unitId);
+    if (!u || u.kind === "PROVINCE") return "";
+    return `\u0E2D\u0E33\u0E40\u0E20\u0E2D${areaName(u)}`;
+  }
+  function memoContext(ctx, b) {
+    const f = facts(ctx, b.projectId, b.activityId);
+    const g = f.group;
+    const units = listUnits(ctx);
+    const unitId = b.unitId || provinceUnitId(units);
+    const draft = {
+      orgLine: g?.memoOrg || `${g?.name ?? ""} \u0E2A\u0E33\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19\u0E40\u0E01\u0E29\u0E15\u0E23\u0E08\u0E31\u0E07\u0E2B\u0E27\u0E31\u0E14\u0E01\u0E33\u0E41\u0E1E\u0E07\u0E40\u0E1E\u0E0A\u0E23`.trim(),
+      fax: g?.memoFax ?? "",
+      docPrefix: g?.memoPrefix ?? "",
+      docNumber: "",
+      date: today(ctx),
+      to: MEMO_DEFAULT_TO,
+      subject: MEMO_SUBJECT,
+      refNo: "",
+      refDate: "",
+      refFrom: unitRefName(ctx, unitId),
+      expense: "",
+      projectName: "",
+      mainActivityName: "",
+      fund: "",
+      budgetCode: f.activity.budgetCode ?? "",
+      mainActivityCode: f.activity.mainActivityCode ?? "",
+      subActivityName: "",
+      budgetSatang: 0,
+      previousSatang: 0,
+      requestSatang: 0,
+      checks: { ok: false, returnFix: false, returnReason: "", forward: false },
+      signer: { name: "", position: "" },
+      head: { name: g?.headName ?? "", position: g?.headPosition ?? "", line2: g?.headLine2 ?? "" },
+      align: "left",
+      thaiNumerals: false,
+      ...autoFields(ctx, f)
+    };
+    const mine = live(ctx.env.db.list("Memos")).slice(-200);
+    const used = mine.map((m) => {
+      try {
+        return JSON.parse(m.data).expense;
+      } catch {
+        return "";
+      }
+    }).filter(Boolean);
+    const profile = getProfile(ctx);
+    return {
+      draft,
+      codesSaved: !!(f.activity.budgetCode && f.activity.mainActivityCode),
+      expenseSuggestions: [.../* @__PURE__ */ new Set([...used.reverse(), ...DEFAULT_EXPENSES])].slice(0, 30),
+      units: units.map((u) => ({ id: u.id, name: u.kind === "PROVINCE" ? "\u0E23\u0E30\u0E14\u0E31\u0E1A\u0E08\u0E31\u0E07\u0E2B\u0E27\u0E31\u0E14 (\u0E2A\u0E19\u0E07.\u0E40\u0E01\u0E29\u0E15\u0E23\u0E08\u0E31\u0E07\u0E2B\u0E27\u0E31\u0E14)" : `\u0E2D\u0E33\u0E40\u0E20\u0E2D${areaName(u)}` })),
+      profileComplete: profile.complete,
+      groupConfigured: !!(g?.memoPrefix && g?.headName)
+    };
+  }
+  var ISO = /^\d{4}-\d{2}-\d{2}$/;
+  function sanitize(ctx, input, f, keepSigner) {
+    const i = input ?? {};
+    const s = (v, n) => cleanText(v, n);
+    const code = (v) => s(v, 40).replace(/\s+/g, "");
+    const body = Array.isArray(i.bodyOverride) ? i.bodyOverride.map((x) => s(x, 2e3)).filter(Boolean).slice(0, 20) : [];
+    const d = {
+      orgLine: s(i.orgLine, 200),
+      fax: s(i.fax, 40),
+      docPrefix: s(i.docPrefix, 40),
+      docNumber: s(i.docNumber, 40),
+      date: ISO.test(String(i.date)) ? String(i.date) : "",
+      to: s(i.to, 120) || MEMO_DEFAULT_TO,
+      subject: MEMO_SUBJECT,
+      refNo: s(i.refNo, 80),
+      refDate: ISO.test(String(i.refDate)) ? String(i.refDate) : "",
+      refFrom: s(i.refFrom, 120),
+      expense: s(i.expense, 200),
+      projectName: "",
+      mainActivityName: "",
+      fund: "",
+      budgetCode: f.activity.budgetCode || code(i.budgetCode),
+      mainActivityCode: f.activity.mainActivityCode || code(i.mainActivityCode),
+      subActivityName: "",
+      budgetSatang: 0,
+      previousSatang: 0,
+      requestSatang: Math.round(Number(i.requestSatang) || 0),
+      checks: {
+        ok: !!i.checks?.ok,
+        returnFix: !!i.checks?.returnFix,
+        returnReason: s(i.checks?.returnReason, 300),
+        forward: !!i.checks?.forward
+      },
+      signer: { name: "", position: "" },
+      head: { name: s(i.head?.name, 120), position: s(i.head?.position, 120), line2: s(i.head?.line2, 160) },
+      align: i.align === "justify" ? "justify" : "left",
+      thaiNumerals: !!i.thaiNumerals,
+      bodyOverride: body.length ? body : void 0,
+      ...autoFields(ctx, f)
+    };
+    if (keepSigner) d.signer = keepSigner;
+    if (d.budgetCode && !/^\d{20}$/.test(d.budgetCode)) throw new AppError("VALIDATION_FAILED", "\u0E23\u0E2B\u0E31\u0E2A\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13\u0E15\u0E49\u0E2D\u0E07\u0E40\u0E1B\u0E47\u0E19\u0E15\u0E31\u0E27\u0E40\u0E25\u0E02 20 \u0E2B\u0E25\u0E31\u0E01");
+    if (d.mainActivityCode && !/^\d{17}$/.test(d.mainActivityCode)) throw new AppError("VALIDATION_FAILED", "\u0E23\u0E2B\u0E31\u0E2A\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E2B\u0E25\u0E31\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E40\u0E1B\u0E47\u0E19\u0E15\u0E31\u0E27\u0E40\u0E25\u0E02 17 \u0E2B\u0E25\u0E31\u0E01");
+    const errors = validateMemo(d);
+    if (errors.length) throw new AppError("VALIDATION_FAILED", errors.join(" \xB7 "));
+    if (memoOverrideStale(d)) {
+      throw new AppError("VALIDATION_FAILED", '\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21\u0E17\u0E35\u0E48\u0E41\u0E01\u0E49\u0E44\u0E02\u0E21\u0E35\u0E22\u0E2D\u0E14\u0E40\u0E07\u0E34\u0E19\u0E44\u0E21\u0E48\u0E15\u0E23\u0E07\u0E01\u0E31\u0E1A\u0E22\u0E2D\u0E14\u0E25\u0E48\u0E32\u0E2A\u0E38\u0E14 \u2014 \u0E01\u0E14 "\u0E43\u0E0A\u0E49\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21\u0E2D\u0E31\u0E15\u0E42\u0E19\u0E21\u0E31\u0E15\u0E34" \u0E2B\u0E23\u0E37\u0E2D\u0E41\u0E01\u0E49\u0E15\u0E31\u0E27\u0E40\u0E25\u0E02\u0E43\u0E2B\u0E49\u0E15\u0E23\u0E07');
+    }
+    return d;
+  }
+  function rememberCodes(ctx, a, d) {
+    if ((a.budgetCode || !d.budgetCode) && (a.mainActivityCode || !d.mainActivityCode)) return;
+    const cur = findById(ctx, "Activities", a.id, "\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21");
+    const patch = { budgetCode: cur.budgetCode || d.budgetCode, mainActivityCode: cur.mainActivityCode || d.mainActivityCode };
+    ctx.env.db.update("Activities", cur.id, { ...cur, ...patch, version: cur.version + 1, updatedAt: nowIso(ctx), updatedBy: ctx.user?.sub ?? "" });
+    audit(ctx, "activity.codes", "Activity", cur.id, { projectId: cur.projectId, after: patch });
+  }
+  var docUrl = (id) => id && !id.startsWith("mem-") ? `https://docs.google.com/document/d/${id}/edit` : "";
+  var pdfUrl = (id) => id && !id.startsWith("mem-") ? `https://drive.google.com/file/d/${id}/view` : "";
+  function toRecord(ctx, m) {
+    const disb = ctx.env.db.list("Disbursements").find((x) => x.id === m.disbursementId);
+    let data;
+    try {
+      data = JSON.parse(m.data);
+    } catch {
+      data = {};
+    }
+    return {
+      id: m.id,
+      version: Number(m.version),
+      projectId: m.projectId,
+      activityId: m.activityId,
+      disbursementId: m.disbursementId,
+      unitId: m.unitId,
+      docNo: m.docNo,
+      date: m.date,
+      amountSatang: Number(m.amountSatang),
+      revision: Number(m.revision) || 1,
+      status: disb?.status ?? "VOID",
+      docUrl: docUrl(m.docFileId),
+      pdfUrl: pdfUrl(m.pdfFileId),
+      renderStatus: m.renderStatus,
+      renderError: m.renderError,
+      data,
+      createdAt: m.createdAt,
+      updatedAt: m.updatedAt
+    };
+  }
+  function render(ctx, m, d, p) {
+    const rev = Number(m.revision) || 1;
+    const base = safeFileName(`\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E15\u0E23\u0E27\u0E08\u0E2A\u0E2D\u0E1A\u0E40\u0E2D\u0E01\u0E2A\u0E32\u0E23_${memoDocNo(d).replace(/\//g, "-")}_${d.date}${rev > 1 ? `_\u0E09\u0E1A\u0E31\u0E1A\u0E41\u0E01\u0E49\u0E44\u0E02${rev}` : ""}`, "doc");
+    const folder = `02_Project_Evidence/FY${p.fiscalYear}/${safeFileName(p.projectCode, "x")}/\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21`;
+    let patch;
+    try {
+      const r3 = ctx.env.files.renderMemo(folder, base, d);
+      patch = { docFileId: r3.docId, pdfFileId: r3.pdfId, renderStatus: "OK", renderError: "" };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      ctx.env.log("error", "memo.render", { memoId: m.id, msg });
+      patch = { renderStatus: "ERROR", renderError: cleanText(msg, 300) };
+    }
+    const next = { ...m, ...patch };
+    ctx.env.db.update("Memos", m.id, next);
+    return next;
+  }
+  function createMemo(ctx, b) {
+    const key = `memo:${String(b.idempotencyKey)}`;
+    const prev = findByIdempotency(ctx, "Disbursements", key);
+    if (prev) {
+      const m = live(ctx.env.db.list("Memos")).find((x) => x.disbursementId === prev.id);
+      if (m) return toRecord(ctx, m);
+    }
+    const f = facts(ctx, b.projectId, b.activityId);
+    const d = sanitize(ctx, b.data, f);
+    const docNo = memoDocNo(d);
+    const dup = live(ctx.env.db.list("Memos")).find((m) => m.docNo === docNo && ctx.env.db.list("Disbursements").some((x) => x.id === m.disbursementId && x.status !== "VOID"));
+    if (dup) throw new AppError("VALIDATION_FAILED", `\u0E40\u0E25\u0E02\u0E17\u0E35\u0E48\u0E2B\u0E19\u0E31\u0E07\u0E2A\u0E37\u0E2D ${docNo} \u0E16\u0E39\u0E01\u0E43\u0E0A\u0E49\u0E41\u0E25\u0E49\u0E27`);
+    const disb = createDisbursement(ctx, {
+      projectId: f.project.id,
+      activityId: f.activity.id,
+      unitId: b.unitId || void 0,
+      status: "APPROVED",
+      amountSatang: d.requestSatang,
+      date: d.date,
+      docNo,
+      description: `\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21: ${d.expense}`.slice(0, 500),
+      idempotencyKey: key,
+      source: "MEMO"
+    });
+    rememberCodes(ctx, f.activity, d);
+    const memo = {
+      ...newMeta(ctx),
+      projectId: f.project.id,
+      activityId: f.activity.id,
+      disbursementId: disb.id,
+      unitId: disb.unitId,
+      docNo,
+      date: d.date,
+      amountSatang: d.requestSatang,
+      data: JSON.stringify(d),
+      revision: 1,
+      docFileId: "",
+      pdfFileId: "",
+      renderStatus: "PENDING",
+      renderError: ""
+    };
+    ctx.env.db.insert("Memos", [memo]);
+    audit(ctx, "memo.create", "Memo", memo.id, { projectId: f.project.id, after: { docNo, amount: d.requestSatang, disbursementId: disb.id } });
+    return toRecord(ctx, render(ctx, memo, d, f.project));
+  }
+  function getMemo(ctx, b) {
+    const m = findById(ctx, "Memos", String(b.id), "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21");
+    const p = findById(ctx, "Projects", m.projectId, "\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23");
+    requireWorkgroup(ctx, p.workgroupId);
+    return toRecord(ctx, m);
+  }
+  function updateMemo(ctx, b) {
+    const cur = findById(ctx, "Memos", String(b.id), "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21");
+    if (Number(b.version) !== Number(cur.version)) throw new AppError("VERSION_CONFLICT", "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E19\u0E35\u0E49\u0E16\u0E39\u0E01\u0E41\u0E01\u0E49\u0E44\u0E02\u0E42\u0E14\u0E22\u0E1C\u0E39\u0E49\u0E2D\u0E37\u0E48\u0E19 \u2014 \u0E42\u0E2B\u0E25\u0E14\u0E43\u0E2B\u0E21\u0E48\u0E01\u0E48\u0E2D\u0E19\u0E41\u0E01\u0E49\u0E44\u0E02");
+    let disb = findById(ctx, "Disbursements", cur.disbursementId, "\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E40\u0E1A\u0E34\u0E01\u0E08\u0E48\u0E32\u0E22");
+    if (disb.status === "VOID") throw new AppError("VALIDATION_FAILED", "\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E40\u0E1A\u0E34\u0E01\u0E08\u0E48\u0E32\u0E22\u0E19\u0E35\u0E49\u0E16\u0E39\u0E01\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01\u0E41\u0E25\u0E49\u0E27 \u0E41\u0E01\u0E49\u0E44\u0E02\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49");
+    const f = facts(ctx, cur.projectId, cur.activityId, { id: disb.id, at: cur.createdAt });
+    let oldSigner;
+    try {
+      oldSigner = JSON.parse(cur.data).signer;
+    } catch {
+      oldSigner = void 0;
+    }
+    const d = sanitize(ctx, b.data, f, ctx.user?.sub === cur.createdBy ? void 0 : oldSigner);
+    const docNo = memoDocNo(d);
+    const moneyChanged = d.requestSatang !== Number(cur.amountSatang) || d.date !== cur.date || docNo !== cur.docNo;
+    if (moneyChanged) {
+      const u = requireRole(ctx, "admin", "minisuper", "superadmin");
+      if (u.role !== "superadmin") {
+        throw new AppError("FORBIDDEN_SCOPE", "\u0E40\u0E1B\u0E25\u0E35\u0E48\u0E22\u0E19\u0E22\u0E2D\u0E14\u0E40\u0E07\u0E34\u0E19 \u0E27\u0E31\u0E19\u0E17\u0E35\u0E48 \u0E2B\u0E23\u0E37\u0E2D\u0E40\u0E25\u0E02\u0E17\u0E35\u0E48\u0E2B\u0E19\u0E31\u0E07\u0E2A\u0E37\u0E2D \u0E44\u0E14\u0E49\u0E40\u0E09\u0E1E\u0E32\u0E30 Super Admin (\u0E23\u0E30\u0E1A\u0E1A\u0E08\u0E30\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E40\u0E14\u0E34\u0E21\u0E41\u0E25\u0E30\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E43\u0E2B\u0E21\u0E48\u0E41\u0E17\u0E19)");
+      }
+      const reason = cleanText(b.reason, 300) || `\u0E41\u0E01\u0E49\u0E44\u0E02\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21 ${cur.docNo}`;
+      const r3 = voidDisbursement(ctx, {
+        id: disb.id,
+        reason,
+        replacement: { amountSatang: d.requestSatang, date: d.date, docNo, description: disb.description, status: "APPROVED" }
+      });
+      disb = r3.replacement;
+    }
+    rememberCodes(ctx, f.activity, d);
+    const next = {
+      ...cur,
+      disbursementId: disb.id,
+      docNo,
+      date: d.date,
+      amountSatang: d.requestSatang,
+      data: JSON.stringify(d),
+      revision: (Number(cur.revision) || 1) + 1,
+      renderStatus: "PENDING",
+      version: Number(cur.version) + 1,
+      updatedAt: nowIso(ctx),
+      updatedBy: ctx.user?.sub ?? ""
+    };
+    ctx.env.db.update("Memos", cur.id, next);
+    audit(ctx, "memo.update", "Memo", cur.id, { projectId: cur.projectId, before: { docNo: cur.docNo, amount: cur.amountSatang, revision: cur.revision }, after: { docNo, amount: d.requestSatang, revision: next.revision } });
+    return toRecord(ctx, render(ctx, next, d, f.project));
+  }
+  function rerenderMemo(ctx, b) {
+    const m = findById(ctx, "Memos", String(b.id), "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21");
+    const p = findById(ctx, "Projects", m.projectId, "\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23");
+    requireWorkgroup(ctx, p.workgroupId);
+    return toRecord(ctx, render(ctx, m, JSON.parse(m.data), p));
+  }
+
   // src/core/router.ts
   var r = (fn, write, limit) => ({ fn, write, limit });
   var ROUTES = {
@@ -4189,6 +4784,15 @@ var KPP = (() => {
       logoutAll(c);
       return { ok: true };
     }, true, "admin"),
+    "profile.get": r((c) => getProfile(c), false, "admin"),
+    "profile.save": r(saveProfile, true, "admin"),
+    "memos.context": r(memoContext, false, "admin"),
+    "memos.get": r(getMemo, false, "admin"),
+    "memos.create": r(createMemo, true, "admin"),
+    "memos.update": r(updateMemo, true, "admin"),
+    "memos.render": r(rerenderMemo, true, "admin"),
+    "memos.groupSettings": r((c) => listGroupSettings(c), false, "admin"),
+    "memos.saveGroupSettings": r(saveGroupSettings, true, "admin"),
     "admin.overview": r(overview, false, "admin"),
     "projects.list": r(listProjects, false, "admin"),
     "projects.get": r(getProject, false, "admin"),
@@ -4261,12 +4865,12 @@ var KPP = (() => {
       const ctx = { env, requestId, user: null, device: String(device ?? "").slice(0, 200) };
       if (!PUBLIC_ACTIONS.has(action)) ctx.user = verifyToken(ctx, token);
       rateLimit(env, route, ctx.user?.sub ?? "public");
-      const run = () => route.fn(ctx, body);
+      const run2 = () => route.fn(ctx, body);
       const data = route.write ? env.lock.withLock(() => {
-        const out = run();
+        const out = run2();
         env.db.flush?.();
         return out;
-      }) : run();
+      }) : run2();
       return { ok: true, data: data ?? null, meta: meta(), error: null };
     } catch (e) {
       if (e instanceof AppError) {
@@ -4344,6 +4948,117 @@ var KPP = (() => {
     if (org && !live(ctx.env.db.list("Workgroups")).some((g) => g.orgId === org.id && g.id !== dist.id)) {
       ctx.env.db.update("Organizations", org.id, { ...org, isDeleted: true, version: org.version + 1, updatedAt: nowIso(ctx), updatedBy: "system" });
     }
+  }
+
+  // src/gas/memoDoc.ts
+  var CM = 28.3465;
+  var FONT = "Sarabun";
+  var BODY = MEMO_FONT_PT.body;
+  var LABEL = MEMO_FONT_PT.label;
+  var INDENT = 2.5 * CM;
+  var SECTION_GAP = 6;
+  var DOTS = "................................................";
+  function style(p, align, before = 0) {
+    p.setAlignment(align).setSpacingBefore(before).setSpacingAfter(0).setLineSpacing(1).setIndentStart(0).setIndentEnd(0).setIndentFirstLine(0);
+    return p;
+  }
+  function run(p, text, size, bold = false) {
+    if (!text) return;
+    const t2 = p.appendText(text);
+    t2.setFontFamily(FONT).setFontSize(size).setBold(bold);
+  }
+  function layoutTable(body, cols, widths) {
+    const table = body.appendTable([Array.from({ length: cols }, () => "")]);
+    table.setBorderWidth(0);
+    widths.forEach((w, i) => table.setColumnWidth(i, w));
+    const row = table.getRow(0);
+    for (let i = 0; i < cols; i++) {
+      const c = row.getCell(i);
+      c.setPaddingTop(0).setPaddingBottom(0).setPaddingLeft(0).setPaddingRight(0);
+    }
+    return table;
+  }
+  function cellPara(c, first, align) {
+    const p = first ? c.getChild(0).asParagraph() : c.appendParagraph("");
+    return style(p, align);
+  }
+  function buildMemoDoc(name, d) {
+    const H = DocumentApp.HorizontalAlignment;
+    const tx = (s) => protectGroups(memoText(d, s));
+    const bodyAlign = d.align === "justify" ? H.JUSTIFY : H.LEFT;
+    const doc = DocumentApp.create(name);
+    const body = doc.getBody();
+    body.setPageWidth(595.28).setPageHeight(841.89).setMarginLeft(3 * CM).setMarginRight(2 * CM).setMarginTop(1.5 * CM).setMarginBottom(1.5 * CM);
+    const contentW = 595.28 - 5 * CM;
+    const head = layoutTable(body, 3, [2 * CM, contentW - 4 * CM, 2 * CM]);
+    const g = cellPara(head.getRow(0).getCell(0), true, H.LEFT);
+    const img = g.appendInlineImage(Utilities.newBlob(Utilities.base64Decode(GARUDA_JPEG_BASE64), "image/jpeg", "garuda.jpg"));
+    img.setWidth(Math.round(1.5 * CM)).setHeight(Math.round(1.5 * CM));
+    const title = cellPara(head.getRow(0).getCell(1), true, H.CENTER);
+    title.setSpacingBefore(10);
+    run(title, "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21", MEMO_FONT_PT.title, true);
+    cellPara(head.getRow(0).getCell(2), true, H.LEFT);
+    const org = style(body.appendParagraph(""), H.LEFT);
+    run(org, "\u0E2A\u0E48\u0E27\u0E19\u0E23\u0E32\u0E0A\u0E01\u0E32\u0E23", LABEL, true);
+    run(org, `  ${tx(d.orgLine)}${d.fax ? `  \u0E42\u0E17\u0E23\u0E2A\u0E32\u0E23 ${tx(d.fax)}` : ""}`, BODY);
+    const nd = layoutTable(body, 2, [contentW * 0.5, contentW * 0.5]);
+    const no = cellPara(nd.getRow(0).getCell(0), true, H.LEFT);
+    run(no, "\u0E17\u0E35\u0E48", LABEL, true);
+    run(no, `  ${tx(memoDocNo(d))}`, BODY);
+    const dt = cellPara(nd.getRow(0).getCell(1), true, H.LEFT);
+    run(dt, "\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48", LABEL, true);
+    run(dt, `  ${tx(formatThaiDateLong(d.date))}`, BODY);
+    const subj = style(body.appendParagraph(""), H.LEFT);
+    run(subj, "\u0E40\u0E23\u0E37\u0E48\u0E2D\u0E07", LABEL, true);
+    run(subj, `  ${tx(d.subject)}`, BODY);
+    const to = style(body.appendParagraph(""), H.LEFT, SECTION_GAP);
+    run(to, "\u0E40\u0E23\u0E35\u0E22\u0E19", BODY);
+    run(to, `  ${tx(d.to)}`, BODY);
+    memoBody(d).forEach((line, i) => {
+      const p = style(body.appendParagraph(""), bodyAlign, i === 0 ? SECTION_GAP : 0);
+      if (i === 0) p.setIndentFirstLine(INDENT);
+      run(p, tx(line), BODY);
+    });
+    const box = (on) => on ? "\u2611" : "\u2610";
+    const chk = style(body.appendParagraph(""), H.LEFT, SECTION_GAP);
+    chk.setIndentStart(INDENT);
+    run(chk, "\u0E15\u0E23\u0E27\u0E08\u0E2A\u0E2D\u0E1A\u0E41\u0E25\u0E49\u0E27", BODY);
+    const lines = [
+      `${box(d.checks.ok)}  \u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E15\u0E32\u0E21\u0E04\u0E39\u0E48\u0E21\u0E37\u0E2D\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23`,
+      `${box(d.checks.returnFix)}  \u0E2A\u0E48\u0E07\u0E04\u0E37\u0E19\u0E41\u0E01\u0E49\u0E44\u0E02 \u0E40\u0E19\u0E37\u0E48\u0E2D\u0E07\u0E08\u0E32\u0E01 ${d.checks.returnFix && d.checks.returnReason.trim() ? tx(d.checks.returnReason.trim()) : DOTS}`,
+      `${box(d.checks.forward)}  \u0E2A\u0E48\u0E07\u0E1D\u0E48\u0E32\u0E22\u0E1A\u0E23\u0E34\u0E2B\u0E32\u0E23\u0E17\u0E31\u0E48\u0E27\u0E44\u0E1B\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E14\u0E33\u0E40\u0E19\u0E34\u0E19\u0E01\u0E32\u0E23\u0E15\u0E48\u0E2D\u0E44\u0E1B`
+    ];
+    for (const l of lines) {
+      const p = style(body.appendParagraph(""), H.LEFT);
+      p.setIndentStart(INDENT + 0.5 * CM);
+      run(p, l, BODY);
+    }
+    body.appendParagraph("").setSpacingBefore(0).setSpacingAfter(0);
+    const sig = layoutTable(body, 2, [contentW / 2, contentW / 2]);
+    const people = [d.signer, d.head];
+    people.forEach((person, i) => {
+      const c = sig.getRow(0).getCell(i);
+      const rows = [
+        "(\u0E25\u0E07\u0E0A\u0E37\u0E48\u0E2D)........................................................",
+        `(${person.name ? tx(person.name) : DOTS})`,
+        `\u0E15\u0E33\u0E41\u0E2B\u0E19\u0E48\u0E07 ${person.position ? tx(person.position) : DOTS}`,
+        person.line2 ? tx(person.line2) : ""
+      ].filter(Boolean);
+      rows.forEach((r3, j) => run(cellPara(c, j === 0, H.CENTER), r3, BODY));
+    });
+    const ap = style(body.appendParagraph(""), H.CENTER, 18);
+    run(ap, "\u0E2D\u0E19\u0E38\u0E21\u0E31\u0E15\u0E34", BODY);
+    for (const r3 of ["(\u0E25\u0E07\u0E0A\u0E37\u0E48\u0E2D)........................................................", `(${DOTS})`, `\u0E15\u0E33\u0E41\u0E2B\u0E19\u0E48\u0E07 ${DOTS}`]) {
+      run(style(body.appendParagraph(""), H.CENTER, r3.startsWith("(\u0E25\u0E07\u0E0A\u0E37\u0E48\u0E2D)") ? 14 : 0), r3, BODY);
+    }
+    const first = body.getChild(0);
+    if (first.getType() === DocumentApp.ElementType.PARAGRAPH && first.asParagraph().getText() === "" && body.getNumChildren() > 1) {
+      try {
+        first.removeFromParent();
+      } catch {
+      }
+    }
+    return doc;
   }
 
   // src/core/pbkdf2.ts
@@ -4664,6 +5379,18 @@ var KPP = (() => {
     moveToFolder(fileId, folderPath) {
       DriveApp.getFileById(fileId).moveTo(this.folder(folderPath));
     }
+    renderMemo(folderPath, baseName, memo) {
+      const folder = this.folder(folderPath);
+      const doc = buildMemoDoc(baseName, memo);
+      const docId = doc.getId();
+      doc.saveAndClose();
+      const docFile = DriveApp.getFileById(docId);
+      docFile.moveTo(folder);
+      docFile.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+      const pdf = folder.createFile(docFile.getAs("application/pdf").setName(`${baseName}.pdf`));
+      pdf.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+      return { docId, pdfId: pdf.getId() };
+    }
   };
   function provision(files, dryRun = false) {
     const log = [];
@@ -4845,6 +5572,43 @@ var KPP = (() => {
     }
     return `backup ${day} ok`;
   }
+  function testMemoRender() {
+    const files = new GasFiles();
+    const sample = {
+      orgLine: "\u0E01\u0E25\u0E38\u0E48\u0E21\u0E2D\u0E32\u0E23\u0E31\u0E01\u0E02\u0E32\u0E1E\u0E37\u0E0A \u0E2A\u0E33\u0E19\u0E31\u0E01\u0E07\u0E32\u0E19\u0E40\u0E01\u0E29\u0E15\u0E23\u0E08\u0E31\u0E07\u0E2B\u0E27\u0E31\u0E14\u0E01\u0E33\u0E41\u0E1E\u0E07\u0E40\u0E1E\u0E0A\u0E23",
+      fax: "0-5571-6858",
+      docPrefix: "\u0E01\u0E1E 0009.3",
+      docNumber: "\u0E15\u0E31\u0E27\u0E2D\u0E22\u0E48\u0E32\u0E07",
+      date: todayBangkok(),
+      to: MEMO_DEFAULT_TO,
+      subject: MEMO_SUBJECT,
+      refNo: "\u0E01\u0E1E 0109/2269",
+      refDate: todayBangkok(),
+      refFrom: "\u0E2D\u0E33\u0E40\u0E20\u0E2D\u0E40\u0E21\u0E37\u0E2D\u0E07\u0E01\u0E33\u0E41\u0E1E\u0E07\u0E40\u0E1E\u0E0A\u0E23",
+      expense: "\u0E04\u0E48\u0E32\u0E08\u0E31\u0E14\u0E0B\u0E37\u0E49\u0E2D\u0E27\u0E31\u0E2A\u0E14\u0E38\u0E2A\u0E19\u0E31\u0E1A\u0E2A\u0E19\u0E38\u0E19",
+      projectName: "\u0E2A\u0E48\u0E07\u0E40\u0E2A\u0E23\u0E34\u0E21\u0E01\u0E32\u0E23\u0E08\u0E31\u0E14\u0E01\u0E32\u0E23\u0E2A\u0E38\u0E02\u0E20\u0E32\u0E1E\u0E1E\u0E37\u0E0A\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E40\u0E1E\u0E34\u0E48\u0E21\u0E1B\u0E23\u0E30\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E20\u0E32\u0E1E\u0E01\u0E32\u0E23\u0E1C\u0E25\u0E34\u0E15\u0E2A\u0E34\u0E19\u0E04\u0E49\u0E32\u0E40\u0E01\u0E29\u0E15\u0E23",
+      mainActivityName: "\u0E2A\u0E19\u0E31\u0E1A\u0E2A\u0E19\u0E38\u0E19\u0E01\u0E32\u0E23\u0E02\u0E31\u0E1A\u0E40\u0E04\u0E25\u0E37\u0E48\u0E2D\u0E19\u0E28\u0E39\u0E19\u0E22\u0E4C\u0E08\u0E31\u0E14\u0E01\u0E32\u0E23\u0E14\u0E34\u0E19\u0E1B\u0E38\u0E4B\u0E22\u0E0A\u0E38\u0E21\u0E0A\u0E19 (\u0E28\u0E14\u0E1B\u0E0A.) \u0E2A\u0E39\u0E48 Service Provider \u0E14\u0E34\u0E19\u0E1B\u0E38\u0E4B\u0E22\u0E0A\u0E38\u0E21\u0E0A\u0E19",
+      fund: "\u0E07\u0E1A\u0E01\u0E23\u0E21\u0E2A\u0E48\u0E07\u0E40\u0E2A\u0E23\u0E34\u0E21\u0E01\u0E32\u0E23\u0E40\u0E01\u0E29\u0E15\u0E23",
+      budgetCode: "07011152034002000000",
+      mainActivityCode: "07011690009900000",
+      subActivityName: "\u0E2A\u0E19\u0E31\u0E1A\u0E2A\u0E19\u0E38\u0E19\u0E01\u0E32\u0E23\u0E08\u0E31\u0E14\u0E17\u0E33\u0E41\u0E1B\u0E25\u0E07\u0E40\u0E23\u0E35\u0E22\u0E19\u0E23\u0E39\u0E49\u0E14\u0E49\u0E32\u0E19\u0E01\u0E32\u0E23\u0E08\u0E31\u0E14\u0E01\u0E32\u0E23\u0E14\u0E34\u0E19\u0E41\u0E25\u0E30\u0E01\u0E32\u0E23\u0E43\u0E0A\u0E49\u0E1B\u0E38\u0E4B\u0E22\u0E40\u0E09\u0E1E\u0E32\u0E30\u0E14\u0E49\u0E32\u0E19",
+      budgetSatang: 44e5,
+      previousSatang: 36e5,
+      requestSatang: 4e5,
+      checks: { ok: true, returnFix: false, returnReason: "", forward: true },
+      signer: { name: "\u0E0A\u0E37\u0E48\u0E2D-\u0E2A\u0E01\u0E38\u0E25 \u0E1C\u0E39\u0E49\u0E15\u0E23\u0E27\u0E08\u0E2A\u0E2D\u0E1A", position: "\u0E19\u0E31\u0E01\u0E27\u0E34\u0E0A\u0E32\u0E01\u0E32\u0E23\u0E2A\u0E48\u0E07\u0E40\u0E2A\u0E23\u0E34\u0E21\u0E01\u0E32\u0E23\u0E40\u0E01\u0E29\u0E15\u0E23\u0E0A\u0E33\u0E19\u0E32\u0E0D\u0E01\u0E32\u0E23" },
+      head: { name: "\u0E0A\u0E37\u0E48\u0E2D-\u0E2A\u0E01\u0E38\u0E25 \u0E2B\u0E31\u0E27\u0E2B\u0E19\u0E49\u0E32\u0E01\u0E25\u0E38\u0E48\u0E21", position: "\u0E19\u0E31\u0E01\u0E27\u0E34\u0E0A\u0E32\u0E01\u0E32\u0E23\u0E2A\u0E48\u0E07\u0E40\u0E2A\u0E23\u0E34\u0E21\u0E01\u0E32\u0E23\u0E40\u0E01\u0E29\u0E15\u0E23\u0E0A\u0E33\u0E19\u0E32\u0E0D\u0E01\u0E32\u0E23", line2: "\u0E23\u0E31\u0E01\u0E29\u0E32\u0E01\u0E32\u0E23\u0E2B\u0E31\u0E27\u0E2B\u0E19\u0E49\u0E32\u0E01\u0E25\u0E38\u0E48\u0E21\u0E2D\u0E32\u0E23\u0E31\u0E01\u0E02\u0E32\u0E1E\u0E37\u0E0A" },
+      align: "left",
+      thaiNumerals: false
+    };
+    const left = files.renderMemo(`${FOLDERS.system}/tmp`, "\u0E17\u0E14\u0E2A\u0E2D\u0E1A\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21_\u0E0A\u0E34\u0E14\u0E0B\u0E49\u0E32\u0E22", sample);
+    const just = files.renderMemo(`${FOLDERS.system}/tmp`, "\u0E17\u0E14\u0E2A\u0E2D\u0E1A\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21_\u0E0A\u0E34\u0E14\u0E02\u0E2D\u0E1A", { ...sample, align: "justify" });
+    const msg = `left: https://docs.google.com/document/d/${left.docId}/edit
+justify: https://docs.google.com/document/d/${just.docId}/edit
+pdf: https://drive.google.com/file/d/${left.pdfId}/view`;
+    Logger.log(msg);
+    return msg;
+  }
   return __toCommonJS(main_exports);
 })();
 function doGet() { return KPP.doGet.apply(null, arguments); }
@@ -4854,3 +5618,4 @@ function setSuperAdmin() { return KPP.setSuperAdmin.apply(null, arguments); }
 function installTriggers() { return KPP.installTriggers.apply(null, arguments); }
 function autoImportInbox() { return KPP.autoImportInbox.apply(null, arguments); }
 function dailyMaintenance() { return KPP.dailyMaintenance.apply(null, arguments); }
+function testMemoRender() { return KPP.testMemoRender.apply(null, arguments); }

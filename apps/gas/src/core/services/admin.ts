@@ -72,7 +72,7 @@ export function decideRequest(ctx: Ctx, b: { requestId: string; approve: boolean
     const h = phoneHash(ctx, req.phone);
     if (!ctx.env.db.list<User>('Users').some((x) => !x.isDeleted && x.phoneHash === h)) {
       const user: User = {
-        ...newMeta(ctx), phone: normalizePhone(req.phone), phoneHash: h, fullName: req.fullName, position: req.position,
+        ...newMeta(ctx), phone: normalizePhone(req.phone), phoneHash: h, fullName: req.fullName, position: req.position, title: req.title ?? '',
         workgroupId: req.workgroupId, affiliation: req.affiliation, role, status: 'active', scopeWorkgroups: '[]', tokenVersion: 1,
         approvedAt: at, approvedBy: u.name, lastLoginAt: '', knownDevices: '[]',
       };
@@ -93,7 +93,7 @@ export function listUsers(ctx: Ctx): Array<Omit<User, 'phoneHash' | 'knownDevice
     .sort((a, b) => a.fullName.localeCompare(b.fullName, 'th'));
 }
 
-export function saveUser(ctx: Ctx, b: { id?: string; phone: string; fullName: string; position: string; workgroupId: string; affiliation: string; role: 'admin' | 'minisuper'; scopeWorkgroups?: string[] }): { id: string } {
+export function saveUser(ctx: Ctx, b: { id?: string; phone: string; title?: string; fullName: string; position: string; workgroupId: string; affiliation: string; role: 'admin' | 'minisuper'; scopeWorkgroups?: string[] }): { id: string } {
   const u = requireRole(ctx, 'minisuper', 'superadmin');
   const phone = normalizePhone(b.phone);
   if (!isValidPhone(phone)) throw new AppError('VALIDATION_FAILED', 'รูปแบบเบอร์โทรศัพท์ไม่ถูกต้อง');
@@ -105,7 +105,7 @@ export function saveUser(ctx: Ctx, b: { id?: string; phone: string; fullName: st
   const users = live(ctx.env.db.list<User>('Users'));
   if (users.some((x) => x.phoneHash === h && x.id !== b.id)) throw new AppError('VALIDATION_FAILED', 'หมายเลขนี้มีในระบบแล้ว');
   const fields = {
-    phone, phoneHash: h, fullName: cleanText(b.fullName, 120), position: cleanText(b.position, 120), workgroupId: b.workgroupId,
+    phone, phoneHash: h, title: cleanText(b.title, 40), fullName: cleanText(b.fullName, 120), position: cleanText(b.position, 120), workgroupId: b.workgroupId,
     affiliation: cleanText(b.affiliation, 160), role, scopeWorkgroups: JSON.stringify(scope),
   };
   if (fields.fullName.length < 4) throw new AppError('VALIDATION_FAILED', 'กรุณากรอกชื่อ-สกุล');
@@ -113,8 +113,10 @@ export function saveUser(ctx: Ctx, b: { id?: string; phone: string; fullName: st
     const cur = findById<User>(ctx, 'Users', b.id, 'ผู้ใช้');
     if ((cur.role === 'minisuper' || role === 'minisuper') && u.role !== 'superadmin') throw new AppError('FORBIDDEN_SCOPE', 'จัดการ Mini Super Admin ได้เฉพาะ Super Admin');
     if (cur.id === u.sub && cur.role !== role) throw new AppError('VALIDATION_FAILED', 'ไม่สามารถเปลี่ยนบทบาทของตนเองได้');
-    // เปลี่ยนสิทธิ์ → เพิกถอน token เดิมทันที
-    const next = { ...cur, ...fields, tokenVersion: Number(cur.tokenVersion) + 1, version: cur.version + 1, updatedAt: nowIso(ctx), updatedBy: u.sub };
+    // เปลี่ยนสิทธิ์/เบอร์ → เพิกถอน token เดิมทันที (แก้เฉพาะคำนำหน้า/ชื่อ/ตำแหน่ง ไม่ต้องออกจากระบบ)
+    const authChanged = cur.phoneHash !== fields.phoneHash || cur.role !== role || cur.workgroupId !== fields.workgroupId
+      || (cur.scopeWorkgroups || '[]') !== fields.scopeWorkgroups;
+    const next = { ...cur, ...fields, tokenVersion: Number(cur.tokenVersion) + (authChanged ? 1 : 0), version: cur.version + 1, updatedAt: nowIso(ctx), updatedBy: u.sub };
     ctx.env.db.update('Users', cur.id, next);
     audit(ctx, 'user.update', 'User', cur.id, { before: cur, after: next });
     return { id: cur.id };

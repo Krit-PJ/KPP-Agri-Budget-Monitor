@@ -2,7 +2,7 @@
  * Entry points ของ Apps Script — bundle เป็น global `KPP`, แล้ว footer สร้างฟังก์ชันระดับบนสุด
  * (doGet, doPost, setup, setSuperAdmin, autoImportInbox, dailyMaintenance, installTriggers)
  */
-import { AppError, todayBangkok } from '@kpp/domain';
+import { AppError, MEMO_DEFAULT_TO, MEMO_SUBJECT, todayBangkok, type MemoData } from '@kpp/domain';
 import { SYSTEM_USER, getSettings, setSetting, type Ctx } from '../core/context';
 import { handle, type RpcRequest } from '../core/router';
 import { setSuperAdmin as setSuper } from '../core/auth';
@@ -136,3 +136,29 @@ export function dailyMaintenance(): string {
 }
 
 export { AppError };
+
+/**
+ * ทดสอบรูปแบบบันทึกข้อความ (รันจากหน้า editor) — สร้าง Doc + PDF ตัวอย่างใน 00_System/tmp
+ * ไม่บันทึกข้อมูลใด ๆ ลงตาราง ไม่สร้างรายการเบิกจ่าย
+ */
+export function testMemoRender(): string {
+  const files = new GasFiles();
+  const sample: MemoData = {
+    orgLine: 'กลุ่มอารักขาพืช สำนักงานเกษตรจังหวัดกำแพงเพชร', fax: '0-5571-6858', docPrefix: 'กพ 0009.3', docNumber: 'ตัวอย่าง',
+    date: todayBangkok(), to: MEMO_DEFAULT_TO, subject: MEMO_SUBJECT, refNo: 'กพ 0109/2269', refDate: todayBangkok(), refFrom: 'อำเภอเมืองกำแพงเพชร',
+    expense: 'ค่าจัดซื้อวัสดุสนับสนุน', projectName: 'ส่งเสริมการจัดการสุขภาพพืชเพื่อเพิ่มประสิทธิภาพการผลิตสินค้าเกษตร',
+    mainActivityName: 'สนับสนุนการขับเคลื่อนศูนย์จัดการดินปุ๋ยชุมชน (ศดปช.) สู่ Service Provider ดินปุ๋ยชุมชน', fund: 'งบกรมส่งเสริมการเกษตร',
+    budgetCode: '07011152034002000000', mainActivityCode: '07011690009900000',
+    subActivityName: 'สนับสนุนการจัดทำแปลงเรียนรู้ด้านการจัดการดินและการใช้ปุ๋ยเฉพาะด้าน',
+    budgetSatang: 4_400_000, previousSatang: 3_600_000, requestSatang: 400_000,
+    checks: { ok: true, returnFix: false, returnReason: '', forward: true },
+    signer: { name: 'ชื่อ-สกุล ผู้ตรวจสอบ', position: 'นักวิชาการส่งเสริมการเกษตรชำนาญการ' },
+    head: { name: 'ชื่อ-สกุล หัวหน้ากลุ่ม', position: 'นักวิชาการส่งเสริมการเกษตรชำนาญการ', line2: 'รักษาการหัวหน้ากลุ่มอารักขาพืช' },
+    align: 'left', thaiNumerals: false,
+  };
+  const left = files.renderMemo(`${FOLDERS.system}/tmp`, 'ทดสอบบันทึกข้อความ_ชิดซ้าย', sample);
+  const just = files.renderMemo(`${FOLDERS.system}/tmp`, 'ทดสอบบันทึกข้อความ_ชิดขอบ', { ...sample, align: 'justify' });
+  const msg = `left: https://docs.google.com/document/d/${left.docId}/edit\njustify: https://docs.google.com/document/d/${just.docId}/edit\npdf: https://drive.google.com/file/d/${left.pdfId}/view`;
+  Logger.log(msg);
+  return msg;
+}

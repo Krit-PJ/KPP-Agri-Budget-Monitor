@@ -15,6 +15,7 @@ import * as plansSvc from './services/plans';
 import * as reportsSvc from './services/reports';
 import * as targetsSvc from './services/targets';
 import * as unitsSvc from './services/units';
+import * as memosSvc from './services/memos';
 
 type Handler = (ctx: Ctx, body: Record<string, unknown>) => unknown;
 interface Route { fn: Handler; write: boolean; limit: 'public' | 'auth' | 'admin' | 'import' }
@@ -36,6 +37,15 @@ export const ROUTES: Record<Exclude<ActionName, 'batch'>, Route> = {
   'auth.loginSuper': r(loginSuper, true, 'auth'),
   'auth.me': r((c) => c.user, false, 'admin'),
   'auth.logout': r((c) => { logoutAll(c); return { ok: true }; }, true, 'admin'),
+  'profile.get': r((c) => memosSvc.getProfile(c), false, 'admin'),
+  'profile.save': r(memosSvc.saveProfile, true, 'admin'),
+  'memos.context': r(memosSvc.memoContext, false, 'admin'),
+  'memos.get': r(memosSvc.getMemo, false, 'admin'),
+  'memos.create': r(memosSvc.createMemo, true, 'admin'),
+  'memos.update': r(memosSvc.updateMemo, true, 'admin'),
+  'memos.render': r(memosSvc.rerenderMemo, true, 'admin'),
+  'memos.groupSettings': r((c) => memosSvc.listGroupSettings(c), false, 'admin'),
+  'memos.saveGroupSettings': r(memosSvc.saveGroupSettings, true, 'admin'),
   'admin.overview': r(adminSvc.overview, false, 'admin'),
   'projects.list': r(projectsSvc.listProjects, false, 'admin'),
   'projects.get': r(projectsSvc.getProject, false, 'admin'),

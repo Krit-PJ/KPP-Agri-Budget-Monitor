@@ -9,6 +9,7 @@ import type {
 } from './types';
 import type { Satang } from './money';
 import type { CoverLetterResult } from './coverLetter';
+import type { MemoData } from './memo';
 import type { StagedRow } from './importer';
 import type { ParsedPlan, PlanMeta } from './plan';
 import type { ApiEnvelope, PlanDoc, PlanItem } from './types';
@@ -57,7 +58,39 @@ export interface EntryActivity {
   /** กำหนดพื้นที่ดำเนินการ (แบ่งงบรายอำเภอ) แล้วหรือยัง — ยังไม่กำหนด = เลือกได้เฉพาะระดับจังหวัด */
   hasAreas: boolean;
   units: Array<{ unitId: string; budget: Satang; used: Satang }>;
-  history: Array<{ id: string; no: number; date: string; amountSatang: Satang; docNo: string; unitId: string; status: string; hasFile: boolean }>;
+  history: Array<{ id: string; no: number; date: string; amountSatang: Satang; docNo: string; unitId: string; status: string; hasFile: boolean; memoId?: string }>;
+}
+
+/** ข้อมูลของฉัน (ใช้เป็นผู้ลงนามในบันทึกข้อความ) */
+export interface MyProfile {
+  title: string; fullName: string; position: string; workgroupId: string; workgroupName: string;
+  /** ครบสำหรับใช้ลงนาม (มีคำนำหน้า ชื่อ และตำแหน่ง) */
+  complete: boolean;
+}
+/** ค่าหัวบันทึกข้อความของกลุ่มงาน */
+export interface WorkgroupMemoSettings {
+  id: string; code: string; name: string;
+  memoOrg: string; memoFax: string; memoPrefix: string; headName: string; headPosition: string; headLine2: string;
+}
+/** ข้อมูลตั้งต้นสำหรับสร้างบันทึกข้อความของกิจกรรม (ช่องสีฟ้า = ระบบเติมให้) */
+export interface MemoContext {
+  draft: MemoData;
+  /** รหัสงบ/รหัสกิจกรรมหลักถูกบันทึกไว้กับกิจกรรมแล้ว */
+  codesSaved: boolean;
+  /** รายการค่าใช้จ่ายที่เคยใช้ (ช่วยพิมพ์) */
+  expenseSuggestions: string[];
+  /** ชื่ออำเภอ/หน่วยดำเนินการที่เลือกได้ */
+  units: Array<{ id: string; name: string }>;
+  profileComplete: boolean;
+  groupConfigured: boolean;
+}
+export interface MemoRecord {
+  id: string; version: number; projectId: string; activityId: string; disbursementId: string; unitId: string;
+  docNo: string; date: string; amountSatang: Satang; revision: number;
+  /** สถานะรายการเบิกจ่ายที่ผูกอยู่ (VOID = ยกเลิกแล้ว) */
+  status: string;
+  docUrl: string; pdfUrl: string; renderStatus: string; renderError: string;
+  data: MemoData; createdAt: string; updatedAt: string;
 }
 export interface VisitCount { today: number; total: number; since: string }
 export interface AssignResult { assigned: number; skipped: Array<{ id: string; reason: string }> }
@@ -203,11 +236,24 @@ export interface Actions {
   /** ตัวนับผู้เข้าชม: count = true นับเพิ่ม 1 (ครั้งแรกของการเปิดเว็บ) */
   'public.hit': [{ count?: boolean }, VisitCount];
   // auth
-  'auth.requestAccess': [{ phone: string; fullName: string; position: string; workgroupId: string; affiliation: string; note?: string }, { requestId: string }];
+  'auth.requestAccess': [{ phone: string; title?: string; fullName: string; position: string; workgroupId: string; affiliation: string; note?: string }, { requestId: string }];
   'auth.login': [{ phone: string; device?: string }, { token: string; user: SessionUser }];
   'auth.loginSuper': [{ username: string; password: string; device?: string }, { token: string; user: SessionUser }];
   'auth.me': [Record<string, never>, SessionUser];
   'auth.logout': [Record<string, never>, { ok: true }];
+  'profile.get': [Record<string, never>, MyProfile];
+  'profile.save': [{ title: string; fullName: string; position: string }, MyProfile];
+  // บันทึกข้อความตรวจสอบเอกสารเพื่อขอเบิกเงินราชการ
+  'memos.context': [{ projectId: string; activityId: string; unitId?: string }, MemoContext];
+  'memos.get': [{ id: string }, MemoRecord];
+  /** บันทึก = สร้างรายการเบิกจ่ายสถานะ APPROVED + Google Doc + PDF */
+  'memos.create': [{ projectId: string; activityId: string; unitId?: string; data: MemoData; idempotencyKey: string }, MemoRecord];
+  /** แก้ไข = ฉบับใหม่ (revision + 1) — เปลี่ยนยอดเงิน/วันที่/เลขที่ ได้เฉพาะ Super Admin */
+  'memos.update': [{ id: string; version: number; data: MemoData; reason?: string }, MemoRecord];
+  /** สร้างไฟล์ Doc/PDF ใหม่อีกครั้ง (กรณีครั้งก่อนไม่สำเร็จ) */
+  'memos.render': [{ id: string }, MemoRecord];
+  'memos.groupSettings': [Record<string, never>, WorkgroupMemoSettings[]];
+  'memos.saveGroupSettings': [WorkgroupMemoSettings, WorkgroupMemoSettings];
   // admin
   'admin.overview': [{ fiscalYear?: number }, OverviewData];
   'projects.list': [{ fiscalYear?: number }, ProjectListItem[]];
@@ -257,7 +303,7 @@ export interface Actions {
   'admin.requests': [{ status?: string }, AccessRequest[]];
   'admin.decideRequest': [{ requestId: string; approve: boolean; reason?: string; role?: 'admin' | 'minisuper' }, { ok: true }];
   'admin.users': [Record<string, never>, Array<Omit<User, 'phoneHash' | 'knownDevices'>>];
-  'admin.saveUser': [{ id?: string; phone: string; fullName: string; position: string; workgroupId: string; affiliation: string; role: 'admin' | 'minisuper'; scopeWorkgroups?: string[] }, { id: string }];
+  'admin.saveUser': [{ id?: string; phone: string; title?: string; fullName: string; position: string; workgroupId: string; affiliation: string; role: 'admin' | 'minisuper'; scopeWorkgroups?: string[] }, { id: string }];
   'admin.setUserStatus': [{ id: string; status: 'active' | 'suspended' }, { ok: true }];
   'admin.loginReport': [{ days?: number }, LoginAttempt[]];
   'admin.audit': [{ entityId?: string; limit?: number }, AuditLog[]];
@@ -286,4 +332,5 @@ export const READ_ACTIONS: ReadonlySet<ActionName> = new Set<ActionName>([
   'public.lookups', 'public.summary', 'public.projects', 'public.project', 'public.report', 'auth.me', 'targets.get',
   'admin.overview', 'projects.list', 'projects.get', 'disbursements.entryList', 'imports.get', 'imports.list', 'plans.check', 'plans.list', 'plans.get', 'reports.data',
   'admin.requests', 'admin.users', 'admin.loginReport', 'admin.audit', 'admin.health',
+  'profile.get', 'memos.context', 'memos.get', 'memos.groupSettings',
 ]);

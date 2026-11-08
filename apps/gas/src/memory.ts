@@ -6,7 +6,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { hmac } from '@noble/hashes/hmac';
 import { pbkdf2 } from '@noble/hashes/pbkdf2';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
-import { AppError, escapeCell, parseDelimited, readXlsx, unescapeCell } from '@kpp/domain';
+import { AppError, escapeCell, memoBody, parseDelimited, readXlsx, unescapeCell, type MemoData } from '@kpp/domain';
 import type { Cache, Crypto, Db, Env, FileStore, Locker, Props, Row } from './core/env';
 import { primaryKeyOf, TABLES, type TableName } from './core/schema';
 
@@ -183,6 +183,13 @@ export class MemoryFiles implements FileStore {
       const f = this.inbox.splice(i, 1)[0];
       this.files.set(f.id, { name: f.name, mime: f.mimeType, bytes: f.bytes, folder });
     }
+  }
+  /** โหมดสาธิต/ทดสอบ: เก็บข้อความแทน Google Doc และ PDF */
+  renderMemo(folder: string, baseName: string, memo: MemoData) {
+    const text = new TextEncoder().encode(memoBody(memo).join('\n'));
+    const doc = this.save(folder, baseName, 'application/vnd.google-apps.document', text);
+    const pdf = this.save(folder, `${baseName}.pdf`, 'application/pdf', text);
+    return { docId: doc.id, pdfId: pdf.id };
   }
 }
 

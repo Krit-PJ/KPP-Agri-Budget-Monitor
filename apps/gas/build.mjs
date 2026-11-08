@@ -4,7 +4,7 @@ import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
-const ENTRIES = ['doGet', 'doPost', 'setup', 'setSuperAdmin', 'installTriggers', 'autoImportInbox', 'dailyMaintenance'];
+const ENTRIES = ['doGet', 'doPost', 'setup', 'setSuperAdmin', 'installTriggers', 'autoImportInbox', 'dailyMaintenance', 'testMemoRender'];
 const footer = ENTRIES.map((n) => `function ${n}() { return KPP.${n}.apply(null, arguments); }`).join('\n');
 const pkg = JSON.parse(readFileSync(here('../../package.json'), 'utf8'));
 

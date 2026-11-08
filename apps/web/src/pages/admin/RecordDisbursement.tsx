@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   areaName, formatBaht, formatThaiDate, normalizeKey, todayBangkok,
-  type CoverLetterResult, type DisbursementStatus, type EntryActivity, type SessionUser,
+  type CoverLetterResult, type DisbursementStatus, type EntryActivity, type MemoRecord, type SessionUser,
 } from '@kpp/domain';
+import { MemoEditor, MemoSaved } from './MemoEditor';
 import { ApiError, call, fileToBase64, newKey, shrinkImage } from '../../api/client';
 import { Async, bahtInputToSatang, ErrorBox, useApi, useLookups, useSubmit, useToast } from '../../components/ui';
 import { FiscalYearPicker } from '../public/Home';
@@ -147,8 +148,50 @@ function Board({ list, user, initial, onChange }: { list: EntryActivity[]; user:
   );
 }
 
-/** ขั้นที่ 2: ข้อมูลสำคัญ + ฟอร์มกรอก (ให้น้อยที่สุด) + ประวัติการเบิก */
+/**
+ * ขั้นที่ 2: จัดทำบันทึกข้อความ (ค่าเริ่มต้น — บันทึกแล้วนับเป็นเบิกจ่ายทันที) หรือบันทึกยอดอย่างเดียว + ประวัติการเบิก
+ */
 function Entry({ e, user, onChange }: { e: EntryActivity; user: SessionUser; onChange: () => void }) {
+  const l = useLookups();
+  const unitName = (id: string) => areaName(l.units.find((u) => u.id === id));
+  const [mode, setMode] = useState<'memo' | 'quick'>(e.activityId ? 'memo' : 'quick');
+  const [saved, setSaved] = useState<MemoRecord | null>(null);
+  const [editing, setEditing] = useState<MemoRecord | undefined>(undefined);
+  const [formKey, setFormKey] = useState(0);
+  const { error, run } = useSubmit();
+  const openMemo = (id: string) => void run(async () => {
+    const m = await call('memos.get', { id });
+    setMode('memo');
+    setSaved(m);
+    setEditing(undefined);
+    document.getElementById(`memo-top-${keyOf(e)}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  return (
+    <>
+      <div id={`memo-top-${keyOf(e)}`} />
+      {e.activityId && (
+        <div className="segmented mode-switch" role="group" aria-label="วิธีบันทึก">
+          <button type="button" aria-pressed={mode === 'memo'} onClick={() => setMode('memo')}>จัดทำบันทึกข้อความ</button>
+          <button type="button" aria-pressed={mode === 'quick'} onClick={() => setMode('quick')}>บันทึกยอดอย่างเดียว</button>
+        </div>
+      )}
+      {error && <ErrorBox error={error} />}
+      {mode === 'memo' && e.activityId ? (
+        saved && !editing
+          ? <MemoSaved key={`${saved.id}-${saved.revision}`} m={saved} onNew={() => { setSaved(null); setFormKey((k) => k + 1); }} onEdit={() => setEditing(saved)} />
+          : (
+            <MemoEditor key={editing ? `edit-${editing.id}-${editing.version}` : `new-${formKey}`} e={e} user={user} existing={editing}
+              onClose={editing ? () => setEditing(undefined) : undefined}
+              onSaved={(m) => { setSaved(m); setEditing(undefined); onChange(); }} />
+          )
+      ) : <QuickEntry e={e} user={user} onChange={onChange} />}
+      <History e={e} user={user} unitName={unitName} onChange={onChange} onOpenMemo={openMemo} />
+    </>
+  );
+}
+
+/** บันทึกยอดอย่างเดียว (ไม่จัดทำบันทึกข้อความ) */
+function QuickEntry({ e, user, onChange }: { e: EntryActivity; user: SessionUser; onChange: () => void }) {
   const l = useLookups();
   const toast = useToast();
   const unitName = (id: string) => areaName(l.units.find((u) => u.id === id));
@@ -295,13 +338,11 @@ function Entry({ e, user, onChange }: { e: EntryActivity; user: SessionUser; onC
 
         <button className="btn btn-lg" disabled={busy || !!stage || (overAll && user.role !== 'superadmin')}>{busy ? 'กำลังบันทึก…' : `บันทึกการเบิกจ่าย ครั้งที่ ${no}`}</button>
       </form>
-
-      <History e={e} user={user} unitName={unitName} onChange={onChange} />
     </>
   );
 }
 
-function History({ e, user, unitName, onChange }: { e: EntryActivity; user: SessionUser; unitName: (id: string) => string; onChange: () => void }) {
+function History({ e, user, unitName, onChange, onOpenMemo }: { e: EntryActivity; user: SessionUser; unitName: (id: string) => string; onChange: () => void; onOpenMemo: (id: string) => void }) {
   const toast = useToast();
   const { busy, error, run } = useSubmit();
   const [voiding, setVoiding] = useState('');
@@ -327,7 +368,8 @@ function History({ e, user, unitName, onChange }: { e: EntryActivity; user: Sess
                 <tr key={h.id}>
                   <td data-label="ครั้งที่" className="primary">ครั้งที่ {h.no}</td>
                   <td data-label="วันที่">{formatThaiDate(h.date)}</td>
-                  <td data-label="เลขที่หนังสือ">{h.docNo || '–'}{h.hasFile && <span className="xs muted"> · มีรูปหนังสือ</span>}</td>
+                  <td data-label="เลขที่หนังสือ">{h.docNo || '–'}{h.hasFile && <span className="xs muted"> · มีรูปหนังสือ</span>}
+                    {h.memoId && <> <button type="button" className="btn btn-ghost btn-sm" onClick={() => onOpenMemo(h.memoId!)}>บันทึกข้อความ</button></>}</td>
                   <td data-label="พื้นที่">{unitName(h.unitId)}</td>
                   <td data-label="จำนวนเงิน (บาท)" className="r num">{formatBaht(h.amountSatang)}</td>
                   <td data-label="สถานะ">{STATUS_TEXT[h.status] ?? h.status}</td>

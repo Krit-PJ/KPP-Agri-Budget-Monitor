@@ -10,3 +10,5 @@ export * from './coverLetter';
 export * from './contracts';
 export * from './plan';
 export * from './xlsx';
+export * from './memo';
+export * from './garuda';

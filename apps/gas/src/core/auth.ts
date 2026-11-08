@@ -236,6 +236,7 @@ export function requestAccess(ctx: Ctx, b: Record<string, unknown>): { requestId
   if (!isValidPhone(phone)) throw new AppError('VALIDATION_FAILED', 'รูปแบบเบอร์โทรศัพท์ไม่ถูกต้อง (ตัวอย่าง 0812345678)');
   const fullName = cleanText(b.fullName, 120);
   const position = cleanText(b.position, 120);
+  const title = cleanText(b.title, 40);
   const affiliation = cleanText(b.affiliation, 160);
   const workgroupId = cleanText(b.workgroupId, 60);
   if (fullName.length < 4) throw new AppError('VALIDATION_FAILED', 'กรุณากรอกชื่อ-สกุล');
@@ -256,7 +257,7 @@ export function requestAccess(ctx: Ctx, b: Record<string, unknown>): { requestId
   const meta = newMeta(ctx);
   const row: AccessRequest = {
     ...meta, createdBy: 'PUBLIC', updatedBy: 'PUBLIC', phone, fullName, position, workgroupId, affiliation,
-    note: cleanText(b.note, 300), status: 'pending', decidedAt: '', decidedBy: '', reason: '',
+    note: cleanText(b.note, 300), status: 'pending', decidedAt: '', decidedBy: '', reason: '', title,
   };
   ctx.env.db.insert('AccessRequests', [row as unknown as Record<string, unknown>]);
   audit(ctx, 'request_access', 'AccessRequest', row.id, { after: { fullName, workgroupId } });

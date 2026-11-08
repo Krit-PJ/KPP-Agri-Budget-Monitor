@@ -1,0 +1,324 @@
+/**
+ * บันทึกข้อความ "ตรวจสอบเอกสารเพื่อขอเบิกเงินราชการ" — ตรรกะกลางที่ใช้ทั้งหน้าเว็บ (ตัวอย่าง A4/พิมพ์)
+ * และ Apps Script (สร้าง Google Doc + PDF) เพื่อให้ข้อความตรงกันทุกที่
+ */
+import { THAI_MONTHS } from './thai';
+import { BE_OFFSET, isValidYmd } from './dates';
+import type { Satang } from './money';
+
+/* ---------------- ตัวเลข / จำนวนเงิน ---------------- */
+
+const TH_DIGIT = ['ศูนย์', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า'];
+const TH_UNIT = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน'];
+
+/** อ่านเลข 0–999,999 (กลุ่มละ 6 หลัก) */
+function readGroup(n: number): string {
+  const s = String(n);
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const d = Number(s[i]);
+    const pos = s.length - 1 - i;
+    if (d === 0) continue;
+    if (pos === 1) {
+      out += (d === 1 ? '' : d === 2 ? 'ยี่' : TH_DIGIT[d]) + 'สิบ';
+    } else if (pos === 0) {
+      out += d === 1 && s.length > 1 && Number(s.slice(0, -1)) > 0 ? 'เอ็ด' : TH_DIGIT[d];
+    } else {
+      out += TH_DIGIT[d] + TH_UNIT[pos];
+    }
+  }
+  return out;
+}
+
+/** อ่านจำนวนเต็มเป็นคำไทย เช่น 1_000_011 → "หนึ่งล้านสิบเอ็ด" */
+export function thaiNumberWords(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return '';
+  n = Math.floor(n);
+  if (n === 0) return TH_DIGIT[0];
+  const groups: number[] = [];
+  while (n > 0) { groups.unshift(n % 1_000_000); n = Math.floor(n / 1_000_000); }
+  return groups.map((g, i) => (g ? readGroup(g) : '') + (i < groups.length - 1 ? 'ล้าน' : '')).join('');
+}
+
+/** จำนวนเงินตัวอักษรตามแบบหนังสือราชการ เช่น 4_400_000 สตางค์ → "สี่หมื่นสี่พันบาทถ้วน" */
+export function bahtText(satang: Satang): string {
+  const neg = satang < 0;
+  const abs = Math.round(Math.abs(satang));
+  const baht = Math.floor(abs / 100);
+  const st = abs % 100;
+  let out: string;
+  if (st === 0) out = `${thaiNumberWords(baht)}บาทถ้วน`;
+  else if (baht === 0) out = `${thaiNumberWords(st)}สตางค์`;
+  else out = `${thaiNumberWords(baht)}บาท${thaiNumberWords(st)}สตางค์`;
+  return neg ? `ลบ${out}` : out;
+}
+
+const THAI_NUM = '๐๑๒๓๔๕๖๗๘๙';
+/** แปลงเลขอารบิกในข้อความเป็นเลขไทย */
+export function thaiDigits(input: string): string {
+  return input.replace(/[0-9]/g, (c) => THAI_NUM[Number(c)]);
+}
+
+/** จำนวนเงินแบบหนังสือราชการ: จำนวนเต็มไม่แสดงทศนิยม เช่น 44,000 / 1,250.50 */
+export function formatMoneyPlain(satang: Satang): string {
+  const neg = satang < 0;
+  const abs = Math.round(Math.abs(satang));
+  const i = String(Math.floor(abs / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const f = abs % 100;
+  return `${neg ? '-' : ''}${i}${f ? `.${String(f).padStart(2, '0')}` : ''}`;
+}
+
+/** วันที่แบบเต็ม เช่น "5 สิงหาคม 2569" */
+export function formatThaiDateLong(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  if (!isValidYmd(y, m, d)) return '';
+  return `${d} ${THAI_MONTHS[m - 1].full} ${y + BE_OFFSET}`;
+}
+
+/* ---------------- การตัดคำภาษาไทย ---------------- */
+
+export interface WrapToken {
+  t: string;
+  /** true = ห้ามตัดบรรทัดภายในชิ้นนี้ (จำนวนเงิน+บาท, ข้อความในวงเล็บ, รหัส, คำย่อ) */
+  keep: boolean;
+}
+
+/** กลุ่มที่ไม่ควรถูกตัดกลางบรรทัด — เรียงจากเฉพาะเจาะจงที่สุด */
+const KEEP_RE = new RegExp(
+  [
+    '\\([^()\\n]{1,40}\\)', // (สี่หมื่นสี่พันบาทถ้วน), (ศดปช.), (นายกิตติ โพธิ์จวง)
+    '[0-9๐-๙][0-9๐-๙,.]*\\s?บาท', // 44,000 บาท
+    '[0-9๐-๙][0-9๐-๙/.\\-]*', // รหัส เลขที่ วันที่
+    '[ก-ฮ]{1,4}\\.(?:[ก-ฮ]{1,4}\\.)*', // อ. จ. ศดปช.
+    '[A-Za-z][A-Za-z0-9 ]*[A-Za-z0-9]', // Service Provider
+  ].join('|'),
+  'g',
+);
+
+type Segmenter = { segment(s: string): Iterable<{ segment: string }> };
+let segmenter: Segmenter | null | undefined;
+function getSegmenter(): Segmenter | null {
+  if (segmenter !== undefined) return segmenter;
+  try {
+    const Ctor = (Intl as unknown as { Segmenter?: new (l: string, o: object) => Segmenter }).Segmenter;
+    segmenter = Ctor ? new Ctor('th', { granularity: 'word' }) : null;
+  } catch {
+    segmenter = null;
+  }
+  return segmenter;
+}
+
+function splitWords(s: string): WrapToken[] {
+  if (!s) return [];
+  const seg = getSegmenter();
+  if (!seg) return s.split(/(\s+)/).filter(Boolean).map((t) => ({ t, keep: false }));
+  const out: WrapToken[] = [];
+  for (const p of seg.segment(s)) out.push({ t: p.segment, keep: false });
+  return out;
+}
+
+/**
+ * แบ่งข้อความเป็นชิ้นสำหรับจัดบรรทัด: คำไทยแยกด้วย Intl.Segmenter (พจนานุกรม ICU)
+ * ส่วนที่ต้องอยู่ด้วยกันถูกรวมเป็นชิ้นเดียว (keep) — ฝั่งเว็บวางเป็น <span nowrap>
+ */
+export function wrapSegments(text: string): WrapToken[] {
+  const out: WrapToken[] = [];
+  let last = 0;
+  for (const m of text.matchAll(KEEP_RE)) {
+    const i = m.index ?? 0;
+    out.push(...splitWords(text.slice(last, i)));
+    out.push({ t: m[0], keep: true });
+    last = i + m[0].length;
+  }
+  out.push(...splitWords(text.slice(last)));
+  return out;
+}
+
+/** สำหรับ Google Docs: แทนช่องว่างในกลุ่มที่ห้ามตัดด้วย NBSP */
+export function protectGroups(text: string): string {
+  return text.replace(KEEP_RE, (g) => g.replace(/ /g, ' '));
+}
+
+/* ---------------- ข้อมูลบันทึกข้อความ ---------------- */
+
+export type MemoAlign = 'left' | 'justify';
+
+export interface MemoPerson {
+  /** ชื่อพร้อมคำนำหน้า เช่น "นายกิตติ โพธิ์จวง" */
+  name: string;
+  position: string;
+  /** บรรทัดที่สองใต้ตำแหน่ง เช่น "รักษาการหัวหน้ากลุ่มอารักขาพืช" */
+  line2?: string;
+}
+
+export interface MemoChecks {
+  /** ถูกต้องตามคู่มือโครงการ */
+  ok: boolean;
+  /** ส่งคืนแก้ไข (ไม่เลือกพร้อม ok) */
+  returnFix: boolean;
+  returnReason: string;
+  /** ส่งฝ่ายบริหารทั่วไปเพื่อดำเนินการต่อไป */
+  forward: boolean;
+}
+
+export interface MemoData {
+  /** ส่วนราชการ เช่น "กลุ่มอารักขาพืช สำนักงานเกษตรจังหวัดกำแพงเพชร" */
+  orgLine: string;
+  fax: string;
+  /** ส่วนหน้าของเลขที่ เช่น "กพ 0009.4" */
+  docPrefix: string;
+  /** เลขที่ที่เจ้าหน้าที่ลงเอง (ระบบไม่ออกเลข) */
+  docNumber: string;
+  /** วันที่ของบันทึก (ISO) */
+  date: string;
+  to: string;
+  subject: string;
+  /** หนังสืออ้างถึงจากอำเภอ/หน่วย */
+  refNo: string;
+  refDate: string;
+  refFrom: string;
+  /** ค่าใช้จ่ายที่ขอเบิก เช่น "ค่าจัดซื้อวัสดุสนับสนุน" */
+  expense: string;
+  projectName: string;
+  mainActivityName: string;
+  fund: string;
+  budgetCode: string;
+  mainActivityCode: string;
+  subActivityName: string;
+  budgetSatang: Satang;
+  previousSatang: Satang;
+  requestSatang: Satang;
+  checks: MemoChecks;
+  signer: MemoPerson;
+  head: MemoPerson;
+  align: MemoAlign;
+  thaiNumerals: boolean;
+  /** ข้อความเนื้อหาที่ผู้ใช้แก้เอง (แต่ละย่อหน้า) — ว่าง = ใช้ข้อความอัตโนมัติ */
+  bodyOverride?: string[];
+}
+
+/**
+ * ขนาดตัวอักษรเมื่อใช้ฟอนต์ Sarabun (Google) ให้ได้ขนาดบนกระดาษเท่ากับแบบ TH Sarabun
+ * (เนื้อหา 16pt / หัวข้อ 20pt / "บันทึกข้อความ" 29pt): พยัญชนะ Sarabun สูง 586 หน่วย/em ส่วน TH Sarabun 400
+ */
+export const SARABUN_SCALE = 400 / 586;
+const sz = (thPt: number) => Math.round(thPt * SARABUN_SCALE * 2) / 2;
+export const MEMO_FONT_PT = { body: sz(16), label: sz(20), title: sz(29) } as const;
+
+export const MEMO_SUBJECT = 'ตรวจสอบเอกสารเพื่อขอเบิกเงินราชการ';
+export const MEMO_DEFAULT_TO = 'เกษตรจังหวัดกำแพงเพชร';
+
+/** คงเหลือหลังการขอเบิกครั้งนี้ */
+export function memoRemaining(d: Pick<MemoData, 'budgetSatang' | 'previousSatang' | 'requestSatang'>): Satang {
+  return d.budgetSatang - d.previousSatang - d.requestSatang;
+}
+
+const money = (s: Satang) => `${formatMoneyPlain(s)} บาท (${bahtText(s)})`;
+const joinNonEmpty = (...parts: Array<string | false | undefined>) => parts.filter(Boolean).join(' ');
+
+/** "อำเภอเมืองกำแพงเพชร" — เติม "อำเภอ" ให้ถ้ายังไม่มีคำนำหน้าหน่วยงาน */
+function fromUnit(s: string): string {
+  const t = s.trim();
+  if (!t) return '';
+  return /^(อำเภอ|สำนักงาน|กลุ่ม|ศูนย์|ฝ่าย)/.test(t) ? t : `อำเภอ${t}`;
+}
+
+/** ข้อความเนื้อหาที่ระบบสร้าง — ย่อหน้าแรกย่อหน้า (indent) ที่เหลือชิดขอบ */
+export function memoParagraphs(d: MemoData): string[] {
+  const ref = joinNonEmpty(
+    d.refNo && `ตามหนังสือที่ ${d.refNo.trim()}`,
+    d.refDate && `ลงวันที่ ${formatThaiDateLong(d.refDate)}`,
+    d.refFrom && `ของ${fromUnit(d.refFrom)}`,
+  );
+  const first = joinNonEmpty(
+    ref ? `${ref} ได้ส่งเอกสารหลักฐานเพื่อขอเบิกเงิน${d.expense.trim()}` : `ขอส่งเอกสารหลักฐานเพื่อขอเบิกเงิน${d.expense.trim()}`,
+    d.projectName && (d.projectName.startsWith('โครงการ') ? d.projectName : `โครงการ${d.projectName}`),
+    d.mainActivityName && (d.mainActivityName.startsWith('กิจกรรม') ? d.mainActivityName : `กิจกรรม${d.mainActivityName}`),
+    d.fund && `(${d.fund})`,
+    d.budgetCode && `(${d.budgetCode})`,
+  );
+  const lines = [first];
+  if (d.mainActivityCode) lines.push(`รหัสกิจกรรมหลัก ${d.mainActivityCode}`);
+  if (d.subActivityName) lines.push(`กิจกรรมย่อย ${d.subActivityName}`);
+  lines.push(
+    `ยอดเงินงบประมาณ ${money(d.budgetSatang)} (รวมทั้งหมดของกิจกรรมนี้)`,
+    `ขอเบิกเงิน/ยืมเงินราชการมาแล้ว เป็นจำนวนเงิน ${money(d.previousSatang)} (รวมทุกครั้งทุกอำเภอ)`,
+    `ขอเบิกเงินราชการครั้งนี้ เป็นจำนวนเงิน ${money(d.requestSatang)} (เฉพาะครั้งนี้)`,
+    `งบประมาณคงเหลือ ${money(memoRemaining(d))} (คงเหลือทั้งหมดของกิจกรรมนี้)`,
+  );
+  return lines;
+}
+
+/** เนื้อหาที่จะใช้จริง (ข้อความที่ผู้ใช้แก้ หรือข้อความอัตโนมัติ) */
+export function memoBody(d: MemoData): string[] {
+  const o = (d.bodyOverride ?? []).map((s) => s.trim()).filter(Boolean);
+  return o.length ? o : memoParagraphs(d);
+}
+
+/** ข้อความแก้เองยังมียอดเงินตรงกับตัวเลขล่าสุดหรือไม่ — ใช้เตือนเมื่อยอดเปลี่ยนหลังแก้ข้อความ */
+export function memoOverrideStale(d: MemoData): boolean {
+  if (!d.bodyOverride?.length) return false;
+  const text = d.bodyOverride.join('\n');
+  return [d.budgetSatang, d.previousSatang, d.requestSatang, memoRemaining(d)].some((s) => !text.includes(formatMoneyPlain(s)));
+}
+
+/** ตรวจข้อมูลก่อนบันทึก — คืนรายการข้อผิดพลาด (ภาษาไทย) */
+export function validateMemo(d: MemoData): string[] {
+  const e: string[] = [];
+  if (!d.docNumber.trim()) e.push('กรุณากรอกเลขที่หนังสือ');
+  if (!d.date) e.push('กรุณาเลือกวันที่');
+  if (!d.expense.trim()) e.push('กรุณาระบุรายการค่าใช้จ่ายที่ขอเบิก');
+  if (!(d.requestSatang > 0)) e.push('ยอดขอเบิกครั้งนี้ต้องมากกว่า 0');
+  if (memoRemaining(d) < 0) e.push('ยอดขอเบิกเกินงบประมาณคงเหลือของกิจกรรม');
+  if (d.checks.ok && d.checks.returnFix) e.push('เลือกได้อย่างใดอย่างหนึ่ง: ถูกต้องตามคู่มือ หรือ ส่งคืนแก้ไข');
+  if (d.checks.returnFix && !d.checks.returnReason.trim()) e.push('กรุณาระบุเหตุผลที่ส่งคืนแก้ไข');
+  if (!d.signer.name.trim()) e.push('ไม่พบชื่อผู้ลงนาม — กรุณากรอกข้อมูลของฉันให้ครบ');
+  return e;
+}
+
+/** ข้อความแสดงผล (แปลงเลขไทยถ้าเลือก) */
+export function memoText(d: Pick<MemoData, 'thaiNumerals'>, s: string): string {
+  return d.thaiNumerals ? thaiDigits(s) : s;
+}
+
+/** เลขที่หนังสือเต็ม เช่น "กพ 0009.4/123" */
+export function memoDocNo(d: Pick<MemoData, 'docPrefix' | 'docNumber'>): string {
+  const p = d.docPrefix.trim().replace(/\/$/, '');
+  const n = d.docNumber.trim();
+  return p ? `${p}/${n}` : n;
+}
+
+/** คำนำหน้าชื่อที่ใช้บ่อย */
+export const NAME_TITLES = ['นาย', 'นาง', 'นางสาว', 'ว่าที่ร้อยตรี', 'ว่าที่ร้อยตรีหญิง', 'ดร.', 'ผศ.ดร.'];
+
+/** ตำแหน่งที่ใช้บ่อยในสำนักงานเกษตร (เลือกหรือพิมพ์เองได้) */
+export const COMMON_POSITIONS = [
+  'นักวิชาการส่งเสริมการเกษตร',
+  'นักวิชาการส่งเสริมการเกษตรปฏิบัติการ',
+  'นักวิชาการส่งเสริมการเกษตรชำนาญการ',
+  'นักวิชาการส่งเสริมการเกษตรชำนาญการพิเศษ',
+  'เจ้าพนักงานการเกษตร',
+  'เจ้าพนักงานการเกษตรปฏิบัติงาน',
+  'เจ้าพนักงานการเกษตรชำนาญงาน',
+  'เจ้าพนักงานการเกษตรอาวุโส',
+  'นักจัดการงานทั่วไป',
+  'นักจัดการงานทั่วไปปฏิบัติการ',
+  'นักจัดการงานทั่วไปชำนาญการ',
+  'นักวิเคราะห์นโยบายและแผน',
+  'นักวิเคราะห์นโยบายและแผนชำนาญการ',
+  'เจ้าพนักงานธุรการ',
+  'เจ้าพนักงานธุรการปฏิบัติงาน',
+  'เจ้าพนักงานการเงินและบัญชี',
+  'เจ้าพนักงานการเงินและบัญชีชำนาญงาน',
+  'พนักงานราชการ',
+  'พนักงานจ้างเหมาบริการ',
+];
+
+/** ชื่อเต็มพร้อมคำนำหน้า — ไม่เติมซ้ำถ้าชื่อขึ้นต้นด้วยคำนำหน้าอยู่แล้ว */
+export function withTitle(title: string | undefined, fullName: string): string {
+  const t = (title ?? '').trim();
+  const n = fullName.trim();
+  if (!t || n.startsWith(t)) return n;
+  return `${t}${n}`;
+}

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { normalizePhone, isValidPhone } from '@kpp/domain';
 import { call, DEMO, saveSession } from '../api/client';
 import { ErrorBox, useLookups, useSubmit } from '../components/ui';
+import { PositionField, TitleField } from '../components/PersonFields';
 
 type Mode = 'admin' | 'super' | 'request';
 
@@ -81,7 +82,7 @@ function SuperLogin() {
 
 function RequestAccess({ onDone }: { onDone: () => void }) {
   const l = useLookups();
-  const [f, setF] = useState({ phone: '', fullName: '', position: '', workgroupId: '', affiliation: 'สำนักงานเกษตรจังหวัดกำแพงเพชร', note: '' });
+  const [f, setF] = useState({ phone: '', title: '', fullName: '', position: '', workgroupId: '', affiliation: 'สำนักงานเกษตรจังหวัดกำแพงเพชร', note: '' });
   const [sent, setSent] = useState(false);
   const { busy, error, run } = useSubmit();
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
@@ -101,13 +102,14 @@ function RequestAccess({ onDone }: { onDone: () => void }) {
     <form onSubmit={(e) => { e.preventDefault(); void run(async () => { await call('auth.requestAccess', f); setSent(true); }); }}>
       {error && <ErrorBox error={error} />}
       <div className="form-grid">
-        <label className="field"><span className="req">ชื่อ-สกุล</span><input value={f.fullName} onChange={set('fullName')} autoComplete="name" required /></label>
+        <TitleField value={f.title} onChange={(title) => setF({ ...f, title })} required />
+        <label className="field"><span className="req">ชื่อ-สกุล</span><input value={f.fullName} onChange={set('fullName')} autoComplete="name" placeholder="ไม่ต้องใส่คำนำหน้า" required /></label>
         <label className="field">
           <span className="req">หมายเลขโทรศัพท์</span>
           <input type="tel" inputMode="numeric" value={f.phone} onChange={set('phone')} aria-invalid={phoneBad} aria-describedby="ph-hint" required />
           <span id="ph-hint" className="hint">{phoneBad ? 'ตรวจสอบหมายเลขอีกครั้ง เช่น 0812345678' : 'ใช้เป็นชื่อผู้ใช้เข้าสู่ระบบ'}</span>
         </label>
-        <label className="field"><span className="req">ตำแหน่ง</span><input value={f.position} onChange={set('position')} required /></label>
+        <PositionField value={f.position} onChange={(position) => setF({ ...f, position })} required />
         <label className="field"><span className="req">กลุ่มงาน</span>
           <select value={f.workgroupId} onChange={set('workgroupId')} required>
             <option value="">เลือกกลุ่มงาน</option>

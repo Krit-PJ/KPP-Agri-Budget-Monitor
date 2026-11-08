@@ -2,7 +2,8 @@
  * Google Apps Script adapters — ใช้ SpreadsheetApp / DriveApp / Drive (advanced v3) / LockService / CacheService
  * ไฟล์นี้รันได้เฉพาะบน Apps Script (ไม่มี unit test บน Node; ตรรกะทั้งหมดอยู่ใน core)
  */
-import { AppError, escapeCell, parseDelimited, unescapeCell } from '@kpp/domain';
+import { AppError, escapeCell, parseDelimited, unescapeCell, type MemoData } from '@kpp/domain';
+import { buildMemoDoc } from './memoDoc';
 import type { Cache, Crypto, Db, Env, FileStore, Locker, Props, Row, StoredFile } from '../core/env';
 import { pbkdf2Sha256Hex } from '../core/pbkdf2';
 import { FILE_NAMES, FOLDERS, primaryKeyOf, SCHEMA_VERSION, TABLES, type FileKey, type TableName } from '../core/schema';
@@ -356,6 +357,19 @@ export class GasFiles implements FileStore {
 
   moveToFolder(fileId: string, folderPath: string): void {
     DriveApp.getFileById(fileId).moveTo(this.folder(folderPath));
+  }
+
+  renderMemo(folderPath: string, baseName: string, memo: MemoData): { docId: string; pdfId: string } {
+    const folder = this.folder(folderPath);
+    const doc = buildMemoDoc(baseName, memo);
+    const docId = doc.getId();
+    doc.saveAndClose();
+    const docFile = DriveApp.getFileById(docId);
+    docFile.moveTo(folder);
+    docFile.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+    const pdf = folder.createFile(docFile.getAs('application/pdf').setName(`${baseName}.pdf`));
+    pdf.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+    return { docId, pdfId: pdf.getId() };
   }
 }
 

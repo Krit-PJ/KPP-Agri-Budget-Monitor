@@ -1,0 +1,91 @@
+/* ---------- บันทึกข้อความ: หน้า A4 ตามระเบียบงานสารบรรณ ---------- */
+.memo-page {
+  --m-body: 11pt; --m-label: 13.5pt; --m-title: 20pt;
+  width: 210mm; min-height: 297mm; box-sizing: border-box;
+  padding: 15mm 20mm 15mm 30mm;
+  background: #fff; color: #000;
+  font-family: 'Sarabun', 'TH Sarabun New', 'Noto Sans Thai', sans-serif;
+  font-size: var(--m-body); line-height: 1.6; font-weight: 400;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 8px 24px rgba(0, 0, 0, 0.08);
+  text-align: left;
+}
+.memo-page p { margin: 0; }
+.memo-page .nw { white-space: nowrap; }
+.memo-page .jsp { font-size: 0; }
+.m-head { position: relative; height: 1.5cm; margin-bottom: 4pt; display: flex; align-items: center; justify-content: center; }
+.m-garuda { position: absolute; left: 0; top: 0; width: 1.5cm; height: 1.5cm; }
+.memo-page h1.m-title { margin: 0; font: 700 var(--m-title)/1 'Sarabun', sans-serif; color: #000; letter-spacing: 0; }
+.m-label { font-size: var(--m-label); font-weight: 700; margin-right: 0.35em; }
+.m-line { overflow-wrap: anywhere; }
+.m-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1em; }
+.m-gap { margin-top: 6pt !important; }
+.m-body { margin-top: 6pt; }
+.m-body p.m-first { text-indent: 2.5cm; }
+.align-justify .m-body p { text-align: justify; text-justify: inter-word; }
+.m-checks { margin-top: 6pt; padding-left: 2.5cm; }
+.m-check { padding-left: 0.5cm; display: flex; gap: 0.5em; align-items: baseline; }
+.m-box {
+  display: inline-block; flex: none; width: 0.9em; height: 0.9em; border: 1.2px solid #000; border-radius: 1px;
+  position: relative; top: 0.1em; background: #fff; padding: 0; margin: 0; font: inherit;
+}
+.m-box.is-on::after {
+  content: ''; position: absolute; left: 0.24em; top: 0.02em; width: 0.28em; height: 0.55em;
+  border: solid #000; border-width: 0 0.13em 0.13em 0; transform: rotate(45deg);
+}
+.m-box.is-btn { cursor: pointer; }
+.m-box.is-btn:focus-visible { outline: 3px solid var(--focus, #c9a227); outline-offset: 2px; }
+.m-sigs { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5em; margin-top: 18pt; text-align: center; }
+.m-approve { text-align: center; margin-top: 14pt; }
+.m-gap2 { margin-top: 14pt !important; }
+
+/* ย่อให้พอดีจอ */
+.a4-fit { position: relative; width: 100%; overflow: hidden; }
+.a4-fit-inner { width: 210mm; transform-origin: top left; }
+
+/* พิมพ์เฉพาะหน้าบันทึก */
+.memo-print-root { display: none; }
+@media print {
+  @page { size: A4; margin: 0; }
+  body.printing-memo { background: #fff !important; margin: 0; }
+  body.printing-memo > *:not(.memo-print-root) { display: none !important; }
+  body.printing-memo .memo-print-root { display: block; }
+  .memo-print-root .memo-page { box-shadow: none; margin: 0; min-height: 0; }
+}
+
+/* ---------- ฟอร์มจัดทำบันทึก ---------- */
+.memo-editor { display: grid; gap: var(--s4); }
+@media (min-width: 1180px) { .memo-editor { grid-template-columns: minmax(380px, 1fr) minmax(0, 1.15fr); align-items: start; } .memo-preview { position: sticky; top: 72px; } }
+.memo-legend { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); font-size: var(--fs-sm); margin: 0 0 var(--s3); }
+.memo-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.memo-legend i { width: 18px; height: 14px; border-radius: 3px; display: inline-block; }
+.memo-form fieldset { border: 1px solid var(--line); border-radius: var(--r-md); padding: var(--s3) var(--s4) var(--s4); margin: 0 0 var(--s3); background: var(--paper); }
+.memo-form legend { font-family: var(--font-head); font-weight: 600; color: var(--forest-ink); padding: 0 6px; }
+.lg-staff, .fld-staff input, .fld-staff select, .fld-staff textarea, .fld-staff .tdp-btn { background: #fff4bf !important; border-color: #d8b93a !important; }
+.lg-auto, .fld-auto input, .fld-auto select, .fld-auto textarea { background: #e2effa !important; border-color: #8fb8de !important; }
+.fld-auto input[readonly] { color: var(--ink); cursor: default; }
+.auto-v { background: #e2effa; border: 1px solid #8fb8de; border-radius: var(--r-sm); padding: 8px 12px; min-height: 44px; display: flex; align-items: center; flex-wrap: wrap; gap: 0 0.4em; }
+.auto-v.num { font-variant-numeric: tabular-nums; }
+.auto-v small { color: var(--ink-2); }
+.money-grid { display: grid; grid-template-columns: 1fr; gap: var(--s2); }
+@media (min-width: 640px) { .money-grid { grid-template-columns: 1fr 1fr; } }
+.money-grid .big { font-size: var(--fs-lg); font-weight: 600; }
+.memo-checks { display: flex; flex-direction: column; gap: var(--s2); }
+.memo-checks label { display: flex; align-items: center; gap: var(--s2); min-height: 44px; padding: 4px 10px; border-radius: var(--r-sm); background: #fff4bf; border: 1px solid #d8b93a; cursor: pointer; }
+.memo-checks input[type='checkbox'] { width: 22px; height: 22px; min-height: 22px; accent-color: var(--forest); flex: none; }
+.memo-body-edit textarea { width: 100%; min-height: 220px; font-family: 'Sarabun', var(--font-body); font-size: 1rem; line-height: 1.6; }
+.memo-actions { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; }
+.memo-warn { color: var(--clay); font-size: var(--fs-sm); }
+.memo-ok-card { border: 1px solid var(--paddy); background: var(--paddy-soft); border-radius: var(--r-md); padding: var(--s4); }
+.memo-ok-card h3 { margin-bottom: var(--s2); }
+dialog.sheet.memo-confirm { width: min(940px, calc(100vw - 16px)); }
+.memo-confirm .sheet-body { background: #e9ece9; }
+.memo-confirm-bar { position: sticky; bottom: 0; display: flex; flex-wrap: wrap; gap: var(--s2); justify-content: flex-end; padding: var(--s3) 0 0; background: linear-gradient(transparent, #e9ece9 30%); }
+.mode-switch { margin-bottom: var(--s2); }
+.memo-groups { display: grid; gap: var(--s4); }
+.memo-group-h { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; margin-bottom: var(--s2); }
+.memo-group-h h3 { margin: 0; flex: 1 1 auto; }
+.sig-preview { display: flex; flex-direction: column; align-items: center; font-family: 'Sarabun', var(--font-body); margin: var(--s4) 0; padding: var(--s3); border: 1px dashed var(--line); border-radius: var(--r-md); background: #fff; }
+.profile-card { max-width: 760px; }
+.row-gap { display: flex; gap: var(--s2); flex-wrap: wrap; margin-top: var(--s3); }
+.field-title select + input { margin-top: 6px; }
+.profile-banner { margin-bottom: var(--s4); }

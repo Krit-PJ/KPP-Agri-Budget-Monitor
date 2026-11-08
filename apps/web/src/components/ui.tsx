@@ -297,7 +297,7 @@ export function Async<T>({ s, children, lines }: { s: Loadable<T>; children: (da
 
 /* --------------------------------- dialog -------------------------------- */
 
-export function Sheet({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: ReactNode }) {
+export function Sheet({ open, title, onClose, children, className = '' }: { open: boolean; title: string; onClose: () => void; children: ReactNode; className?: string }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const d = ref.current;
@@ -306,7 +306,7 @@ export function Sheet({ open, title, onClose, children }: { open: boolean; title
     if (!open && d.open) d.close();
   }, [open]);
   return (
-    <dialog ref={ref} className="sheet" onClose={onClose} aria-labelledby="sheet-title">
+    <dialog ref={ref} className={`sheet ${className}`} onClose={onClose} aria-labelledby="sheet-title">
       {open && (
         <>
           <div className="sheet-head">

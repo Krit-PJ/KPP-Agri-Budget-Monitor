@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { formatThaiDateTime, maskPhone, type SessionUser } from '@kpp/domain';
 import { call } from '../../api/client';
 import { Async, Empty, ErrorBox, Sheet, useApi, useLookups, useNames, useSubmit, useToast } from '../../components/ui';
+import { PositionField, TitleField } from '../../components/PersonFields';
 
 const TABS = ['คำขอสิทธิ์', 'ผู้ใช้', 'รายงานการเข้าสู่ระบบ'] as const;
 const RESULT_LABEL: Record<string, string> = {
@@ -46,7 +47,7 @@ function Requests({ user }: { user: SessionUser }) {
             <tbody>
               {list.map((r) => (
                 <tr key={r.id}>
-                  <td className="primary">{r.fullName}<div className="xs muted">{r.position} {r.affiliation}</div></td>
+                  <td className="primary">{r.title ?? ''}{r.fullName}<div className="xs muted">{r.position} {r.affiliation}</div></td>
                   <td data-label="เบอร์โทร">{user.role === 'superadmin' ? r.phone : maskPhone(r.phone)}</td>
                   <td data-label="กลุ่มงาน">{n.group(r.workgroupId)}</td>
                   <td data-label="เมื่อ">{formatThaiDateTime(r.createdAt)}</td>
@@ -73,7 +74,8 @@ function UserList({ user }: { user: SessionUser }) {
   const toast = useToast();
   const s = useApi('admin.users', {});
   const [open, setOpen] = useState(false);
-  const [f, setF] = useState({ phone: '', fullName: '', position: '', workgroupId: '', affiliation: 'สำนักงานเกษตรจังหวัดกำแพงเพชร', role: 'admin' as 'admin' | 'minisuper', scope: [] as string[] });
+  const blank = { id: '', phone: '', title: '', fullName: '', position: '', workgroupId: '', affiliation: 'สำนักงานเกษตรจังหวัดกำแพงเพชร', role: 'admin' as 'admin' | 'minisuper', scope: [] as string[] };
+  const [f, setF] = useState(blank);
   const { error, run, busy } = useSubmit();
   const setStatus = (id: string, status: 'active' | 'suspended') => void run(async () => {
     if (status === 'suspended' && !window.confirm('ระงับบัญชีนี้? ผู้ใช้จะถูกออกจากระบบทันที')) return;
@@ -84,15 +86,15 @@ function UserList({ user }: { user: SessionUser }) {
   const save = (e: FormEvent) => {
     e.preventDefault();
     void run(async () => {
-      await call('admin.saveUser', { phone: f.phone, fullName: f.fullName, position: f.position, workgroupId: f.workgroupId, affiliation: f.affiliation, role: f.role, scopeWorkgroups: f.scope });
-      toast('เพิ่มผู้ใช้แล้ว');
+      await call('admin.saveUser', { id: f.id || undefined, phone: f.phone, title: f.title, fullName: f.fullName, position: f.position, workgroupId: f.workgroupId, affiliation: f.affiliation, role: f.role, scopeWorkgroups: f.scope });
+      toast(f.id ? 'บันทึกการแก้ไขแล้ว' : 'เพิ่มผู้ใช้แล้ว');
       setOpen(false);
       s.reload();
     });
   };
   return (
     <>
-      <div className="section-head"><span /><button className="btn" onClick={() => setOpen(true)}>เพิ่มผู้ใช้</button></div>
+      <div className="section-head"><span /><button className="btn" onClick={() => { setF(blank); setOpen(true); }}>เพิ่มผู้ใช้</button></div>
       {error && !open && <ErrorBox error={error} />}
       <Async s={s}>
         {(list) => (
@@ -101,12 +103,20 @@ function UserList({ user }: { user: SessionUser }) {
             <tbody>
               {list.map((u) => (
                 <tr key={u.id} style={u.status === 'suspended' ? { opacity: 0.6 } : undefined}>
-                  <td className="primary">{u.fullName}<div className="xs muted">{u.position}</div></td>
+                  <td className="primary">{u.title ?? ''}{u.fullName}<div className="xs muted">{u.position}</div></td>
                   <td data-label="เบอร์โทร">{u.phone}</td>
                   <td data-label="กลุ่มงาน">{n.group(u.workgroupId)}</td>
                   <td data-label="บทบาท">{u.role === 'minisuper' ? 'Mini Super Admin' : 'Admin'}{u.status === 'suspended' && <span className="badge b-risk" style={{ marginLeft: 6 }}>ระงับ</span>}</td>
                   <td data-label="เข้าใช้ล่าสุด">{formatThaiDateTime(u.lastLoginAt)}</td>
                   <td>
+                    {user.role === 'superadmin' && (
+                      <button className="btn btn-ghost btn-sm" onClick={() => {
+                        let scope: string[] = [];
+                        try { scope = JSON.parse(u.scopeWorkgroups || '[]') as string[]; } catch { scope = []; }
+                        setF({ id: u.id, phone: u.phone, title: u.title ?? '', fullName: u.fullName, position: u.position, workgroupId: u.workgroupId, affiliation: u.affiliation, role: u.role === 'minisuper' ? 'minisuper' : 'admin', scope });
+                        setOpen(true);
+                      }}>แก้ไข</button>
+                    )}
                     {(u.role === 'admin' || user.role === 'superadmin') && u.id !== user.sub && (
                       u.status === 'active'
                         ? <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setStatus(u.id, 'suspended')}>ระงับ</button>
@@ -119,13 +129,14 @@ function UserList({ user }: { user: SessionUser }) {
           </table>
         )}
       </Async>
-      <Sheet open={open} title="เพิ่มผู้ใช้" onClose={() => setOpen(false)}>
+      <Sheet open={open} title={f.id ? 'แก้ไขผู้ใช้' : 'เพิ่มผู้ใช้'} onClose={() => setOpen(false)}>
         <form onSubmit={save}>
           {error && <ErrorBox error={error} />}
           <div className="form-grid">
-            <label className="field"><span className="req">ชื่อ-สกุล</span><input value={f.fullName} onChange={(e) => setF({ ...f, fullName: e.target.value })} required /></label>
+            <TitleField value={f.title} onChange={(title) => setF({ ...f, title })} />
+            <label className="field"><span className="req">ชื่อ-สกุล</span><input value={f.fullName} onChange={(e) => setF({ ...f, fullName: e.target.value })} placeholder="ไม่ต้องใส่คำนำหน้า" required /></label>
             <label className="field"><span className="req">เบอร์โทร</span><input type="tel" inputMode="numeric" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} required /></label>
-            <label className="field"><span className="req">ตำแหน่ง</span><input value={f.position} onChange={(e) => setF({ ...f, position: e.target.value })} required /></label>
+            <PositionField value={f.position} onChange={(position) => setF({ ...f, position })} required />
             <label className="field"><span className="req">กลุ่มงานหลัก</span>
               <select value={f.workgroupId} onChange={(e) => setF({ ...f, workgroupId: e.target.value })} required>
                 <option value="">เลือก</option>
@@ -151,7 +162,7 @@ function UserList({ user }: { user: SessionUser }) {
               </fieldset>
             )}
           </div>
-          <button className="btn" style={{ marginTop: 'var(--s4)' }} disabled={busy}>เพิ่มผู้ใช้</button>
+          <button className="btn" style={{ marginTop: 'var(--s4)' }} disabled={busy}>{f.id ? 'บันทึกการแก้ไข' : 'เพิ่มผู้ใช้'}</button>
         </form>
       </Sheet>
     </>

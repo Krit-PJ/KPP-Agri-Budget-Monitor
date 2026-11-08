@@ -2,7 +2,7 @@
  * Schema ของตารางใน Google Sheets (versioned) — header แถวที่ 1 ของแต่ละแท็บ
  * เปลี่ยน schema: เพิ่มคอลัมน์ต่อท้ายเท่านั้น แล้วเพิ่ม SCHEMA_VERSION; provisioning เติมหัวคอลัมน์ให้เอง
  */
-export const SCHEMA_VERSION = '2026.11.07-6';
+export const SCHEMA_VERSION = '2026.11.08-1';
 
 export type ColType = 'string' | 'number' | 'boolean' | 'json';
 export type FileKey = 'IDENTITY' | 'CORE' | 'STAGING' | 'REPORTING';
@@ -26,18 +26,22 @@ export const TABLES = {
   Users: t('IDENTITY', [
     ['phone', 'string'], ['phoneHash', 'string'], ['fullName', 'string'], ['position', 'string'], ['workgroupId', 'string'],
     ['affiliation', 'string'], ['role', 'string'], ['status', 'string'], ['scopeWorkgroups', 'string'], ['tokenVersion', 'number'],
-    ['approvedAt', 'string'], ['approvedBy', 'string'], ['lastLoginAt', 'string'], ['knownDevices', 'string'],
+    ['approvedAt', 'string'], ['approvedBy', 'string'], ['lastLoginAt', 'string'], ['knownDevices', 'string'], ['title', 'string'],
   ]),
   AccessRequests: t('IDENTITY', [
     ['phone', 'string'], ['fullName', 'string'], ['position', 'string'], ['workgroupId', 'string'], ['affiliation', 'string'],
-    ['note', 'string'], ['status', 'string'], ['decidedAt', 'string'], ['decidedBy', 'string'], ['reason', 'string'],
+    ['note', 'string'], ['status', 'string'], ['decidedAt', 'string'], ['decidedBy', 'string'], ['reason', 'string'], ['title', 'string'],
   ]),
   LoginAttempts: t('IDENTITY', [
     ['id', 'string'], ['at', 'string'], ['role', 'string'], ['identifierMasked', 'string'], ['result', 'string'],
     ['userId', 'string'], ['device', 'string'], ['newDevice', 'boolean'],
   ], false),
   Organizations: t('CORE', [['code', 'string'], ['name', 'string']]),
-  Workgroups: t('CORE', [['orgId', 'string'], ['code', 'string'], ['name', 'string'], ['noActivities', 'boolean']]),
+  Workgroups: t('CORE', [
+    ['orgId', 'string'], ['code', 'string'], ['name', 'string'], ['noActivities', 'boolean'],
+    // ค่าหัวบันทึกข้อความของกลุ่ม
+    ['memoOrg', 'string'], ['memoFax', 'string'], ['memoPrefix', 'string'], ['headName', 'string'], ['headPosition', 'string'], ['headLine2', 'string'],
+  ]),
   FundingSources: t('CORE', [['code', 'string'], ['name', 'string'], ['shortName', 'string']]),
   Units: t('CORE', [['code', 'string'], ['name', 'string'], ['shortName', 'string'], ['kind', 'string'], ['sortOrder', 'number']]),
   ActivityUnits: t('CORE', [['projectId', 'string'], ['activityId', 'string'], ['unitId', 'string'], ['budgetSatang', 'number'], ['targetQty', 'number']]),
@@ -51,6 +55,7 @@ export const TABLES = {
     ['projectId', 'string'], ['activityCode', 'string'], ['name', 'string'], ['startDate', 'string'], ['endDate', 'string'],
     ['status', 'string'], ['progressPct', 'number'], ['idempotencyKey', 'string'],
     ['planItemId', 'string'], ['unit', 'string'], ['targetQty', 'number'], ['planQuarters', 'string'], ['dueMonth', 'number'], ['dueDate', 'string'],
+    ['budgetCode', 'string'], ['mainActivityCode', 'string'],
   ]),
   Allocations: t('CORE', [
     ['projectId', 'string'], ['activityId', 'string'], ['type', 'string'], ['amountSatang', 'number'], ['date', 'string'],
@@ -60,6 +65,12 @@ export const TABLES = {
     ['projectId', 'string'], ['activityId', 'string'], ['status', 'string'], ['amountSatang', 'number'], ['date', 'string'],
     ['docNo', 'string'], ['description', 'string'], ['source', 'string'], ['idempotencyKey', 'string'], ['voidReason', 'string'],
     ['replacesId', 'string'], ['attachmentId', 'string'], ['unitId', 'string'],
+  ]),
+  /** บันทึกข้อความตรวจสอบเอกสารเพื่อขอเบิกเงิน — 1 แถวต่อ 1 การเบิก; แก้ไขแล้วเพิ่ม revision */
+  Memos: t('CORE', [
+    ['projectId', 'string'], ['activityId', 'string'], ['disbursementId', 'string'], ['unitId', 'string'], ['docNo', 'string'],
+    ['date', 'string'], ['amountSatang', 'number'], ['data', 'string'], ['revision', 'number'], ['docFileId', 'string'],
+    ['pdfFileId', 'string'], ['renderStatus', 'string'], ['renderError', 'string'],
   ]),
   ProgressReports: t('CORE', [
     ['projectId', 'string'], ['activityId', 'string'], ['reportDate', 'string'], ['progressPct', 'number'], ['detail', 'string'],

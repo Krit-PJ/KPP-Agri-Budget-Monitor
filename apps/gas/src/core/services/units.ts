@@ -6,7 +6,7 @@
  */
 import {
   AppError, MEETING_RE, areaName, computeBudget, fiscalMonthIndex, fiscalYearRange, pct, planAt, splitEqual, splitMoney,
-  type Activity, type ActivityUnit, type Allocation, type BudgetSummary, type Disbursement, type EntryActivity, type PlanActivityState,
+  type Activity, type ActivityUnit, type Allocation, type BudgetSummary, type Disbursement, type EntryActivity, type Memo, type PlanActivityState,
   type Project, type ReportRow, type Satang, type Unit, type UnitShareInput,
 } from '@kpp/domain';
 import { canAccessWorkgroup, requireRole, requireWorkgroup } from '../auth';
@@ -301,6 +301,7 @@ export function entryActivities(ctx: Ctx, b: { fiscalYear: number }): EntryActiv
   const disbs = live(ctx.env.db.list<Disbursement>('Disbursements')).filter((x) => pids.has(x.projectId));
   const shares = activityUnitsOf(ctx);
   const pao = provinceUnitId(listUnits(ctx));
+  const memoOf = new Map(live(ctx.env.db.list<Memo>('Memos')).map((m) => [m.disbursementId, m.id]));
   const out: EntryActivity[] = [];
   const emit = (p: Project, a: Activity | null) => {
     const aid = a?.id ?? '';
@@ -317,7 +318,7 @@ export function entryActivities(ctx: Ctx, b: { fiscalYear: number }): EntryActiv
     out.push({
       activityId: aid, projectId: p.id, projectCode: p.projectCode, projectName: p.name, activityName: a?.name ?? 'งบระดับโครงการ',
       workgroupId: p.workgroupId, budget: bud.currentBudget, disbursed: bud.disbursed, committed: bud.committed, hasAreas: unitShares.length > 0, units,
-      history: live_.map((x, i) => ({ id: x.id, no: i + 1, date: x.date, amountSatang: x.amountSatang, docNo: x.docNo, unitId: x.unitId || pao, status: x.status, hasFile: !!x.attachmentId })),
+      history: live_.map((x, i) => ({ id: x.id, no: i + 1, date: x.date, amountSatang: x.amountSatang, docNo: x.docNo, unitId: x.unitId || pao, status: x.status, hasFile: !!x.attachmentId, memoId: memoOf.get(x.id) })),
     });
   };
   for (const p of projects) {

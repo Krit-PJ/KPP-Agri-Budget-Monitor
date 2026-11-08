@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { fiscalMonthIndex, normalizePlanTable, readXlsx, todayBangkok, type ApiEnvelope, type AssignResult, type AuditLog, type Lookups, type PlanCheck, type PlanDetail, type PlanDoc, type PlanDocSummary, type PlanPreview, type ProjectDetail, type ProjectListItem } from '@kpp/domain';
+import { fiscalMonthIndex, formatMoneyPlain, normalizePlanTable, readXlsx, todayBangkok, type ApiEnvelope, type AssignResult, type AuditLog, type Lookups, type PlanCheck, type PlanDetail, type PlanDoc, type PlanDocSummary, type PlanPreview, type ProjectDetail, type ProjectListItem, type MemoData, type MemoRecord, type MyProfile, type WorkgroupMemoSettings } from '@kpp/domain';
 import { createMemoryEnv, type MemoryEnv } from '../src/memory';
 import { handle } from '../src/core/router';
 import { setSuperAdmin } from '../src/core/auth';
@@ -412,5 +412,102 @@ describe('เป้าการเบิกจ่าย ตัวนับผู
     expect(v).toMatchObject({ today: 2, total: 2 });
     expect(v.since).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(ok<{ total: number }>('public.hit', {}).total).toBe(2);
+  });
+});
+
+describe('บันทึกข้อความตรวจสอบเอกสารเพื่อขอเบิกเงินราชการ', () => {
+  type Ctx2 = { draft: MemoData; codesSaved: boolean; profileComplete: boolean; groupConfigured: boolean; units: Array<{ id: string; name: string }> };
+  function setup() {
+    const { detail } = importPlan();
+    const lf = detail.items.find((i) => i.isLeaf && i.name.includes('Smart Group'))!;
+    ok<AssignResult>('plans.assign', { itemIds: [lf.id], workgroupId: wg('PROD') }, superToken);
+    const item = ok<PlanDetail>('plans.get', { id: detail.doc.id }, superToken).items.find((i) => i.id === lf.id)!;
+    const staff = adminFor('0855555555', 'PROD');
+    return { item, staff };
+  }
+
+  it('fills blue fields from the system, needs only the request amount, and counts as disbursed at once', () => {
+    const { item, staff } = setup();
+    // ข้อมูลของฉัน: คำนำหน้า + ตำแหน่งเต็ม
+    expect(ok<MyProfile>('profile.get', {}, staff).complete).toBe(false);
+    ok('profile.save', { title: 'นาย', fullName: 'กิตติ โพธิ์จวง', position: 'นักวิชาการส่งเสริมการเกษตรชำนาญการ' }, staff);
+    // ค่าหัวบันทึกของกลุ่ม: เฉพาะ Mini Super/Super Admin
+    const gs = ok<WorkgroupMemoSettings[]>('memos.groupSettings', {}, staff)[0];
+    expect(call('memos.saveGroupSettings', { ...gs, memoPrefix: 'กพ 0009.3' }, staff).error?.code).toBe('FORBIDDEN_SCOPE');
+    ok('memos.saveGroupSettings', { ...gs, memoPrefix: 'กพ 0009.3', memoFax: '0-5571-6858', headName: 'นายธนจิรพัชร พัฒนศักดิ์ภิญโญ', headPosition: 'นักวิชาการส่งเสริมการเกษตรชำนาญการ', headLine2: 'รักษาการหัวหน้ากลุ่ม' }, superToken);
+    // public lookups ต้องไม่มีชื่อหัวหน้ากลุ่ม
+    expect(JSON.stringify(ok('public.lookups'))).not.toContain('ธนจิรพัชร');
+
+    const c = ok<Ctx2>('memos.context', { projectId: item.projectId, activityId: item.activityId }, staff);
+    expect(c.profileComplete && c.groupConfigured).toBe(true);
+    expect(c.codesSaved).toBe(false);
+    expect(c.draft).toMatchObject({ budgetSatang: item.amountSatang, previousSatang: 0, docPrefix: 'กพ 0009.3', signer: { name: 'นายกิตติ โพธิ์จวง' }, align: 'left' });
+    expect(c.draft.subActivityName).toBe(item.name);
+    expect(c.draft.mainActivityName).toContain('กิจกรรมสร้างความเข้มแข็งกลุ่มการผลิต');
+
+    const data: MemoData = {
+      ...c.draft, docNumber: '101', expense: 'ค่าจัดซื้อวัสดุสนับสนุน', requestSatang: 1000_00,
+      budgetCode: '07011152034002000000', mainActivityCode: '07011690009900000',
+      // พยายามปลอมยอด/ผู้ลงนาม → server ทับด้วยค่าจริง
+      budgetSatang: 999_999_99, previousSatang: 0, signer: { name: 'ปลอม', position: 'x' },
+      checks: { ok: true, returnFix: false, returnReason: '', forward: true },
+    };
+    const m = ok<MemoRecord>('memos.create', { projectId: item.projectId, activityId: item.activityId, data, idempotencyKey: 'm1' }, staff);
+    expect(m).toMatchObject({ docNo: 'กพ 0009.3/101', amountSatang: 1000_00, status: 'APPROVED', revision: 1, renderStatus: 'OK' });
+    expect(m.data.budgetSatang).toBe(item.amountSatang);
+    expect(m.data.signer.name).toBe('นายกิตติ โพธิ์จวง');
+    // ส่งซ้ำ (กดสองครั้ง) ได้ผลเดิม ไม่เบิกซ้ำ
+    expect(ok<MemoRecord>('memos.create', { projectId: item.projectId, activityId: item.activityId, data, idempotencyKey: 'm1' }, staff).id).toBe(m.id);
+    // ไฟล์ Doc + PDF อยู่ในโฟลเดอร์หลักฐานของโครงการ
+    const files = [...env.files.files.values()].filter((f) => f.folder.endsWith('/บันทึกข้อความ'));
+    expect(files.map((f) => f.mime).sort()).toEqual(['application/pdf', 'application/vnd.google-apps.document']);
+
+    // นับเป็นเบิกจ่ายแล้ว + ประวัติมีลิงก์บันทึก
+    const e = ok<Array<{ activityId: string; disbursed: number; history: Array<{ memoId?: string }> }>>('disbursements.entryList', { fiscalYear: 2570 }, staff).find((x) => x.activityId === item.activityId)!;
+    expect(e.disbursed).toBe(1000_00);
+    expect(e.history[0].memoId).toBe(m.id);
+
+    // ครั้งถัดไป: รหัสถูกจำไว้ ยอดเบิกมาแล้วรวมครั้งก่อน
+    const c2 = ok<Ctx2>('memos.context', { projectId: item.projectId, activityId: item.activityId }, staff);
+    expect(c2.codesSaved).toBe(true);
+    expect(c2.draft).toMatchObject({ previousSatang: 1000_00, budgetCode: '07011152034002000000' });
+    // เลขที่ซ้ำ / เกินงบ ถูกปฏิเสธ
+    const base2 = { ...c2.draft, docNumber: '101', expense: 'ค่าวัสดุ', requestSatang: 100_00 };
+    expect(call('memos.create', { projectId: item.projectId, activityId: item.activityId, data: base2, idempotencyKey: 'm2' }, staff).error?.message).toContain('ถูกใช้แล้ว');
+    const over = { ...base2, docNumber: '102', requestSatang: item.amountSatang };
+    expect(call('memos.create', { projectId: item.projectId, activityId: item.activityId, data: over, idempotencyKey: 'm3' }, staff).error?.message).toContain('เกินงบประมาณ');
+  });
+
+  it('edits make a new revision; amount changes need Super Admin and replace the disbursement', () => {
+    const { item, staff } = setup();
+    ok('profile.save', { title: 'นาง', fullName: 'สมใจ ใจดี', position: 'เจ้าพนักงานการเกษตรชำนาญงาน' }, staff);
+    const c = ok<Ctx2>('memos.context', { projectId: item.projectId, activityId: item.activityId }, staff);
+    const data = { ...c.draft, docNumber: '7', expense: 'ค่าวัสดุ', requestSatang: 500_00 };
+    const m = ok<MemoRecord>('memos.create', { projectId: item.projectId, activityId: item.activityId, data, idempotencyKey: 'e1' }, staff);
+    // แก้ข้อความ (ชิดขอบทั้งสองด้าน + ข้อความแก้เอง) → ฉบับที่ 2
+    const body = [`ข้อความแก้เอง ยอด ${formatMoneyPlain(m.data.budgetSatang)} เบิกมาแล้ว 0 ครั้งนี้ 500 คงเหลือ ${formatMoneyPlain(m.data.budgetSatang - 500_00)}`];
+    const r2 = ok<MemoRecord>('memos.update', { id: m.id, version: m.version, data: { ...m.data, align: 'justify', bodyOverride: body } }, staff);
+    expect(r2).toMatchObject({ revision: 2, disbursementId: m.disbursementId });
+    expect(r2.data.align).toBe('justify');
+    // ข้อความแก้เองที่ยอดไม่ตรงถูกปฏิเสธ
+    expect(call('memos.update', { id: m.id, version: r2.version, data: { ...r2.data, bodyOverride: ['ยอด 9,999'] } }, staff).error?.message).toContain('ไม่ตรง');
+    // เปลี่ยนยอด: เจ้าหน้าที่ไม่ได้ / Super Admin ได้ (ยกเลิกรายการเดิม + รายการใหม่)
+    const changed = { ...r2.data, bodyOverride: undefined, requestSatang: 600_00 };
+    expect(call('memos.update', { id: m.id, version: r2.version, data: changed }, staff).error?.code).toBe('FORBIDDEN_SCOPE');
+    const r3 = ok<MemoRecord>('memos.update', { id: m.id, version: r2.version, data: changed, reason: 'แก้ยอดตามหลักฐาน' }, superToken);
+    expect(r3.disbursementId).not.toBe(m.disbursementId);
+    expect(r3).toMatchObject({ amountSatang: 600_00, status: 'APPROVED', revision: 3 });
+    expect(r3.data.previousSatang).toBe(0);
+    // ฉบับเก่าใช้ version เดิมไม่ได้
+    expect(call('memos.update', { id: m.id, version: r2.version, data: changed }, superToken).error?.code).toBe('VERSION_CONFLICT');
+  });
+
+  it('keeps title through registration and approval', () => {
+    ok('auth.requestAccess', { phone: '0866666666', title: 'นางสาว', fullName: 'ทดสอบ ระบบ', position: 'นักวิชาการส่งเสริมการเกษตรปฏิบัติการ', workgroupId: wg('PROD'), affiliation: 'x' });
+    const req = ok<Array<{ id: string; title?: string }>>('admin.requests', { status: 'pending' }, superToken)[0];
+    expect(req.title).toBe('นางสาว');
+    ok('admin.decideRequest', { requestId: req.id, approve: true }, superToken);
+    const t = ok<{ token: string }>('auth.login', { phone: '0866666666' }).token;
+    expect(ok<MyProfile>('profile.get', {}, t)).toMatchObject({ title: 'นางสาว', complete: true });
   });
 });

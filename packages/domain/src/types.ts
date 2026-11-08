@@ -44,7 +44,13 @@ export interface Meta {
 
 export interface Organization extends Meta { code: string; name: string }
 /** noActivities = ไม่รับผิดชอบกิจกรรมในแผน (เช่น ฝ่ายบริหารทั่วไป) — คงไว้ให้ผู้ใช้สังกัดได้ */
-export interface Workgroup extends Meta { orgId: string; code: string; name: string; noActivities: boolean }
+export interface Workgroup extends Meta {
+  orgId: string; code: string; name: string; noActivities: boolean;
+  /** หัวบันทึกข้อความ: ส่วนราชการ, โทรสาร, ส่วนหน้าเลขที่ (เช่น "กพ 0009.4") */
+  memoOrg?: string; memoFax?: string; memoPrefix?: string;
+  /** ผู้ลงนามฝั่งขวา (หัวหน้ากลุ่ม/ผู้รักษาการ) */
+  headName?: string; headPosition?: string; headLine2?: string;
+}
 export interface FundingSource extends Meta { code: string; name: string; shortName: string }
 /**
  * หน่วยดำเนินการ: สำนักงานเกษตรจังหวัด และสำนักงานเกษตรอำเภอ 11 อำเภอ
@@ -113,6 +119,10 @@ export interface Activity extends Meta {
   dueMonth?: number;
   /** กำหนดเบิกครบเป็นวันที่ (YYYY-MM-DD ค.ศ.) — ใช้เตือน; ถ้ามีค่า dueMonth = เดือนของวันนี้ */
   dueDate?: string;
+  /** รหัสงบประมาณ 20 หลัก (จำจากบันทึกข้อความครั้งแรก) */
+  budgetCode?: string;
+  /** รหัสกิจกรรมหลัก 17 หลัก */
+  mainActivityCode?: string;
 }
 
 export interface Allocation extends Meta {
@@ -185,6 +195,8 @@ export interface User extends Meta {
   approvedBy: string;
   lastLoginAt: string;
   knownDevices: string;
+  /** คำนำหน้าชื่อ เช่น นาย นาง นางสาว */
+  title?: string;
 }
 
 export interface AccessRequest extends Meta {
@@ -198,6 +210,25 @@ export interface AccessRequest extends Meta {
   decidedAt: string;
   decidedBy: string;
   reason: string;
+  title?: string;
+}
+
+/** บันทึกข้อความที่บันทึกแล้ว (ข้อมูลเต็มเก็บใน data เป็น JSON ของ MemoData) */
+export interface Memo extends Meta {
+  projectId: string;
+  activityId: string;
+  disbursementId: string;
+  unitId: string;
+  docNo: string;
+  date: string;
+  amountSatang: number;
+  data: string;
+  revision: number;
+  docFileId: string;
+  pdfFileId: string;
+  /** OK | ERROR | PENDING */
+  renderStatus: string;
+  renderError: string;
 }
 
 export interface LoginAttempt {
