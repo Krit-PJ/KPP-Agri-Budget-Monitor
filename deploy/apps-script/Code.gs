@@ -4956,10 +4956,11 @@ var KPP = (() => {
   var BODY = MEMO_FONT_PT.body;
   var LABEL = MEMO_FONT_PT.label;
   var INDENT = 2.5 * CM;
+  var LINE = 1.15;
   var SECTION_GAP = 6;
   var DOTS = "................................................";
   function style(p, align, before = 0) {
-    p.setAlignment(align).setSpacingBefore(before).setSpacingAfter(0).setLineSpacing(1).setIndentStart(0).setIndentEnd(0).setIndentFirstLine(0);
+    p.setAlignment(align).setSpacingBefore(before).setSpacingAfter(0).setLineSpacing(LINE).setIndentStart(0).setIndentEnd(0).setIndentFirstLine(0);
     return p;
   }
   function run(p, text, size, bold = false) {
@@ -4990,14 +4991,11 @@ var KPP = (() => {
     const body = doc.getBody();
     body.setPageWidth(595.28).setPageHeight(841.89).setMarginLeft(3 * CM).setMarginRight(2 * CM).setMarginTop(1.5 * CM).setMarginBottom(1.5 * CM);
     const contentW = 595.28 - 5 * CM;
-    const head = layoutTable(body, 3, [2 * CM, contentW - 4 * CM, 2 * CM]);
-    const g = cellPara(head.getRow(0).getCell(0), true, H.LEFT);
-    const img = g.appendInlineImage(Utilities.newBlob(Utilities.base64Decode(GARUDA_JPEG_BASE64), "image/jpeg", "garuda.jpg"));
-    img.setWidth(Math.round(1.5 * CM)).setHeight(Math.round(1.5 * CM));
-    const title = cellPara(head.getRow(0).getCell(1), true, H.CENTER);
-    title.setSpacingBefore(10);
+    const title = style(body.getChild(0).asParagraph(), H.CENTER);
+    title.setSpacingBefore(12).setSpacingAfter(14);
+    const img = title.addPositionedImage(Utilities.newBlob(Utilities.base64Decode(GARUDA_JPEG_BASE64), "image/jpeg", "garuda.jpg"));
+    img.setWidth(Math.round(1.5 * CM)).setHeight(Math.round(1.5 * CM)).setLeftOffset(0).setTopOffset(0).setLayout(DocumentApp.PositionedLayout.ABOVE_TEXT);
     run(title, "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21", MEMO_FONT_PT.title, true);
-    cellPara(head.getRow(0).getCell(2), true, H.LEFT);
     const org = style(body.appendParagraph(""), H.LEFT);
     run(org, "\u0E2A\u0E48\u0E27\u0E19\u0E23\u0E32\u0E0A\u0E01\u0E32\u0E23", LABEL, true);
     run(org, `  ${tx(d.orgLine)}${d.fax ? `  \u0E42\u0E17\u0E23\u0E2A\u0E32\u0E23 ${tx(d.fax)}` : ""}`, BODY);
@@ -5021,7 +5019,7 @@ var KPP = (() => {
     });
     const box = (on) => on ? "\u2611" : "\u2610";
     const chk = style(body.appendParagraph(""), H.LEFT, SECTION_GAP);
-    chk.setIndentStart(INDENT);
+    chk.setIndentStart(INDENT).setIndentFirstLine(INDENT);
     run(chk, "\u0E15\u0E23\u0E27\u0E08\u0E2A\u0E2D\u0E1A\u0E41\u0E25\u0E49\u0E27", BODY);
     const lines = [
       `${box(d.checks.ok)}  \u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E15\u0E32\u0E21\u0E04\u0E39\u0E48\u0E21\u0E37\u0E2D\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23`,
@@ -5030,7 +5028,7 @@ var KPP = (() => {
     ];
     for (const l of lines) {
       const p = style(body.appendParagraph(""), H.LEFT);
-      p.setIndentStart(INDENT + 0.5 * CM);
+      p.setIndentStart(INDENT + 0.5 * CM).setIndentFirstLine(INDENT + 0.5 * CM);
       run(p, l, BODY);
     }
     body.appendParagraph("").setSpacingBefore(0).setSpacingAfter(0);
@@ -5050,13 +5048,6 @@ var KPP = (() => {
     run(ap, "\u0E2D\u0E19\u0E38\u0E21\u0E31\u0E15\u0E34", BODY);
     for (const r3 of ["(\u0E25\u0E07\u0E0A\u0E37\u0E48\u0E2D)........................................................", `(${DOTS})`, `\u0E15\u0E33\u0E41\u0E2B\u0E19\u0E48\u0E07 ${DOTS}`]) {
       run(style(body.appendParagraph(""), H.CENTER, r3.startsWith("(\u0E25\u0E07\u0E0A\u0E37\u0E48\u0E2D)") ? 14 : 0), r3, BODY);
-    }
-    const first = body.getChild(0);
-    if (first.getType() === DocumentApp.ElementType.PARAGRAPH && first.asParagraph().getText() === "" && body.getNumChildren() > 1) {
-      try {
-        first.removeFromParent();
-      } catch {
-      }
     }
     return doc;
   }

@@ -14,6 +14,8 @@ const FONT = 'Sarabun';
 const BODY = MEMO_FONT_PT.body;
 const LABEL = MEMO_FONT_PT.label;
 const INDENT = 2.5 * CM;
+/** ระยะบรรทัด: Sarabun ใน Docs บรรทัดเดี่ยว ≈1.3 em — ×1.15 ใกล้เคียงระยะบรรทัดของ TH Sarabun 16pt */
+const LINE = 1.15;
 const SECTION_GAP = 6;
 const DOTS = '................................................';
 
@@ -21,7 +23,7 @@ type Para = GoogleAppsScript.Document.Paragraph;
 type Cell = GoogleAppsScript.Document.TableCell;
 
 function style(p: Para, align: GoogleAppsScript.Document.HorizontalAlignment, before = 0): Para {
-  p.setAlignment(align).setSpacingBefore(before).setSpacingAfter(0).setLineSpacing(1).setIndentStart(0).setIndentEnd(0).setIndentFirstLine(0);
+  p.setAlignment(align).setSpacingBefore(before).setSpacingAfter(0).setLineSpacing(LINE).setIndentStart(0).setIndentEnd(0).setIndentFirstLine(0);
   return p;
 }
 
@@ -60,15 +62,12 @@ export function buildMemoDoc(name: string, d: MemoData): GoogleAppsScript.Docume
     .setMarginLeft(3 * CM).setMarginRight(2 * CM).setMarginTop(1.5 * CM).setMarginBottom(1.5 * CM);
   const contentW = 595.28 - 5 * CM;
 
-  // หัว: ครุฑซ้าย + "บันทึกข้อความ" กึ่งกลางหน้า
-  const head = layoutTable(body, 3, [2 * CM, contentW - 4 * CM, 2 * CM]);
-  const g = cellPara(head.getRow(0).getCell(0), true, H.LEFT);
-  const img = g.appendInlineImage(Utilities.newBlob(Utilities.base64Decode(GARUDA_JPEG_BASE64), 'image/jpeg', 'garuda.jpg'));
-  img.setWidth(Math.round(1.5 * CM)).setHeight(Math.round(1.5 * CM));
-  const title = cellPara(head.getRow(0).getCell(1), true, H.CENTER);
-  title.setSpacingBefore(10);
+  // หัว: ครุฑ (วางลอย) มุมซ้ายบน + "บันทึกข้อความ" กึ่งกลางหน้า — ใช้ย่อหน้าแรกของเอกสาร (ไม่มีบรรทัดว่างเกิน)
+  const title = style(body.getChild(0).asParagraph(), H.CENTER);
+  title.setSpacingBefore(12).setSpacingAfter(14);
+  const img = title.addPositionedImage(Utilities.newBlob(Utilities.base64Decode(GARUDA_JPEG_BASE64), 'image/jpeg', 'garuda.jpg'));
+  img.setWidth(Math.round(1.5 * CM)).setHeight(Math.round(1.5 * CM)).setLeftOffset(0).setTopOffset(0).setLayout(DocumentApp.PositionedLayout.ABOVE_TEXT);
   run(title, 'บันทึกข้อความ', MEMO_FONT_PT.title, true);
-  cellPara(head.getRow(0).getCell(2), true, H.LEFT);
 
   // ส่วนราชการ
   const org = style(body.appendParagraph(''), H.LEFT);
@@ -102,7 +101,7 @@ export function buildMemoDoc(name: string, d: MemoData): GoogleAppsScript.Docume
   // ผลการตรวจสอบ (เจ้าหน้าที่กลุ่มเป็นผู้เลือก)
   const box = (on: boolean) => (on ? '☑' : '☐');
   const chk = style(body.appendParagraph(''), H.LEFT, SECTION_GAP);
-  chk.setIndentStart(INDENT);
+  chk.setIndentStart(INDENT).setIndentFirstLine(INDENT);
   run(chk, 'ตรวจสอบแล้ว', BODY);
   const lines: string[] = [
     `${box(d.checks.ok)}  ถูกต้องตามคู่มือโครงการ`,
@@ -111,7 +110,7 @@ export function buildMemoDoc(name: string, d: MemoData): GoogleAppsScript.Docume
   ];
   for (const l of lines) {
     const p = style(body.appendParagraph(''), H.LEFT);
-    p.setIndentStart(INDENT + 0.5 * CM);
+    p.setIndentStart(INDENT + 0.5 * CM).setIndentFirstLine(INDENT + 0.5 * CM);
     run(p, l, BODY);
   }
 
@@ -137,10 +136,5 @@ export function buildMemoDoc(name: string, d: MemoData): GoogleAppsScript.Docume
     run(style(body.appendParagraph(''), H.CENTER, r.startsWith('(ลงชื่อ)') ? 14 : 0), r, BODY);
   }
 
-  // ลบย่อหน้าว่างแรกที่ Docs สร้างไว้ให้
-  const first = body.getChild(0);
-  if (first.getType() === DocumentApp.ElementType.PARAGRAPH && first.asParagraph().getText() === '' && body.getNumChildren() > 1) {
-    try { first.removeFromParent(); } catch { /* Docs ไม่ให้ลบบางกรณี — ปล่อยไว้ได้ */ }
-  }
   return doc;
 }
