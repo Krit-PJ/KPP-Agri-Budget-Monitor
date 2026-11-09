@@ -83,13 +83,16 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
   const { busy, error, run, setError } = useSubmit();
   const allGroups = user.workgroupIds === null;
   const ownerGroups = l.workgroups.filter((g) => !g.noActivities);
-  const myGroups = ownerGroups.filter((g) => allGroups || user.workgroupIds!.includes(g.id));
+  // ADR-011: ย้าย/กำหนดกลุ่มงานได้ทุกกลุ่มอย่างอิสระ; แก้รายละเอียด/ปรับงบได้เฉพาะรายการของกลุ่มตนหรือที่ยังไม่มีกลุ่ม
+  const access = (i: PlanItem) => !i.workgroupId || allGroups || user.workgroupIds!.includes(i.workgroupId);
   const w = useWork();
   const [filter, setFilter] = useState<Filter>(w.g ? 'mine' : 'all');
   useEffect(() => { setFilter((f) => (w.g ? 'mine' : f === 'mine' ? 'all' : f)); }, [w.g]);
   const [q, setQ] = useState('');
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<string | null>(null);
+  const [detail, setDetail] = useState<null | { id: string; mode: 'edit' | 'adjust' }>(null);
+  const [adding, setAdding] = useState<string | null>(null);
   const [bulkGroup, setBulkGroup] = useState('');
   const [bulkConfirm, setBulkConfirm] = useState<null | { label: string; unitIds?: string[]; group?: string }>(null);
 
@@ -117,6 +120,12 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
   const pickedItems = leaves.filter((i) => picked.has(i.id));
   const districts = l.units.filter((u) => u.kind === 'DISTRICT').map((u) => u.id);
   const pao = l.units.find((u) => u.kind === 'PROVINCE')?.id ?? '';
+  const removeItem = (i: PlanItem) => void run(async () => {
+    if (!window.confirm(`ลบกิจกรรมที่เพิ่มเอง "${i.name}"?`)) return;
+    await call('plans.deleteItem', { id: i.id });
+    toast('ลบกิจกรรมแล้ว');
+    reload();
+  });
 
   const setGroup = (i: PlanItem, workgroupId: string) => void run(async () => {
     if (!workgroupId) {
@@ -180,7 +189,7 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
       </div>
       {projects.map((p) => {
         const rows = shown.filter((i) => i.planIndex === p.planIndex && i.projectSeq === p.seq);
-        if (!rows.length) return null;
+        if (!rows.length && adding !== p.id) return null;
         const ids = rows.map((i) => i.id);
         const allPicked = ids.every((x) => picked.has(x));
         return (
@@ -191,35 +200,55 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
               </label>
               <h2>{p.number} {p.name}</h2>
               <span className="num small muted">{formatBaht(rows.reduce((a, i) => a + i.amountSatang, 0))} บาท</span>
+              {adding !== p.id && <button className="btn btn-ghost btn-sm pb-add" onClick={() => setAdding(p.id)}>+ เพิ่มกิจกรรม</button>}
             </div>
+            {adding === p.id && (
+              <AddItemForm
+                parents={d.items.filter((x) => !x.isLeaf && x.planIndex === p.planIndex && (x.seq === p.seq || x.projectSeq === p.seq))}
+                defaultParent={p.id} groups={ownerGroups} defaultGroup={w.g || (allGroups ? '' : user.workgroupIds![0] ?? '')}
+                onCancel={() => setAdding(null)} onDone={() => { setAdding(null); reload(); }}
+              />
+            )}
             <ul className="ob-rows">
               {rows.map((i) => {
                 const st = stateOf(i);
                 const trail = pathOf(i, bySeq).filter((x) => x.depth > p.depth && x.seq !== i.seq).map((x) => x.name);
                 const locked = !!st?.hasDisbursement;
-                const canEdit = !i.workgroupId || mine(i);
+                const canEdit = access(i);
                 const isOpen = editing === i.id;
+                const det = detail?.id === i.id ? detail.mode : null;
+                const changed = !!st && st.budget !== i.amountSatang;
                 return (
                   <li key={i.id} className={`pb-row ${picked.has(i.id) ? 'is-picked' : ''} ${isOpen ? 'is-open' : ''}`}>
                     <label className="ob-check"><input type="checkbox" checked={picked.has(i.id)} onChange={(e) => setPicked((s0) => { const nx = new Set(s0); if (e.target.checked) nx.add(i.id); else nx.delete(i.id); return nx; })} aria-label={`เลือก ${i.name}`} /></label>
                     <div className="ob-name">
                       <span className="muted">{i.number}</span> {i.name}
+                      {i.manual && <span className="badge badge-manual">เพิ่มเอง</span>}
                       {trail.length > 0 && <span className="ob-trail">{trail.join(' › ')}</span>}
+                      {i.note && <span className="ob-trail">หมายเหตุ: {i.note}</span>}
+                      {canEdit && !det && (
+                        <span className="pb-tools">
+                          <button className="link-btn" onClick={() => setDetail({ id: i.id, mode: 'edit' })}>แก้ไขรายละเอียด</button>
+                          {st && <button className="link-btn" onClick={() => setDetail({ id: i.id, mode: 'adjust' })}>ปรับงบ</button>}
+                          {i.manual && !locked && <button className="link-btn is-danger" disabled={busy} onClick={() => removeItem(i)}>ลบ</button>}
+                        </span>
+                      )}
                     </div>
                     <div className="pb-nums">
-                      <span className="pb-amt num"><span className="sr-only">งบประมาณ </span>{formatBaht(i.amountSatang)}<small> บาท</small></span>
+                      <span className="pb-amt num"><span className="sr-only">งบประมาณ </span>{formatBaht(changed ? st!.budget : i.amountSatang)}<small> บาท</small></span>
+                      {changed && <span className="pb-plan xs">ตามแผน {formatBaht(i.amountSatang)}</span>}
                       <span className="pb-qty"><span className="pb-qty-l">เป้าหมาย </span>{i.quantity ? `${i.quantity.toLocaleString('th-TH')} ${i.unit}` : '–'}</span>
                     </div>
                     <div className="pb-owner">
                       <label className="ob-group">
                         <span className="pb-owner-l">กลุ่มที่รับผิดชอบ</span>
-                        {canEdit ? (
+                        {(
                           <select value={i.workgroupId} disabled={busy || locked} onChange={(e) => setGroup(i, e.target.value)} title={locked ? 'มีรายการเบิกจ่ายแล้ว เปลี่ยนกลุ่มไม่ได้' : undefined} className={i.workgroupId ? '' : 'is-empty'}>
                             <option value="">— เลือกกลุ่มงาน —</option>
-                            {(i.workgroupId && !myGroups.some((g) => g.id === i.workgroupId) ? [...myGroups, l.workgroups.find((g) => g.id === i.workgroupId)!] : myGroups)
+                            {(i.workgroupId && !ownerGroups.some((g) => g.id === i.workgroupId) ? [...ownerGroups, l.workgroups.find((g) => g.id === i.workgroupId)!] : ownerGroups)
                               .map((g) => <option key={g.id} value={g.id}>{g.name}{g.hidePublic ? ' (ยังไม่เผยแพร่)' : ''}</option>)}
                           </select>
-                        ) : <span className="badge">{n.group(i.workgroupId)}</span>}
+                        )}
                       </label>
                       {!i.workgroupId ? <span className="small muted">เลือกกลุ่มงานก่อน แล้วจึงกำหนดพื้นที่</span> : (
                         <div className="pb-area">
@@ -237,6 +266,13 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
                         </div>
                       )}
                     </div>
+                    {det && (
+                      <div className="pb-editor">
+                        {det === 'edit'
+                          ? <ItemEditor item={i} onCancel={() => setDetail(null)} onDone={() => { setDetail(null); reload(); }} />
+                          : <BudgetAdjuster item={i} st={st!} onCancel={() => setDetail(null)} onDone={() => { setDetail(null); reload(); }} />}
+                      </div>
+                    )}
                     {isOpen && st && (
                       <div className="pb-editor">
                         <AreaEditor item={i} st={st} onCancel={() => setEditing(null)} onDone={() => { setEditing(null); reload(); }} />
@@ -263,7 +299,7 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
               <span className="bar-group">
                 <select value={bulkGroup} onChange={(e) => setBulkGroup(e.target.value)} aria-label="กลุ่มงาน" style={{ width: 'auto' }}>
                   <option value="">กลุ่มงาน…</option>
-                  {myGroups.map((g) => <option key={g.id} value={g.id}>{g.name}{g.hidePublic ? ' (ยังไม่เผยแพร่)' : ''}</option>)}
+                  {ownerGroups.map((g) => <option key={g.id} value={g.id}>{g.name}{g.hidePublic ? ' (ยังไม่เผยแพร่)' : ''}</option>)}
                 </select>
                 <button className="btn btn-sm" disabled={!bulkGroup} onClick={() => setBulkConfirm({ label: `กำหนดเป็น${n.group(bulkGroup)}`, group: bulkGroup })}>กำหนดกลุ่มงาน</button>
               </span>
@@ -477,4 +513,128 @@ function pathOf(i: PlanItem, bySeq: Map<number, PlanItem>): PlanItem[] {
     cur = cur.parentSeq ? bySeq.get(cur.parentSeq) : undefined;
   }
   return out;
+}
+
+/* ------------------------------ แก้รายละเอียด / ปรับงบ / เพิ่มกิจกรรม (ADR-011) ------------------------------ */
+
+function ItemEditor({ item, onCancel, onDone }: { item: PlanItem; onCancel: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const { busy, error, run } = useSubmit();
+  const [name, setName] = useState(item.name);
+  const [unit, setUnit] = useState(item.unit);
+  const [qty, setQty] = useState(item.quantity ? String(item.quantity) : '');
+  const [note, setNote] = useState(item.note ?? '');
+  const save = () => void run(async () => {
+    await call('plans.updateItem', { id: item.id, version: item.version, name, unit, quantity: Number(qty || 0), note });
+    toast('บันทึกรายละเอียดกิจกรรมแล้ว');
+    onDone();
+  });
+  return (
+    <div className="item-form">
+      <h3 className="h-sm">แก้ไขรายละเอียดกิจกรรม</h3>
+      {error && <ErrorBox error={error} />}
+      <label className="field"><span>ชื่อกิจกรรม</span><textarea rows={2} value={name} onChange={(e) => setName(e.target.value)} /></label>
+      <div className="form-row">
+        <label className="field"><span>เป้าหมาย (ทั้งสิ้น)</span><input inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value.replace(/[^\d.]/g, ''))} /></label>
+        <label className="field"><span>หน่วยนับ</span><input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="เช่น ราย, ครั้ง, แปลง" /></label>
+      </div>
+      <label className="field"><span>หมายเหตุ</span><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="ไม่บังคับ" /></label>
+      <p className="xs muted">ยอดงบประมาณแก้ที่ "ปรับงบ" (บันทึกเป็นรายการปรับพร้อมเหตุผล ยอดตามแผนของกรมยังคงเดิม)</p>
+      <div className="btn-row">
+        <button className="btn btn-sm" onClick={save} disabled={busy}>{busy ? 'กำลังบันทึก…' : 'บันทึก'}</button>
+        <button className="btn btn-ghost btn-sm" onClick={onCancel}>ยกเลิก</button>
+      </div>
+    </div>
+  );
+}
+
+function BudgetAdjuster({ item, st, onCancel, onDone }: { item: PlanItem; st: PlanActivityState; onCancel: () => void; onDone: () => void }) {
+  const toast = useToast();
+  const { busy, error, run } = useSubmit();
+  const [dir, setDir] = useState<1 | -1>(1);
+  const [amt, setAmt] = useState('');
+  const [reason, setReason] = useState('');
+  const [docNo, setDocNo] = useState('');
+  const [key] = useState(() => `${item.id}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`);
+  const delta = dir * (bahtInputToSatang(amt) ?? 0);
+  const after = st.budget + delta;
+  const tooLow = after < st.disbursed;
+  const save = () => void run(async () => {
+    const r = await call('plans.adjustBudget', { id: item.id, deltaSatang: delta, reason, docNo, idempotencyKey: key });
+    toast(`ปรับงบแล้ว งบปัจจุบัน ${formatBaht(r.budget)} บาท`);
+    onDone();
+  });
+  return (
+    <div className="item-form">
+      <h3 className="h-sm">ปรับงบประมาณกิจกรรม</h3>
+      {error && <ErrorBox error={error} />}
+      <p className="small" style={{ margin: 0 }}>ตามแผน {formatBaht(item.amountSatang)} บาท · งบปัจจุบัน <b>{formatBaht(st.budget)}</b> บาท · เบิกจ่ายแล้ว {formatBaht(st.disbursed)} บาท</p>
+      <div className="segmented" role="group" aria-label="ประเภทการปรับ">
+        <button type="button" aria-pressed={dir === 1} onClick={() => setDir(1)}>+ เพิ่มงบ</button>
+        <button type="button" aria-pressed={dir === -1} onClick={() => setDir(-1)}>− ลดงบ</button>
+      </div>
+      <div className="form-row">
+        <label className="field"><span>จำนวนเงิน (บาท)</span><input inputMode="decimal" value={amt} onChange={(e) => setAmt(e.target.value)} /></label>
+        <label className="field"><span>เลขที่หนังสือ (ถ้ามี)</span><input value={docNo} onChange={(e) => setDocNo(e.target.value)} /></label>
+      </div>
+      <label className="field"><span>เหตุผลการปรับ</span><input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="เช่น โอนเปลี่ยนแปลงตามหนังสือกรม, ปรับลดเพื่อใช้กิจกรรมอื่น" /></label>
+      {delta !== 0 && <p className={`small ${tooLow ? 'sum-bad' : ''}`} style={{ margin: 0 }}>หลังปรับ: {formatBaht(after)} บาท{tooLow ? ' — น้อยกว่ายอดที่เบิกจ่ายแล้ว' : ''}</p>}
+      <div className="btn-row">
+        <button className="btn btn-sm" onClick={save} disabled={busy || !delta || tooLow || reason.trim().length < 3}>{busy ? 'กำลังบันทึก…' : 'บันทึกการปรับงบ'}</button>
+        <button className="btn btn-ghost btn-sm" onClick={onCancel}>ยกเลิก</button>
+      </div>
+    </div>
+  );
+}
+
+function AddItemForm({ parents, defaultParent, groups, defaultGroup, onCancel, onDone }: {
+  parents: PlanItem[]; defaultParent: string; groups: Array<{ id: string; name: string }>; defaultGroup: string; onCancel: () => void; onDone: () => void;
+}) {
+  const toast = useToast();
+  const { busy, error, run } = useSubmit();
+  const [parentId, setParentId] = useState(defaultParent);
+  const [name, setName] = useState('');
+  const [qty, setQty] = useState('');
+  const [unit, setUnit] = useState('');
+  const [amt, setAmt] = useState('');
+  const [note, setNote] = useState('');
+  const [group, setGroup] = useState(defaultGroup);
+  const save = () => void run(async () => {
+    await call('plans.addItem', { parentId, name, unit, quantity: Number(qty || 0), amountSatang: (bahtInputToSatang(amt) ?? 0), note, workgroupId: group || undefined });
+    toast('เพิ่มกิจกรรมแล้ว');
+    onDone();
+  });
+  return (
+    <div className="item-form pb-add-form">
+      <h3 className="h-sm">เพิ่มกิจกรรม (นอกแผนที่นำเข้า)</h3>
+      {error && <ErrorBox error={error} />}
+      {parents.length > 1 && (
+        <label className="field"><span>อยู่ภายใต้</span>
+          <select value={parentId} onChange={(e) => setParentId(e.target.value)}>
+            {parents.map((x) => <option key={x.id} value={x.id}>{x.number} {x.name}</option>)}
+          </select>
+        </label>
+      )}
+      <label className="field"><span>ชื่อกิจกรรม</span><textarea rows={2} value={name} onChange={(e) => setName(e.target.value)} /></label>
+      <div className="form-row">
+        <label className="field"><span>งบประมาณ (บาท)</span><input inputMode="decimal" value={amt} onChange={(e) => setAmt(e.target.value)} /></label>
+        <label className="field"><span>เป้าหมาย</span><input inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value.replace(/[^\d.]/g, ''))} /></label>
+        <label className="field"><span>หน่วยนับ</span><input value={unit} onChange={(e) => setUnit(e.target.value)} /></label>
+      </div>
+      <div className="form-row">
+        <label className="field"><span>กลุ่มที่รับผิดชอบ</span>
+          <select value={group} onChange={(e) => setGroup(e.target.value)}>
+            <option value="">— ยังไม่กำหนด —</option>
+            {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
+        </label>
+        <label className="field"><span>หมายเหตุ</span><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="เช่น แหล่งที่มาของงบ" /></label>
+      </div>
+      <p className="xs muted">รายการนี้จะแสดงป้าย "เพิ่มเอง" และลบได้ถ้ายังไม่มีการเบิกจ่าย</p>
+      <div className="btn-row">
+        <button className="btn btn-sm" onClick={save} disabled={busy || name.trim().length < 3 || (bahtInputToSatang(amt) ?? 0) <= 0}>{busy ? 'กำลังบันทึก…' : 'เพิ่มกิจกรรม'}</button>
+        <button className="btn btn-ghost btn-sm" onClick={onCancel}>ยกเลิก</button>
+      </div>
+    </div>
+  );
 }

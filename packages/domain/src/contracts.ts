@@ -265,6 +265,8 @@ export interface Actions {
   /** ฐานข้อมูลรหัสงบประมาณ / รหัสกิจกรรมหลัก ของปีงบประมาณ */
   'budgetCodes.list': [{ fiscalYear: number }, Array<BudgetCodeEntry & { id: string; source: string }>];
   'memos.saveGroupSettings': [WorkgroupMemoSettings, WorkgroupMemoSettings];
+  /** จำผู้ลงนามฝั่งขวา (หัวหน้ากลุ่ม/ผู้รักษาการ) และเบอร์โทรศัพท์ของกลุ่ม — เจ้าหน้าที่ของกลุ่มนั้น */
+  'memos.saveHead': [{ projectId: string; head: MemoData['head']; fax?: string }, WorkgroupMemoSettings];
   // admin
   'admin.overview': [{ fiscalYear?: number; workgroupId?: string }, OverviewData];
   'projects.list': [{ fiscalYear?: number }, ProjectListItem[]];
@@ -310,6 +312,13 @@ export interface Actions {
   /** กำหนดเบิกครบ: dueDate (YYYY-MM-DD ในปีงบ) หรือ ล้างวันที่ด้วย dueMonth 0 = ค่าเริ่มต้น / -1 = ไม่กำหนด */
   'activities.setDue': [{ activityId: string; dueMonth?: number; dueDate?: string }, PlanActivityState];
   'plans.unassign': [{ itemIds: string[] }, { unassigned: number; skipped: Array<{ id: string; reason: string }> }];
+  /** แก้รายละเอียดกิจกรรมในแผน (ชื่อ เป้าหมาย หน่วยนับ หมายเหตุ) — กลุ่มของตัวเองหรือยังไม่มีกลุ่ม */
+  'plans.updateItem': [{ id: string; version: number; name?: string; unit?: string; quantity?: number; note?: string }, PlanItem];
+  /** ปรับงบกิจกรรม (+/−) พร้อมเหตุผล — บันทึกเป็นการโอนงบ ไม่แก้ยอดตามแผนของกรม */
+  'plans.adjustBudget': [{ id: string; deltaSatang: Satang; reason: string; docNo?: string; idempotencyKey: string }, { budget: Satang }];
+  /** เพิ่มกิจกรรมนอกแผนที่นำเข้า */
+  'plans.addItem': [{ parentId: string; name: string; unit?: string; quantity?: number; amountSatang: Satang; note?: string; workgroupId?: string }, PlanItem];
+  'plans.deleteItem': [{ id: string; reason?: string }, { ok: true }];
   // super admin
   'admin.requests': [{ status?: string }, AccessRequest[]];
   'admin.decideRequest': [{ requestId: string; approve: boolean; reason?: string; role?: 'admin' | 'minisuper' }, { ok: true }];

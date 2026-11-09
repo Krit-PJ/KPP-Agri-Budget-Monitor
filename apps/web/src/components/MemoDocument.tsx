@@ -47,7 +47,7 @@ function Box({ on, label, onToggle }: { on: boolean; label: string; onToggle?: (
 export interface MemoGuide { onField?: (f: MemoField) => void }
 
 const FIELD_LABEL: Record<MemoField, string> = {
-  orgLine: 'ส่วนราชการ', fax: 'โทรสาร', docNumber: 'เลขที่หนังสือ', date: 'วันที่', to: 'เรียน', refNo: 'เลขที่หนังสืออ้างถึง',
+  orgLine: 'ส่วนราชการ', fax: 'โทรศัพท์', docNumber: 'เลขที่หนังสือ', date: 'วันที่', to: 'เรียน', refNo: 'เลขที่หนังสืออ้างถึง',
   refDate: 'วันที่หนังสืออ้างถึง', refFrom: 'หน่วยที่ส่งมา', expense: 'รายการค่าใช้จ่าย', projectName: 'โครงการ', mainActivityName: 'กิจกรรม',
   fund: 'แหล่งงบ', budgetCode: 'รหัสงบประมาณ', mainActivityCode: 'รหัสกิจกรรมหลัก', subActivityName: 'กิจกรรมย่อย', budget: 'งบประมาณ',
   previous: 'เบิกมาแล้ว', request: 'ขอเบิกครั้งนี้', remaining: 'คงเหลือ', checks: 'ผลการตรวจสอบ', signer: 'ผู้ตรวจสอบ', head: 'หัวหน้ากลุ่ม',
@@ -84,7 +84,7 @@ export function MemoDocument({ d, onToggle, guide }: { d: MemoData; onToggle?: (
         <img src={GARUDA} alt="ตราครุฑ" className="m-garuda" />
         <h1 className="m-title">บันทึกข้อความ</h1>
       </header>
-      <p className="m-line"><b className="m-label">ส่วนราชการ</b> <F f="orgLine" s={d.orgLine} />{(d.fax || guide) && <> <span className="nw">โทรสาร</span> <F f="fax" s={d.fax} nowrap /></>}</p>
+      <p className="m-line"><b className="m-label">ส่วนราชการ</b> <F f="orgLine" s={d.orgLine} />{(d.fax || guide) && <> <span className="nw">โทรศัพท์</span> <F f="fax" s={d.fax} nowrap /></>}</p>
       <div className="m-row">
         <p className="m-line"><b className="m-label">ที่</b> {d.docPrefix && <span className="nw">{tx(d.docPrefix.replace(/\/$/, ''))}/</span>}<F f="docNumber" s={d.docNumber} nowrap /></p>
         <p className="m-line"><b className="m-label">วันที่</b> <F f="date" s={formatThaiDateLong(d.date)} nowrap /></p>

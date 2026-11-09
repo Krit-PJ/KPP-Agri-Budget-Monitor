@@ -56,6 +56,10 @@ function Editor({ ctx, e, user, existing, onSaved, onClose }: {
   const setAmt = (v: string) => { setDirty(true); setAmtRaw(v); };
   const { busy, error, run, setError } = useSubmit();
   const isSuper = user.role === 'superadmin';
+  const saveHead = () => void run(async () => {
+    await call('memos.saveHead', { projectId: e.projectId, head: d.head, fax: d.fax });
+    toast('บันทึกผู้ลงนาม (หัวหน้ากลุ่ม/ผู้รักษาการ) และโทรศัพท์เป็นค่าประจำกลุ่มแล้ว');
+  });
 
   const satang = bahtInputToSatang(amt) ?? 0;
   const data: MemoData = useMemo(() => ({ ...d, requestSatang: satang }), [d, satang]);
@@ -178,7 +182,7 @@ function Editor({ ctx, e, user, existing, onSaved, onClose }: {
           <legend><b className="step">1</b> หัวบันทึก</legend>
           <div className="form-grid">
             {field('ส่วนราชการ', <input value={d.orgLine} onChange={(ev) => set('orgLine', ev.target.value)} />, 'auto', { wide: true, f: 'orgLine' })}
-            {field('โทรสาร', <input value={d.fax} onChange={(ev) => set('fax', ev.target.value)} />, 'auto', { f: 'fax' })}
+            {field('โทรศัพท์', <input value={d.fax} onChange={(ev) => set('fax', ev.target.value)} />, 'auto', { f: 'fax' })}
             {field('เรียน', <input value={d.to} onChange={(ev) => set('to', ev.target.value)} />, 'auto', { f: 'to' })}
             {field('ส่วนหน้าเลขที่', <input value={d.docPrefix} onChange={(ev) => set('docPrefix', ev.target.value)} placeholder="เช่น กพ 0009.3" readOnly={lockedMoney} />, 'auto')}
             {field('เลขที่หนังสือ', <input value={d.docNumber} onChange={(ev) => set('docNumber', ev.target.value.replace(/^\//, ''))} inputMode="numeric" placeholder="เลขที่ลงทะเบียนส่ง" required readOnly={lockedMoney} />, 'staff', { req: true, hint: `จะแสดงเป็น "ที่ ${memoDocNo(d) || '…'}"`, f: 'docNumber' })}
@@ -247,12 +251,12 @@ function Editor({ ctx, e, user, existing, onSaved, onClose }: {
         <fieldset>
           <legend><b className="step">4</b> ยอดเงิน <small className="muted">(เชื่อมกับงบของกิจกรรม)</small></legend>
           <div className="money-grid">
-            {field('ยอดเงินงบประมาณ (รวมทั้งหมดของกิจกรรม)', <div className="auto-v num">{formatMoneyPlain(d.budgetSatang)} บาท <small>({bahtText(d.budgetSatang)})</small></div>, 'auto')}
-            {field('ขอเบิก/ยืมมาแล้ว (รวมทุกครั้งทุกอำเภอ)', <div className="auto-v num">{formatMoneyPlain(d.previousSatang)} บาท <small>({bahtText(d.previousSatang)})</small></div>, 'auto')}
+            {field('ยอดเงินงบประมาณ', <div className="auto-v num">{formatMoneyPlain(d.budgetSatang)} บาท <small>({bahtText(d.budgetSatang)})</small></div>, 'auto')}
+            {field('ขอเบิก/ยืมมาแล้ว', <div className="auto-v num">{formatMoneyPlain(d.previousSatang)} บาท <small>({bahtText(d.previousSatang)})</small></div>, 'auto')}
             {field('ขอเบิกครั้งนี้ (บาท)', (
               <input className="big num" inputMode="decimal" value={amt} onChange={(ev) => setAmt(ev.target.value)} placeholder="เช่น 4,000" required readOnly={lockedMoney} aria-describedby={`${ids}-amt`} />
             ), 'staff', { req: true, f: 'request' })}
-            {field('งบประมาณคงเหลือ (หลังครั้งนี้)', <div className={`auto-v num ${remaining < 0 ? 'neg' : ''}`}>{formatMoneyPlain(remaining)} บาท <small>({bahtText(remaining)})</small></div>, 'auto')}
+            {field('งบประมาณคงเหลือ', <div className={`auto-v num ${remaining < 0 ? 'neg' : ''}`}>{formatMoneyPlain(remaining)} บาท <small>({bahtText(remaining)})</small></div>, 'auto')}
           </div>
           <p id={`${ids}-amt`} className="hint" style={remaining < 0 || (unit && satang > unitLeft) ? { color: 'var(--clay)' } : undefined}>
             {satang > 0 && <>ตัวอักษร: {bahtText(satang)} · </>}
@@ -306,6 +310,10 @@ function Editor({ ctx, e, user, existing, onSaved, onClose }: {
             {field('หัวหน้ากลุ่ม / ผู้รักษาการ', <input value={d.head.name} onChange={(ev) => setHead('name', ev.target.value)} placeholder="ชื่อพร้อมคำนำหน้า" />, 'auto', { f: 'head' })}
             {field('ตำแหน่ง', <input value={d.head.position} onChange={(ev) => setHead('position', ev.target.value)} />, 'auto')}
             {field('บรรทัดที่สอง', <input value={d.head.line2 ?? ''} onChange={(ev) => setHead('line2', ev.target.value)} placeholder="เช่น รักษาการหัวหน้ากลุ่มอารักขาพืช" />, 'auto')}
+          </div>
+          <div className="head-save">
+            <button type="button" className="btn btn-ghost btn-sm" disabled={busy || !d.head.name.trim()} onClick={saveHead}>บันทึกเป็นค่าประจำกลุ่ม</button>
+            <span className="xs muted">ระบบจำหัวหน้ากลุ่ม/ผู้รักษาการล่าสุดให้อัตโนมัติเมื่อบันทึกเอกสาร และใช้เป็นค่าเริ่มต้นในฉบับถัดไป</span>
           </div>
         </fieldset>
 

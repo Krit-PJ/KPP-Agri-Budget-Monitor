@@ -2,7 +2,7 @@
  * Schema ของตารางใน Google Sheets (versioned) — header แถวที่ 1 ของแต่ละแท็บ
  * เปลี่ยน schema: เพิ่มคอลัมน์ต่อท้ายเท่านั้น แล้วเพิ่ม SCHEMA_VERSION; provisioning เติมหัวคอลัมน์ให้เอง
  */
-export const SCHEMA_VERSION = '2026.11.09-1';
+export const SCHEMA_VERSION = '2026.11.09-2';
 
 export type ColType = 'string' | 'number' | 'boolean' | 'json';
 export type FileKey = 'IDENTITY' | 'CORE' | 'STAGING' | 'REPORTING';
@@ -105,6 +105,8 @@ export const TABLES = {
     ['amountSatang', 'number'], ['isLeaf', 'boolean'], ['planIndex', 'number'], ['projectSeq', 'number'], ['activitySeq', 'number'],
     ['code', 'string'], ['workgroupId', 'string'], ['projectId', 'string'], ['activityId', 'string'], ['assignedAt', 'string'],
     ['assignedBy', 'string'],
+    // รายการที่เจ้าหน้าที่เพิ่มเอง (นอกแผนที่นำเข้า)
+    ['manual', 'boolean'], ['note', 'string'],
   ]),
   ImportJobs: t('STAGING', [
     ['fileName', 'string'], ['sha256', 'string'], ['driveFileId', 'string'], ['channel', 'string'], ['kind', 'string'],

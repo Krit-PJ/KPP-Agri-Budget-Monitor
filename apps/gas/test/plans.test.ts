@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { fiscalMonthIndex, formatMoneyPlain, normalizePlanTable, readXlsx, todayBangkok, type ApiEnvelope, type AssignResult, type AuditLog, type Lookups, type PlanCheck, type PlanDetail, type PlanDoc, type PlanDocSummary, type PlanPreview, type ProjectDetail, type ProjectListItem, type MemoData, type MemoRecord, type MyProfile, type WorkgroupMemoSettings } from '@kpp/domain';
+import { fiscalMonthIndex, formatMoneyPlain, normalizePlanTable, readXlsx, todayBangkok, type ApiEnvelope, type AssignResult, type AuditLog, type Lookups, type PlanCheck, type PlanDetail, type PlanDoc, type PlanDocSummary, type PlanPreview, type ProjectDetail, type ProjectListItem, type PlanItem, type MemoData, type MemoRecord, type MyProfile, type WorkgroupMemoSettings } from '@kpp/domain';
 import { createMemoryEnv, type MemoryEnv } from '../src/memory';
 import { handle } from '../src/core/router';
 import { setSuperAdmin } from '../src/core/auth';
@@ -135,7 +135,8 @@ describe('selecting leaf activities per workgroup', () => {
     const { detail } = importPlan();
     const prod = adminFor('0844444444', 'PROD');
     const anyLeaf = detail.items.find((i) => i.isLeaf)!;
-    expect(call('plans.assign', { itemIds: [anyLeaf.id], workgroupId: wg('FARMER') }, prod).error?.code).toBe('FORBIDDEN_SCOPE');
+    // ADR-011: กำหนดกลุ่มงานให้กลุ่มอื่นได้อิสระ
+    expect(ok<AssignResult>('plans.assign', { itemIds: [anyLeaf.id], workgroupId: wg('FARMER') }, prod).assigned).toBe(1);
     const parent = detail.items.find((i) => !i.isLeaf && i.kind === 'ACTIVITY')!;
     expect(ok<AssignResult>('plans.assign', { itemIds: [parent.id], workgroupId: wg('PROD') }, prod).skipped[0].reason).toContain('กิจกรรมย่อยสุดท้าย');
   });
@@ -169,6 +170,36 @@ describe('selecting leaf activities per workgroup', () => {
     const s = ok<{ totals: { currentBudget: number } }>('public.summary', { fiscalYear: 2570 });
     expect(s.totals.currentBudget).toBe(242_986_200);
     expect(ok<PlanDocSummary[]>('plans.list', { fiscalYear: 2570 }, superToken)[0]).toMatchObject({ assignedCount: 87, assignedSatang: 242_986_200 });
+  });
+
+  it('lets staff move any item, edit their items, adjust budget with a reason and add their own activities', () => {
+    const { detail } = importPlan();
+    const prod = adminFor('0811111111', 'PROD');
+    const farmer = adminFor('0822222222', 'FARMER');
+    const lf = detail.items.filter((i) => i.isLeaf)[3];
+    ok('plans.assign', { itemIds: [lf.id], workgroupId: wg('FARMER') }, farmer);
+    // ย้ายรายการของกลุ่มอื่นมาได้อิสระ
+    expect(ok<AssignResult>('plans.assign', { itemIds: [lf.id], workgroupId: wg('PROD'), reassign: true }, prod).assigned).toBe(1);
+    let it0 = ok<PlanDetail>('plans.get', { id: detail.doc.id }, prod).items.find((i) => i.id === lf.id)!;
+    expect(it0.workgroupId).toBe(wg('PROD'));
+    // กลุ่มอื่นแก้รายละเอียดไม่ได้ (ต้องย้ายก่อน)
+    expect(call('plans.updateItem', { id: lf.id, version: it0.version, name: 'x ชื่อใหม่' }, farmer).error?.code).toBe('FORBIDDEN_SCOPE');
+    it0 = ok<PlanItem>('plans.updateItem', { id: lf.id, version: it0.version, name: 'ชื่อกิจกรรมที่ปรับแล้ว', unit: 'ราย', quantity: 30 }, prod);
+    const d1 = ok<PlanDetail>('plans.get', { id: detail.doc.id }, prod);
+    const before = d1.activities[it0.activityId].budget;
+    expect(call('plans.adjustBudget', { id: lf.id, deltaSatang: 1000_00, reason: '', idempotencyKey: 'a1' }, prod).error?.code).toBe('VALIDATION_FAILED');
+    expect(ok<{ budget: number }>('plans.adjustBudget', { id: lf.id, deltaSatang: 1000_00, reason: 'ได้รับโอนเพิ่ม', idempotencyKey: 'a1' }, prod).budget).toBe(before + 1000_00);
+    expect(ok<{ budget: number }>('plans.adjustBudget', { id: lf.id, deltaSatang: -500_00, reason: 'โอนคืน', idempotencyKey: 'a2' }, prod).budget).toBe(before + 500_00);
+    // ยอดตามแผนของกรมไม่เปลี่ยน
+    expect(ok<PlanDetail>('plans.get', { id: detail.doc.id }, prod).items.find((i) => i.id === lf.id)!.amountSatang).toBe(lf.amountSatang);
+    // เพิ่มกิจกรรมเอง + กำหนดกลุ่มทันที แล้วลบได้ (ยังไม่เบิก)
+    const parent = detail.items.find((i) => i.id === lf.id && false) ?? detail.items.find((i) => !i.isLeaf && i.kind === 'ACTIVITY')!;
+    const added = ok<PlanItem>('plans.addItem', { parentId: parent.id, name: 'กิจกรรมเพิ่มเติมของกลุ่ม', unit: 'ครั้ง', quantity: 2, amountSatang: 3000_00, workgroupId: wg('PROD') }, prod);
+    expect(added).toMatchObject({ manual: true, isLeaf: true, workgroupId: wg('PROD') });
+    expect(ok<Array<{ activityName: string; budget: number }>>('disbursements.entryList', { fiscalYear: 2570 }, prod).find((x) => x.activityName === 'กิจกรรมเพิ่มเติมของกลุ่ม')?.budget).toBe(3000_00);
+    expect(call('plans.deleteItem', { id: lf.id }, prod).error?.message).toContain('เพิ่มเอง');
+    ok('plans.deleteItem', { id: added.id, reason: 'ซ้ำ' }, prod);
+    expect(ok<PlanDetail>('plans.get', { id: detail.doc.id }, prod).items.some((i) => i.id === added.id)).toBe(false);
   });
 
   it('hides a workgroup from public pages without affecting staff work', () => {
@@ -330,7 +361,6 @@ describe('หน่วยดำเนินการ (ADR-006)', () => {
     ok('activities.setUnitsBulk', { activityIds: [item.activityId], unitIds: districts().slice(0, 2) }, superToken);
     const prod = adminFor('0844444444', 'PROD');
     // admin กลุ่มเดียวย้ายไปกลุ่มที่ตนไม่มีสิทธิ์ไม่ได้
-    expect(call('plans.assign', { itemIds: [item.id], workgroupId: wg('FARMER'), reassign: true }, prod).error?.code).toBe('FORBIDDEN_SCOPE');
     const moved = ok<AssignResult>('plans.assign', { itemIds: [item.id], workgroupId: wg('FARMER'), reassign: true }, superToken);
     expect(moved.assigned).toBe(1);
     const d = ok<PlanDetail>('plans.get', { id: detail.doc.id }, superToken);
@@ -515,8 +545,11 @@ describe('บันทึกข้อความตรวจสอบเอก�
     const { item, staff } = setup();
     ok('profile.save', { title: 'นาง', fullName: 'สมใจ ใจดี', position: 'เจ้าพนักงานการเกษตรชำนาญงาน' }, staff);
     const c = ok<Ctx2>('memos.context', { projectId: item.projectId, activityId: item.activityId }, staff);
-    const data = { ...c.draft, docNumber: '7', expense: 'ค่าวัสดุ', requestSatang: 500_00 };
+    const data = { ...c.draft, docNumber: '7', expense: 'ค่าวัสดุ', requestSatang: 500_00, head: { name: 'นางสาวผู้รักษาการ ทดสอบ', position: 'นักวิชาการส่งเสริมการเกษตรชำนาญการ', line2: 'รักษาการหัวหน้ากลุ่ม' } };
     const m = ok<MemoRecord>('memos.create', { projectId: item.projectId, activityId: item.activityId, data, idempotencyKey: 'e1' }, staff);
+    // จำผู้ลงนามฝั่งขวาล่าสุดไว้กับกลุ่ม → ฉบับถัดไปเติมให้
+    expect(ok<Ctx2>('memos.context', { projectId: item.projectId, activityId: item.activityId }, staff).draft.head).toEqual(data.head);
+    expect(ok<WorkgroupMemoSettings>('memos.saveHead', { projectId: item.projectId, head: { name: 'นายหัวหน้า ใหม่', position: 'ผอ.', line2: '' }, fax: '0-5571-1111' }, staff)).toMatchObject({ headName: 'นายหัวหน้า ใหม่', headLine2: '', memoFax: '0-5571-1111' });
     // แก้ข้อความ (ชิดขอบทั้งสองด้าน + ข้อความแก้เอง) → ฉบับที่ 2
     const body = [`ข้อความแก้เอง ยอด ${formatMoneyPlain(m.data.budgetSatang)} เบิกมาแล้ว 0 ครั้งนี้ 500 คงเหลือ ${formatMoneyPlain(m.data.budgetSatang - 500_00)}`];
     const r2 = ok<MemoRecord>('memos.update', { id: m.id, version: m.version, data: { ...m.data, align: 'justify', bodyOverride: body } }, staff);

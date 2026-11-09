@@ -70,7 +70,21 @@ a:hover { color: var(--forest-2); }
 .nav a:focus-visible { outline: 3px solid #f2cf7a; outline-offset: 2px; }
 .topbar-inner > .brand { order: 0; }
 .topbar-inner > .text-size { order: 1; }
+.topbar-inner > .auth-area { order: 1; }
 .topbar-inner > .nav { order: 2; flex-basis: 100%; }
+/* ด้านขวาของหัวเว็บ: ปุ่มเข้าสู่ระบบ หรือบัตรผู้ใช้ (ชื่อ/บทบาท/กลุ่ม) + ออกจากระบบ */
+.auth-area { display: flex; align-items: center; gap: var(--s2); }
+.login-btn { display: inline-flex; align-items: center; min-height: 48px; padding: var(--s2) var(--s4); border-radius: var(--r-sm); background: #f2cf7a; color: var(--forest-ink); font-weight: 700; font-size: 1.0625rem; text-decoration: none; }
+.login-btn:hover { background: #f7dc9a; color: var(--forest-ink); }
+.login-btn[aria-current='page'] { box-shadow: inset 0 -3px 0 var(--forest-ink); }
+.login-btn:focus-visible, .user-chip:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.user-chip { display: flex; align-items: center; gap: var(--s2); min-height: 48px; padding: 4px var(--s3) 4px 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.12); color: #fff; text-decoration: none; max-width: 340px; }
+.user-chip:hover { background: rgba(255, 255, 255, 0.2); color: #fff; }
+.user-ava { width: 40px; height: 40px; flex: none; border-radius: 50%; background: #f2cf7a; color: var(--forest-ink); display: grid; place-items: center; font-weight: 700; font-size: 1.125rem; }
+.user-txt { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.user-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-role { font-size: var(--fs-xs); opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.auth-area .nav-btn { min-height: 44px; }
 .text-size { display: flex; gap: 2px; margin-left: auto; background: rgba(255, 255, 255, 0.1); border-radius: var(--r-sm); padding: 2px; }
 .text-size button { min-width: 44px; min-height: 44px; border: 0; border-radius: 6px; background: transparent; color: #eef4ef; font: inherit; font-weight: 700; cursor: pointer; }
 .text-size button:nth-child(1) { font-size: 1rem; }
@@ -84,6 +98,10 @@ html[data-text-size='2'] { font-size: 125%; }
   .nav { display: grid; grid-template-columns: 1fr 1fr; width: 100%; gap: 4px; }
   .nav a { justify-content: center; text-align: center; padding: var(--s2); font-size: 1.0625rem; }
   .text-size { margin-left: 0; }
+  .auth-area { margin-left: auto; }
+  .user-chip { padding-right: 4px; }
+  .user-txt { display: none; }
+  .login-btn { padding: var(--s2) var(--s3); font-size: 1rem; }
 }
 .demo-band { background: var(--straw); color: var(--ink); font-size: var(--fs-sm); text-align: center; padding: var(--s1) var(--s4); }
 main { max-width: var(--maxw); margin: 0 auto; padding: var(--s5) var(--s4) var(--s8); }
@@ -225,18 +243,26 @@ dialog.sheet::backdrop { background: rgba(22, 40, 32, 0.45); }
 /* ===== Admin ===== */
 .admin-shell { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: var(--s5); }
 .side { position: sticky; top: var(--s4); align-self: start; display: flex; flex-direction: column; gap: 2px; }
-.side { gap: 6px; }
-/* เมนูด้านซ้าย: ทุกเมนูเป็นปุ่มมีกรอบ/พื้น เห็นชัด; เมนูปัจจุบันพื้นเขียวเข้ม + แถบสีทองด้านซ้าย */
-.side a { display: flex; align-items: center; min-height: 48px; text-decoration: none; color: var(--forest-ink); background: var(--paper); border: 1.5px solid #c9d6cc; border-left: 6px solid #c9d6cc; padding: var(--s2) var(--s3); border-radius: var(--r-sm); font-size: 1.0625rem; font-weight: 600; box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04); }
-.side a:hover { background: #e9f1eb; border-color: var(--forest); }
-.side a[aria-current='page'] { background: var(--forest); color: #fff; border-color: var(--forest); border-left-color: #f2cf7a; }
+.side { gap: 4px; }
+/* เมนูด้านซ้าย: ใช้ 2 สี (เขียว/ทอง) แยกหมวดด้วยเฉดสี — แถบซ้ายและพื้นอ่อนตามหมวด, เมนูปัจจุบันพื้นเข้มตามหมวด */
+.side-sec { --sec: var(--forest); --sec-bg: #eef4ef; --sec-ink: var(--forest-ink); --sec-on: #fff; display: flex; flex-direction: column; gap: 4px; padding: var(--s2); border-radius: var(--r-md); background: var(--sec-bg); }
+.side-sec + .side-sec { margin-top: var(--s2); }
+.sec-work { --sec: #1f4d3a; --sec-bg: #e3eee7; --sec-ink: #163a2b; }
+.sec-track { --sec: #4f8a6c; --sec-bg: #eff6f1; --sec-ink: #1f4d3a; }
+.sec-ref { --sec: #c99a2e; --sec-bg: #fbf5e4; --sec-ink: #5c4512; --sec-on: #2b2108; }
+.sec-admin { --sec: #8a6414; --sec-bg: #f6edd6; --sec-ink: #4a360a; }
+.side a { display: flex; align-items: center; min-height: 44px; text-decoration: none; color: var(--sec-ink, var(--forest-ink)); background: var(--paper); border: 1px solid color-mix(in srgb, var(--sec, #c9d6cc) 35%, transparent); border-left: 5px solid var(--sec, #c9d6cc); padding: 6px var(--s3); border-radius: var(--r-sm); font-size: 1.0625rem; font-weight: 600; line-height: 1.3; }
+.side a:hover { border-color: var(--sec, var(--forest)); background: #fff; }
+.side a[aria-current='page'] { background: var(--sec, var(--forest)); color: var(--sec-on, #fff); border-color: var(--sec, var(--forest)); }
 .side a:focus-visible { outline: 3px solid #f2cf7a; outline-offset: 2px; }
-.side-h { margin: var(--s3) 0 0; padding: 0 var(--s1); font-size: var(--fs-xs); font-weight: 700; color: var(--ink-3); letter-spacing: 0.02em; }
-.side .who { padding: var(--s3); margin-bottom: var(--s2); border-radius: var(--r-md); background: var(--paper); box-shadow: var(--shadow); font-size: var(--fs-sm); }
+.side-h { margin: 0 0 2px; padding: 0 var(--s1); font-size: var(--fs-sm); font-weight: 700; color: var(--sec-ink, var(--ink-3)); display: flex; align-items: center; gap: 6px; }
+.side-h::before { content: ''; width: 10px; height: 10px; border-radius: 3px; background: var(--sec, var(--ink-3)); }
 @media (max-width: 860px) {
   .admin-shell { grid-template-columns: 1fr; }
   .side { position: static; flex-direction: row; align-items: center; overflow-x: auto; padding-bottom: 4px; }
-  .side .who, .side-h { display: none; }
+  .side-h { display: none; }
+  .side-sec { flex-direction: row; padding: 4px; flex: none; }
+  .side-sec + .side-sec { margin-top: 0; }
   .side a, .side button { white-space: nowrap; flex: none; }
 }
 .dropzone { display: block; border: 2px dashed #9fb3a5; border-radius: var(--r-lg); padding: var(--s6) var(--s5); background: var(--paper); text-align: center; cursor: pointer; }
@@ -780,3 +806,25 @@ input.is-invalid { border-color: var(--clay); background: #fbeeea; }
   .work-ctx-mobile .work-ctx { grid-template-columns: 1fr 1fr; }
   .work-ctx-mobile .work-ctx-h, .work-ctx-mobile .work-ctx-ro, .work-ctx-mobile .linklike { grid-column: 1 / -1; }
 }
+
+/* ===== แผนงาน: แก้รายละเอียด / ปรับงบ / เพิ่มกิจกรรม (ADR-011) ===== */
+.ob-project-head { grid-template-columns: 2.25rem 1fr auto auto; }
+.pb-add { white-space: nowrap; align-self: center; }
+.pb-tools { display: flex; flex-wrap: wrap; gap: var(--s3); margin-top: 4px; }
+.link-btn { background: none; border: 0; padding: 4px 0; min-height: 32px; color: var(--forest); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; font: inherit; font-size: var(--fs-sm); font-weight: 600; }
+.link-btn:hover { color: var(--forest-2); }
+.link-btn.is-danger { color: var(--clay); }
+.link-btn:disabled { opacity: 0.5; cursor: default; }
+.badge-manual { background: #f6edd6; color: #6b4c0c; margin-left: 6px; vertical-align: middle; }
+.pb-plan { color: var(--ink-3); text-decoration: line-through; }
+.item-form { display: grid; gap: var(--s2); padding: var(--s3) var(--s4); margin: var(--s2) 0; border: 1px solid #c9d6cc; border-left: 5px solid var(--forest); border-radius: var(--r-sm); background: #f7faf7; }
+.item-form .h-sm { margin: 0; font-size: var(--fs-md); }
+.item-form .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--s2) var(--s3); }
+.item-form .segmented { justify-self: start; }
+.pb-add-form { margin: var(--s2) var(--s4); }
+@media (max-width: 640px) {
+  .ob-project-head { grid-template-columns: 2.25rem 1fr; }
+  .ob-project-head .num, .ob-project-head .pb-add { grid-column: 2; justify-self: start; }
+  .pb-add-form { margin: var(--s2); }
+}
+.head-save { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-top: var(--s2); }

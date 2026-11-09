@@ -213,7 +213,9 @@ export function assignPlanItems(ctx: Ctx, b: { itemIds: string[]; workgroupId: s
   const wg = live(ctx.env.db.list<Workgroup>('Workgroups')).find((g) => g.id === b.workgroupId);
   if (!wg) throw new AppError('VALIDATION_FAILED', 'กรุณาเลือกกลุ่มงาน');
   if (wg.noActivities) throw new AppError('VALIDATION_FAILED', `${wg.name}ไม่รับผิดชอบกิจกรรมในแผน`);
-  if (!canAccessWorkgroup(u, wg.id)) throw new AppError('FORBIDDEN_SCOPE', 'เลือกรายการให้กลุ่มงานอื่นไม่ได้');
+  // ADR-011: เจ้าหน้าที่ทุกบทบาทกำหนด/ย้ายกลุ่มงานของรายการในแผนได้อิสระ (บันทึกประวัติทุกครั้ง)
+  // งานภายใน (สร้าง/ย้ายโครงการ กิจกรรม งบ) ทำในนามระบบ เพราะกลุ่มปลายทางอาจไม่ใช่กลุ่มของผู้ใช้
+  const sys: Ctx = { ...ctx, user: { ...u, workgroupIds: null } };
   const ids = [...new Set((b.itemIds ?? []).map(String))].slice(0, 300);
   if (!ids.length) throw new AppError('VALIDATION_FAILED', 'ยังไม่ได้เลือกรายการ');
   const all = live(ctx.env.db.list<PlanItem>('PlanItems'));
@@ -227,10 +229,9 @@ export function assignPlanItems(ctx: Ctx, b: { itemIds: string[]; workgroupId: s
     let carry: { shares: ActivityUnit[]; planQuarters: string } | null = null;
     if (item.workgroupId) {
       if (!b.reassign) { skipped.push({ id, reason: 'กลุ่มงานอื่นเลือกรายการนี้แล้ว' }); continue; }
-      if (!canAccessWorkgroup(u, item.workgroupId)) { skipped.push({ id, reason: 'ย้ายรายการของกลุ่มงานอื่นได้เฉพาะผู้ดูแลระบบ' }); continue; }
       const oldAct = live(ctx.env.db.list<Activity>('Activities')).find((a) => a.id === item.activityId);
       carry = { shares: activityUnitsOf(ctx, item.activityId), planQuarters: oldAct?.planQuarters ?? '' };
-      const r = unassignPlanItems(ctx, { itemIds: [id] });
+      const r = unassignPlanItems(sys, { itemIds: [id] });
       if (r.skipped.length) { skipped.push({ id, reason: r.skipped[0].reason }); continue; }
       Object.assign(item, findById<PlanItem>(ctx, 'PlanItems', id, 'รายการ'));
     }
@@ -243,18 +244,18 @@ export function assignPlanItems(ctx: Ctx, b: { itemIds: string[]; workgroupId: s
     let project = live(ctx.env.db.list<Project>('Projects')).find((p) => p.planDocId === doc.id && Number(p.planNodeSeq) === projectNode.seq && p.workgroupId === wg.id);
     if (!project) {
       const attempt = ctx.env.db.list<Project>('Projects').filter((p) => p.planDocId === doc.id && Number(p.planNodeSeq) === projectNode.seq && p.workgroupId === wg.id).length;
-      project = createProject(ctx, withPlanLink({
+      project = createProject(sys, withPlanLink({
         idempotencyKey: `plan:${doc.id}:${projectNode.seq}:${wg.id}:${attempt}`, fiscalYear: doc.fiscalYear, fundingSourceId: doc.fundingSourceId,
         workgroupId: wg.id, projectCode: projectCodeFor(doc, projectNode, wg) + (attempt ? `-${attempt + 1}` : ''), name: projectNode.name,
         description: planNode ? planNode.name : '', status: 'PLANNED' as const, published: true,
       }, { planDocId: doc.id, planNodeSeq: projectNode.seq }));
     }
-    const activity = createActivity(ctx, withPlanLink({
+    const activity = createActivity(sys, withPlanLink({
       idempotencyKey: `plan:${item.id}:${item.version}`, projectId: project.id, activityCode: item.code, name: item.name,
       unit: item.unit, targetQty: Number(item.quantity) || 0,
     }, { planDocId: doc.id, planNodeSeq: projectNode.seq, planItemId: item.id }));
     if (Number(item.amountSatang) > 0) {
-      createAllocation(ctx, {
+      createAllocation(sys, {
         idempotencyKey: `plan:${item.id}:${item.version}:alloc`, projectId: project.id, activityId: activity.id, type: 'ORIGINAL',
         amountSatang: Number(item.amountSatang), note: `${doc.title}${doc.docNo ? ` (${doc.docNo})` : ''}`, source: `PLAN:${item.id}`,
       });
@@ -273,7 +274,7 @@ export function assignPlanItems(ctx: Ctx, b: { itemIds: string[]; workgroupId: s
     const next = { ...item, workgroupId: wg.id, projectId: project.id, activityId: activity.id, assignedAt: nowIso(ctx), assignedBy: u.sub, version: item.version + 1, updatedAt: nowIso(ctx), updatedBy: u.sub };
     ctx.env.db.update('PlanItems', item.id, next);
     Object.assign(item, next);
-    audit(ctx, 'plan.assign', 'PlanItem', item.id, { projectId: project.id, after: { workgroupId: wg.id, code: item.code, amount: item.amountSatang } });
+    audit(ctx, 'plan.assign', 'PlanItem', item.id, { projectId: project.id, before: carry ? { moved: true } : undefined, after: { workgroupId: wg.id, code: item.code, amount: item.amountSatang } });
     assigned++;
   }
   if (assigned) bumpDataVersion(ctx);
@@ -290,7 +291,6 @@ export function unassignPlanItems(ctx: Ctx, b: { itemIds: string[] }): { unassig
   for (const id of ids) {
     const item = all.find((i) => i.id === id);
     if (!item || !item.workgroupId) { skipped.push({ id, reason: 'รายการนี้ยังไม่มีกลุ่มงานเลือก' }); continue; }
-    if (!canAccessWorkgroup(u, item.workgroupId)) { skipped.push({ id, reason: 'เป็นรายการของกลุ่มงานอื่น' }); continue; }
     const used = live(ctx.env.db.list<Disbursement>('Disbursements')).some((d) => d.activityId === item.activityId && d.status !== 'VOID');
     if (used) { skipped.push({ id, reason: 'มีรายการเบิกจ่ายแล้ว — ยกเลิกรายการเบิกจ่ายก่อน' }); continue; }
     const at = nowIso(ctx);
@@ -323,3 +323,120 @@ export function importPlanTable(ctx: Ctx, table: unknown[][], meta: { fiscalYear
   return commitPlan(ctx, { ...meta, table: normalizePlanTable(table).table, acceptWarnings: true, replaceExisting: true });
 }
 
+
+/* --------------------- แก้ไข/เพิ่มรายการในแผน (ADR-011) --------------------- */
+
+/** แก้ไขได้: รายการที่ยังไม่มีกลุ่ม หรือของกลุ่มในสิทธิ์ (กลุ่มอื่นให้ย้ายมาก่อน — ย้ายได้อิสระ) */
+function editableItem(ctx: Ctx, id: string): PlanItem {
+  const u = requireRole(ctx, 'admin', 'minisuper', 'superadmin');
+  const item = findById<PlanItem>(ctx, 'PlanItems', String(id), 'รายการในแผน');
+  if (!item.isLeaf) throw new AppError('VALIDATION_FAILED', 'แก้ไขได้เฉพาะกิจกรรมย่อยสุดท้าย');
+  if (item.workgroupId && !canAccessWorkgroup(u, item.workgroupId)) {
+    throw new AppError('FORBIDDEN_SCOPE', 'รายการนี้เป็นของกลุ่มงานอื่น — ย้ายมาเป็นของกลุ่มคุณก่อน แล้วจึงแก้ไข');
+  }
+  const doc = findById<PlanDoc>(ctx, 'PlanDocs', item.planDocId, 'แผนงบประมาณ');
+  if (doc.status !== 'ACTIVE') throw new AppError('VALIDATION_FAILED', 'แผนนี้ถูกแทนที่แล้ว');
+  return item;
+}
+
+/** แก้รายละเอียดกิจกรรม (ชื่อ เป้าหมาย หน่วยนับ หมายเหตุ) — ยอดงบใช้ adjustItemBudget */
+export function updatePlanItem(ctx: Ctx, b: { id: string; version: number; name?: string; unit?: string; quantity?: number; note?: string }): PlanItem {
+  const item = editableItem(ctx, b.id);
+  if (Number(b.version) !== Number(item.version)) throw new AppError('VERSION_CONFLICT', 'รายการนี้ถูกแก้ไขโดยผู้อื่น — โหลดใหม่ก่อน');
+  const patch: Partial<PlanItem> = {};
+  if (b.name !== undefined) {
+    patch.name = cleanText(b.name, 300);
+    if (patch.name.length < 3) throw new AppError('VALIDATION_FAILED', 'กรุณากรอกชื่อกิจกรรม');
+  }
+  if (b.unit !== undefined) patch.unit = cleanText(b.unit, 40);
+  if (b.note !== undefined) patch.note = cleanText(b.note, 500);
+  if (b.quantity !== undefined) {
+    const q = Number(b.quantity);
+    if (!Number.isFinite(q) || q < 0) throw new AppError('VALIDATION_FAILED', 'เป้าหมายต้องเป็นตัวเลขไม่ติดลบ');
+    patch.quantity = q;
+  }
+  const u = ctx.user!;
+  const at = nowIso(ctx);
+  if (item.activityId) {
+    const act = findById<Activity>(ctx, 'Activities', item.activityId, 'กิจกรรม');
+    if (patch.quantity !== undefined) {
+      const shares = activityUnitsOf(ctx, item.activityId);
+      const sum = shares.reduce((a, s) => a + Number(s.targetQty || 0), 0);
+      if (sum > 0 && sum !== patch.quantity) {
+        throw new AppError('VALIDATION_FAILED', `เป้าหมายรายพื้นที่รวม ${sum.toLocaleString('th-TH')} ไม่เท่ากับเป้าหมายใหม่ — ปรับที่ "กำหนดพื้นที่" ก่อน`);
+      }
+    }
+    ctx.env.db.update('Activities', act.id, {
+      ...act, name: patch.name ?? act.name, unit: patch.unit ?? act.unit, targetQty: patch.quantity ?? act.targetQty,
+      version: act.version + 1, updatedAt: at, updatedBy: u.sub,
+    });
+  }
+  const next = { ...item, ...patch, version: item.version + 1, updatedAt: at, updatedBy: u.sub };
+  ctx.env.db.update('PlanItems', item.id, next);
+  audit(ctx, 'plan.updateItem', 'PlanItem', item.id, { projectId: item.projectId, before: { name: item.name, unit: item.unit, quantity: item.quantity, note: item.note }, after: patch });
+  bumpDataVersion(ctx);
+  return next;
+}
+
+/** ปรับงบของกิจกรรม (+ เพิ่ม / − ลด) — บันทึกเป็นรายการโอนงบพร้อมเหตุผล ไม่แก้ยอดตามแผนของกรม */
+export function adjustItemBudget(ctx: Ctx, b: { id: string; deltaSatang: number; reason: string; docNo?: string; idempotencyKey: string }): { budget: number } {
+  const item = editableItem(ctx, b.id);
+  if (!item.activityId) throw new AppError('VALIDATION_FAILED', 'กำหนดกลุ่มงานให้รายการนี้ก่อน จึงปรับงบได้');
+  const delta = Math.round(Number(b.deltaSatang) || 0);
+  if (!delta) throw new AppError('VALIDATION_FAILED', 'กรุณาระบุจำนวนเงินที่ปรับ');
+  const reason = cleanText(b.reason, 300);
+  if (reason.length < 3) throw new AppError('VALIDATION_FAILED', 'กรุณาระบุเหตุผลการปรับงบ');
+  createAllocation(ctx, {
+    idempotencyKey: `adjust:${String(b.idempotencyKey)}`, projectId: item.projectId, activityId: item.activityId,
+    type: delta > 0 ? 'TRANSFER_IN' : 'TRANSFER_OUT', amountSatang: Math.abs(delta), docNo: cleanText(b.docNo, 80),
+    note: `ปรับงบ: ${reason}`, source: `ADJUST:${item.id}`,
+  });
+  return { budget: activityState(ctx, findById<Activity>(ctx, 'Activities', item.activityId, 'กิจกรรม')).budget };
+}
+
+/** เพิ่มกิจกรรมนอกแผนที่นำเข้า ใต้หัวข้อโครงการ/กิจกรรมในแผน (และกำหนดกลุ่มงานทันทีถ้าเลือก) */
+export function addPlanItem(ctx: Ctx, b: { parentId: string; name: string; unit?: string; quantity?: number; amountSatang: number; note?: string; workgroupId?: string }): PlanItem {
+  requireRole(ctx, 'admin', 'minisuper', 'superadmin');
+  const parent = findById<PlanItem>(ctx, 'PlanItems', String(b.parentId), 'หัวข้อในแผน');
+  if (parent.isLeaf) throw new AppError('VALIDATION_FAILED', 'เพิ่มได้ใต้หัวข้อโครงการหรือกิจกรรมเท่านั้น');
+  const doc = findById<PlanDoc>(ctx, 'PlanDocs', parent.planDocId, 'แผนงบประมาณ');
+  if (doc.status !== 'ACTIVE') throw new AppError('VALIDATION_FAILED', 'แผนนี้ถูกแทนที่แล้ว');
+  const name = cleanText(b.name, 300);
+  if (name.length < 3) throw new AppError('VALIDATION_FAILED', 'กรุณากรอกชื่อกิจกรรม');
+  const amount = Math.round(Number(b.amountSatang) || 0);
+  if (amount <= 0) throw new AppError('VALIDATION_FAILED', 'กรุณาระบุงบประมาณ');
+  const items = live(ctx.env.db.list<PlanItem>('PlanItems')).filter((i) => i.planDocId === doc.id);
+  const siblings = items.filter((i) => Number(i.parentSeq) === Number(parent.seq));
+  const seq = Math.max(...ctx.env.db.list<PlanItem>('PlanItems').filter((i) => i.planDocId === doc.id).map((i) => Number(i.seq))) + 1;
+  const row: PlanItem = {
+    ...newMeta(ctx), planDocId: doc.id, fiscalYear: doc.fiscalYear, seq, parentSeq: parent.seq, depth: Number(parent.depth) + 1,
+    kind: 'ITEM', number: `${parent.number ? `${parent.number}.` : ''}${siblings.length + 1}*`, name, unit: cleanText(b.unit, 40),
+    quantity: Math.max(0, Number(b.quantity) || 0), amountSatang: amount, isLeaf: true, planIndex: parent.planIndex,
+    projectSeq: parent.kind === 'PROJECT' ? parent.seq : Number(parent.projectSeq) || parent.seq,
+    activitySeq: parent.kind === 'ACTIVITY' ? parent.seq : Number(parent.activitySeq) || 0,
+    code: '', workgroupId: '', projectId: '', activityId: '', assignedAt: '', assignedBy: '', manual: true, note: cleanText(b.note, 500),
+  };
+  ctx.env.db.insert('PlanItems', [row as unknown as Record<string, unknown>]);
+  audit(ctx, 'plan.addItem', 'PlanItem', row.id, { after: { name, amount, parent: parent.name } });
+  bumpDataVersion(ctx);
+  if (b.workgroupId) {
+    const r = assignPlanItems(ctx, { itemIds: [row.id], workgroupId: String(b.workgroupId) });
+    if (r.skipped.length) throw new AppError('VALIDATION_FAILED', r.skipped[0].reason);
+  }
+  return findById<PlanItem>(ctx, 'PlanItems', row.id, 'รายการ');
+}
+
+/** ลบกิจกรรมที่เพิ่มเอง — ต้องยังไม่มีการเบิกจ่าย */
+export function deletePlanItem(ctx: Ctx, b: { id: string; reason?: string }): { ok: true } {
+  const item = editableItem(ctx, b.id);
+  if (!item.manual) throw new AppError('VALIDATION_FAILED', 'ลบได้เฉพาะกิจกรรมที่เพิ่มเอง (รายการจากแผนของกรมใช้ "ยกเลิกกลุ่ม" แทน)');
+  if (item.workgroupId) {
+    const r = unassignPlanItems(ctx, { itemIds: [item.id] });
+    if (r.skipped.length) throw new AppError('VALIDATION_FAILED', r.skipped[0].reason);
+  }
+  const cur = findById<PlanItem>(ctx, 'PlanItems', item.id, 'รายการ');
+  ctx.env.db.update('PlanItems', cur.id, { ...cur, isDeleted: true, version: cur.version + 1, updatedAt: nowIso(ctx), updatedBy: ctx.user!.sub });
+  audit(ctx, 'plan.deleteItem', 'PlanItem', cur.id, { before: { name: cur.name, amount: cur.amountSatang }, reason: cleanText(b.reason, 300) });
+  bumpDataVersion(ctx);
+  return { ok: true };
+}

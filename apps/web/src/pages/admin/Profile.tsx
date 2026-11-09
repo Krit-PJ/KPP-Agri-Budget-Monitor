@@ -59,7 +59,7 @@ const EMPTY_HINT = {
   headLine2: 'เช่น รักษาการหัวหน้ากลุ่มอารักขาพืช',
 };
 
-/** ส่วนราชการ โทรสาร ส่วนหน้าเลขที่ และผู้ลงนามฝั่งขวา — แก้ไขได้โดย Mini Super / Super Admin */
+/** ส่วนราชการ โทรศัพท์ ส่วนหน้าเลขที่ และผู้ลงนามฝั่งขวา — แก้ไขได้โดย Mini Super / Super Admin */
 function GroupSettings({ user }: { user: SessionUser }) {
   const s = useApi('memos.groupSettings', {});
   const canEdit = user.role !== 'admin';
@@ -98,7 +98,7 @@ function GroupCard({ g, canEdit, onSaved }: { g: WorkgroupMemoSettings; canEdit:
       {error && <ErrorBox error={error} />}
       <div className="form-grid">
         {field('memoOrg', 'ส่วนราชการ', true)}
-        {field('memoFax', 'โทรสาร')}
+        {field('memoFax', 'โทรศัพท์')}
         {field('memoPrefix', 'ส่วนหน้าเลขที่หนังสือ ("ที่")')}
         {field('headName', 'ผู้ลงนามฝั่งขวา (ชื่อพร้อมคำนำหน้า)')}
         {field('headPosition', 'ตำแหน่ง')}

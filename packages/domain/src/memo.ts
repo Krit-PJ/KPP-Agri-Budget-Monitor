@@ -165,6 +165,7 @@ export interface MemoChecks {
 export interface MemoData {
   /** ส่วนราชการ เช่น "กลุ่มอารักขาพืช สำนักงานเกษตรจังหวัดกำแพงเพชร" */
   orgLine: string;
+  /** หมายเลขโทรศัพท์ (ชื่อฟิลด์เดิม fax เพื่อไม่ต้องย้ายข้อมูล) */
   fax: string;
   /** ส่วนหน้าของเลขที่ เช่น "กพ 0009.4" */
   docPrefix: string;
@@ -262,10 +263,10 @@ export function memoParagraphParts(d: MemoData, opts: { keepEmpty?: boolean } = 
   if (d.mainActivityCode) lines.push([P('รหัสกิจกรรมหลัก '), P(d.mainActivityCode, 'mainActivityCode')]);
   if (d.subActivityName) lines.push([P('กิจกรรมย่อย '), P(d.subActivityName, 'subActivityName')]);
   lines.push(
-    [P('ยอดเงินงบประมาณ '), ...moneyParts(d.budgetSatang, 'budget'), P(' (รวมทั้งหมดของกิจกรรมนี้)')],
-    [P('ขอเบิกเงิน/ยืมเงินราชการมาแล้ว เป็นจำนวนเงิน '), ...moneyParts(d.previousSatang, 'previous'), P(' (รวมทุกครั้งทุกอำเภอ)')],
-    [P('ขอเบิกเงินราชการครั้งนี้ เป็นจำนวนเงิน '), ...moneyParts(d.requestSatang, 'request'), P(' (เฉพาะครั้งนี้)')],
-    [P('งบประมาณคงเหลือ '), ...moneyParts(memoRemaining(d), 'remaining'), P(' (คงเหลือทั้งหมดของกิจกรรมนี้)')],
+    [P('ยอดเงินงบประมาณ '), ...moneyParts(d.budgetSatang, 'budget')],
+    [P('ขอเบิกเงิน/ยืมเงินราชการมาแล้ว เป็นจำนวนเงิน '), ...moneyParts(d.previousSatang, 'previous')],
+    [P('ขอเบิกเงินราชการครั้งนี้ เป็นจำนวนเงิน '), ...moneyParts(d.requestSatang, 'request')],
+    [P('งบประมาณคงเหลือ '), ...moneyParts(memoRemaining(d), 'remaining')],
   );
   return lines;
 }

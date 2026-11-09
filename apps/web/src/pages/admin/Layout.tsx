@@ -15,7 +15,6 @@ import Publishing from './Publishing';
 import { useApi } from '../../components/ui';
 import { WorkContextBar, WorkContextProvider } from '../../components/WorkContext';
 
-const ROLE_LABEL: Record<SessionUser['role'], string> = { admin: 'Admin', minisuper: 'Mini Super Admin', superadmin: 'Super Admin' };
 
 export default function AdminLayout({ user }: { user: SessionUser }) {
   const canManageUsers = user.role !== 'admin';
@@ -25,29 +24,32 @@ export default function AdminLayout({ user }: { user: SessionUser }) {
     <WorkContextProvider user={user}>
     <div className="admin-shell">
       <nav className="side" aria-label="เมนูเจ้าหน้าที่">
-        <div className="who">
-          <strong>{user.name}</strong>
-          <div className="xs muted">{ROLE_LABEL[user.role]}</div>
-          <div className="xs muted">{user.workgroupName}</div>
-        </div>
         <WorkContextBar />
-        <p className="side-h">งานประจำ</p>
-        <NavLink to="/admin/record">บันทึกผลการเบิกจ่าย</NavLink>
-        <NavLink to="/admin/plans">บันทึกแผนงานและผู้รับผิดชอบ</NavLink>
-        <NavLink to="/admin/profile">ข้อมูลของฉัน / หัวบันทึกข้อความ</NavLink>
-        <NavLink to="/admin/codes">รหัสงบประมาณ</NavLink>
-        <p className="side-h">ติดตามและรายงาน</p>
-        <NavLink to="/admin" end>หน้าหลัก</NavLink>
-        <NavLink to="/admin/reports">รายงาน</NavLink>
-        <NavLink to="/admin/targets">เป้าหมายการเบิกจ่าย</NavLink>
-        <NavLink to="/admin/projects">รายโครงการ</NavLink>
+        {/* 2 สี (เขียว/ทอง) แยกหมวดด้วยเฉดสี: งานประจำ = เขียวเข้ม, ติดตาม = เขียวอ่อน, อ้างอิง = ทองอ่อน, ผู้ดูแล = ทองเข้ม */}
+        <div className="side-sec sec-work">
+          <p className="side-h">งานประจำ</p>
+          <NavLink to="/admin/record">บันทึกผลการเบิกจ่าย</NavLink>
+          <NavLink to="/admin/plans">บันทึกแผนงานและผู้รับผิดชอบ</NavLink>
+        </div>
+        <div className="side-sec sec-track">
+          <p className="side-h">ติดตามและรายงาน</p>
+          <NavLink to="/admin" end>หน้าหลัก</NavLink>
+          <NavLink to="/admin/reports">รายงาน</NavLink>
+          <NavLink to="/admin/targets">เป้าหมายการเบิกจ่าย</NavLink>
+          <NavLink to="/admin/projects">รายโครงการ</NavLink>
+        </div>
+        <div className="side-sec sec-ref">
+          <p className="side-h">ข้อมูลอ้างอิงและตั้งค่า</p>
+          <NavLink to="/admin/codes">รหัสงบประมาณ</NavLink>
+          <NavLink to="/admin/profile">ข้อมูลของฉัน / หัวบันทึกข้อความ</NavLink>
+        </div>
         {canManageUsers && (
-          <>
+          <div className="side-sec sec-admin">
             <p className="side-h">ผู้ดูแลระบบ</p>
             <NavLink to="/admin/users">ผู้ใช้งาน</NavLink>
             <NavLink to="/admin/publishing">การเผยแพร่ข้อมูลกลุ่มงาน</NavLink>
             {isSuper && <NavLink to="/admin/system">ตั้งค่าระบบ</NavLink>}
-          </>
+          </div>
         )}
       </nav>
       <div style={{ minWidth: 0 }}>

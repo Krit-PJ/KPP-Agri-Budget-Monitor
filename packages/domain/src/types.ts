@@ -48,7 +48,7 @@ export interface Workgroup extends Meta {
   orgId: string; code: string; name: string; noActivities: boolean;
   /** ปิดการเผยแพร่บนหน้าสาธารณะชั่วคราว (ข้อมูลยังไม่พร้อม) — งานเจ้าหน้าที่ใช้ได้ตามปกติ */
   hidePublic?: boolean;
-  /** หัวบันทึกข้อความ: ส่วนราชการ, โทรสาร, ส่วนหน้าเลขที่ (เช่น "กพ 0009.4") */
+  /** หัวบันทึกข้อความ: ส่วนราชการ, โทรศัพท์, ส่วนหน้าเลขที่ (เช่น "กพ 0009.4") */
   memoOrg?: string; memoFax?: string; memoPrefix?: string;
   /** ผู้ลงนามฝั่งขวา (หัวหน้ากลุ่ม/ผู้รักษาการ) */
   headName?: string; headPosition?: string; headLine2?: string;
@@ -304,6 +304,9 @@ export interface PlanItem extends Meta {
   activityId: string;
   assignedAt: string;
   assignedBy: string;
+  /** เจ้าหน้าที่เพิ่มเอง (นอกแผนที่นำเข้าจากกรม) */
+  manual?: boolean;
+  note?: string;
 }
 
 export type ImportKind = 'BUDGET_SUMMARY' | 'DISBURSEMENT_LIST';

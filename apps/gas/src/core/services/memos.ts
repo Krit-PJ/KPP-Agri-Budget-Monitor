@@ -247,6 +247,44 @@ function rememberCodes(ctx: Ctx, a: Activity, d: MemoData): void {
   audit(ctx, 'activity.codes', 'Activity', cur.id, { projectId: cur.projectId, after: patch });
 }
 
+/**
+ * จำผู้ลงนามฝั่งขวา (หัวหน้ากลุ่ม/ผู้รักษาการ) ล่าสุดไว้กับกลุ่มงาน — ฉบับถัดไปเติมให้อัตโนมัติ
+ * และเติมเบอร์โทรศัพท์/ส่วนหน้าเลขที่/ส่วนราชการ ถ้ากลุ่มยังไม่ได้ตั้งค่า
+ */
+function rememberHead(ctx: Ctx, workgroupId: string, d: Pick<MemoData, 'head' | 'fax' | 'docPrefix' | 'orgLine'>): void {
+  const g = live(ctx.env.db.list<Workgroup>('Workgroups')).find((x) => x.id === workgroupId);
+  if (!g) return;
+  const patch: Partial<Workgroup> = {};
+  const set = <K extends 'headName' | 'headPosition' | 'headLine2' | 'memoFax' | 'memoPrefix' | 'memoOrg'>(k: K, v: string, onlyIfEmpty = false) => {
+    const val = cleanText(v, 200);
+    if (!val || (g[k] ?? '') === val || (onlyIfEmpty && g[k])) return;
+    patch[k] = val;
+  };
+  set('headName', d.head?.name ?? '');
+  set('headPosition', d.head?.position ?? '');
+  if ((d.head?.name ?? '') && (g.headLine2 ?? '') !== cleanText(d.head?.line2 ?? '', 200)) patch.headLine2 = cleanText(d.head?.line2 ?? '', 200);
+  set('memoFax', d.fax, true);
+  set('memoPrefix', d.docPrefix, true);
+  set('memoOrg', d.orgLine, true);
+  if (!Object.keys(patch).length) return;
+  ctx.env.db.update('Workgroups', g.id, { ...g, ...patch, version: g.version + 1, updatedAt: nowIso(ctx), updatedBy: ctx.user?.sub ?? '' });
+  audit(ctx, 'workgroup.memoRemember', 'Workgroup', g.id, { before: { headName: g.headName, headPosition: g.headPosition, headLine2: g.headLine2 }, after: patch });
+}
+
+/** บันทึกผู้ลงนามฝั่งขวาของกลุ่มจากหน้าบันทึกข้อความ (เจ้าหน้าที่ของกลุ่มนั้น) */
+export function saveMemoHead(ctx: Ctx, b: { projectId: string; head: MemoData['head']; fax?: string }): WorkgroupMemoSettings {
+  const p = findById<Project>(ctx, 'Projects', String(b.projectId), 'โครงการ');
+  requireWorkgroup(ctx, p.workgroupId);
+  if (!cleanText(b.head?.name, 120)) throw new AppError('VALIDATION_FAILED', 'กรุณากรอกชื่อหัวหน้ากลุ่ม/ผู้รักษาการ');
+  rememberHead(ctx, p.workgroupId, { head: b.head, fax: '', docPrefix: '', orgLine: '' });
+  if (b.fax !== undefined) {
+    const g = findById<Workgroup>(ctx, 'Workgroups', p.workgroupId, 'กลุ่มงาน');
+    const fax = cleanText(b.fax, 40);
+    if ((g.memoFax ?? '') !== fax) ctx.env.db.update('Workgroups', g.id, { ...g, memoFax: fax, version: g.version + 1, updatedAt: nowIso(ctx), updatedBy: ctx.user?.sub ?? '' });
+  }
+  return toSettings(findById<Workgroup>(ctx, 'Workgroups', p.workgroupId, 'กลุ่มงาน'));
+}
+
 const docUrl = (id: string) => (id && !id.startsWith('mem-') ? `https://docs.google.com/document/d/${id}/edit` : '');
 const pdfUrl = (id: string) => (id && !id.startsWith('mem-') ? `https://drive.google.com/file/d/${id}/view` : '');
 
@@ -298,6 +336,7 @@ export function createMemo(ctx: Ctx, b: { projectId: string; activityId: string;
     date: d.date, docNo, description: `บันทึกข้อความ: ${d.expense}`.slice(0, 500), idempotencyKey: key, source: 'MEMO',
   });
   rememberCodes(ctx, f.activity, d);
+  rememberHead(ctx, f.project.workgroupId, d);
   const memo: Memo = {
     ...newMeta(ctx), projectId: f.project.id, activityId: f.activity.id, disbursementId: disb.id, unitId: disb.unitId, docNo, date: d.date,
     amountSatang: d.requestSatang, data: JSON.stringify(d), revision: 1, docFileId: '', pdfFileId: '', renderStatus: 'PENDING', renderError: '',
@@ -338,6 +377,7 @@ export function updateMemo(ctx: Ctx, b: { id: string; version: number; data: Mem
     disb = r.replacement!;
   }
   rememberCodes(ctx, f.activity, d);
+  rememberHead(ctx, f.project.workgroupId, d);
   const next: Memo = {
     ...cur, disbursementId: disb.id, docNo, date: d.date, amountSatang: d.requestSatang, data: JSON.stringify(d),
     revision: (Number(cur.revision) || 1) + 1, renderStatus: 'PENDING', version: Number(cur.version) + 1, updatedAt: nowIso(ctx), updatedBy: ctx.user?.sub ?? '',

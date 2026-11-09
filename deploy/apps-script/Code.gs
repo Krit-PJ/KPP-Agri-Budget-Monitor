@@ -1716,10 +1716,10 @@ var KPP = (() => {
     if (d.mainActivityCode) lines.push([P("\u0E23\u0E2B\u0E31\u0E2A\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E2B\u0E25\u0E31\u0E01 "), P(d.mainActivityCode, "mainActivityCode")]);
     if (d.subActivityName) lines.push([P("\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E22\u0E48\u0E2D\u0E22 "), P(d.subActivityName, "subActivityName")]);
     lines.push(
-      [P("\u0E22\u0E2D\u0E14\u0E40\u0E07\u0E34\u0E19\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13 "), ...moneyParts(d.budgetSatang, "budget"), P(" (\u0E23\u0E27\u0E21\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14\u0E02\u0E2D\u0E07\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E19\u0E35\u0E49)")],
-      [P("\u0E02\u0E2D\u0E40\u0E1A\u0E34\u0E01\u0E40\u0E07\u0E34\u0E19/\u0E22\u0E37\u0E21\u0E40\u0E07\u0E34\u0E19\u0E23\u0E32\u0E0A\u0E01\u0E32\u0E23\u0E21\u0E32\u0E41\u0E25\u0E49\u0E27 \u0E40\u0E1B\u0E47\u0E19\u0E08\u0E33\u0E19\u0E27\u0E19\u0E40\u0E07\u0E34\u0E19 "), ...moneyParts(d.previousSatang, "previous"), P(" (\u0E23\u0E27\u0E21\u0E17\u0E38\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07\u0E17\u0E38\u0E01\u0E2D\u0E33\u0E40\u0E20\u0E2D)")],
-      [P("\u0E02\u0E2D\u0E40\u0E1A\u0E34\u0E01\u0E40\u0E07\u0E34\u0E19\u0E23\u0E32\u0E0A\u0E01\u0E32\u0E23\u0E04\u0E23\u0E31\u0E49\u0E07\u0E19\u0E35\u0E49 \u0E40\u0E1B\u0E47\u0E19\u0E08\u0E33\u0E19\u0E27\u0E19\u0E40\u0E07\u0E34\u0E19 "), ...moneyParts(d.requestSatang, "request"), P(" (\u0E40\u0E09\u0E1E\u0E32\u0E30\u0E04\u0E23\u0E31\u0E49\u0E07\u0E19\u0E35\u0E49)")],
-      [P("\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13\u0E04\u0E07\u0E40\u0E2B\u0E25\u0E37\u0E2D "), ...moneyParts(memoRemaining(d), "remaining"), P(" (\u0E04\u0E07\u0E40\u0E2B\u0E25\u0E37\u0E2D\u0E17\u0E31\u0E49\u0E07\u0E2B\u0E21\u0E14\u0E02\u0E2D\u0E07\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E19\u0E35\u0E49)")]
+      [P("\u0E22\u0E2D\u0E14\u0E40\u0E07\u0E34\u0E19\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13 "), ...moneyParts(d.budgetSatang, "budget")],
+      [P("\u0E02\u0E2D\u0E40\u0E1A\u0E34\u0E01\u0E40\u0E07\u0E34\u0E19/\u0E22\u0E37\u0E21\u0E40\u0E07\u0E34\u0E19\u0E23\u0E32\u0E0A\u0E01\u0E32\u0E23\u0E21\u0E32\u0E41\u0E25\u0E49\u0E27 \u0E40\u0E1B\u0E47\u0E19\u0E08\u0E33\u0E19\u0E27\u0E19\u0E40\u0E07\u0E34\u0E19 "), ...moneyParts(d.previousSatang, "previous")],
+      [P("\u0E02\u0E2D\u0E40\u0E1A\u0E34\u0E01\u0E40\u0E07\u0E34\u0E19\u0E23\u0E32\u0E0A\u0E01\u0E32\u0E23\u0E04\u0E23\u0E31\u0E49\u0E07\u0E19\u0E35\u0E49 \u0E40\u0E1B\u0E47\u0E19\u0E08\u0E33\u0E19\u0E27\u0E19\u0E40\u0E07\u0E34\u0E19 "), ...moneyParts(d.requestSatang, "request")],
+      [P("\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13\u0E04\u0E07\u0E40\u0E2B\u0E25\u0E37\u0E2D "), ...moneyParts(memoRemaining(d), "remaining")]
     );
     return lines;
   }
@@ -2268,7 +2268,7 @@ var KPP = (() => {
   }
 
   // src/core/schema.ts
-  var SCHEMA_VERSION = "2026.11.09-1";
+  var SCHEMA_VERSION = "2026.11.09-2";
   var META = [
     ["id", "string"],
     ["createdAt", "string"],
@@ -2511,7 +2511,10 @@ var KPP = (() => {
       ["projectId", "string"],
       ["activityId", "string"],
       ["assignedAt", "string"],
-      ["assignedBy", "string"]
+      ["assignedBy", "string"],
+      // รายการที่เจ้าหน้าที่เพิ่มเอง (นอกแผนที่นำเข้า)
+      ["manual", "boolean"],
+      ["note", "string"]
     ]),
     ImportJobs: t("STAGING", [
       ["fileName", "string"],
@@ -4394,7 +4397,7 @@ var KPP = (() => {
     const wg = live(ctx.env.db.list("Workgroups")).find((g) => g.id === b.workgroupId);
     if (!wg) throw new AppError("VALIDATION_FAILED", "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19");
     if (wg.noActivities) throw new AppError("VALIDATION_FAILED", `${wg.name}\u0E44\u0E21\u0E48\u0E23\u0E31\u0E1A\u0E1C\u0E34\u0E14\u0E0A\u0E2D\u0E1A\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E43\u0E19\u0E41\u0E1C\u0E19`);
-    if (!canAccessWorkgroup(u, wg.id)) throw new AppError("FORBIDDEN_SCOPE", "\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E43\u0E2B\u0E49\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19\u0E2D\u0E37\u0E48\u0E19\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49");
+    const sys = { ...ctx, user: { ...u, workgroupIds: null } };
     const ids = [...new Set((b.itemIds ?? []).map(String))].slice(0, 300);
     if (!ids.length) throw new AppError("VALIDATION_FAILED", "\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23");
     const all = live(ctx.env.db.list("PlanItems"));
@@ -4417,13 +4420,9 @@ var KPP = (() => {
           skipped.push({ id, reason: "\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19\u0E2D\u0E37\u0E48\u0E19\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E19\u0E35\u0E49\u0E41\u0E25\u0E49\u0E27" });
           continue;
         }
-        if (!canAccessWorkgroup(u, item.workgroupId)) {
-          skipped.push({ id, reason: "\u0E22\u0E49\u0E32\u0E22\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E02\u0E2D\u0E07\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19\u0E2D\u0E37\u0E48\u0E19\u0E44\u0E14\u0E49\u0E40\u0E09\u0E1E\u0E32\u0E30\u0E1C\u0E39\u0E49\u0E14\u0E39\u0E41\u0E25\u0E23\u0E30\u0E1A\u0E1A" });
-          continue;
-        }
         const oldAct = live(ctx.env.db.list("Activities")).find((a) => a.id === item.activityId);
         carry = { shares: activityUnitsOf(ctx, item.activityId), planQuarters: oldAct?.planQuarters ?? "" };
-        const r3 = unassignPlanItems(ctx, { itemIds: [id] });
+        const r3 = unassignPlanItems(sys, { itemIds: [id] });
         if (r3.skipped.length) {
           skipped.push({ id, reason: r3.skipped[0].reason });
           continue;
@@ -4440,7 +4439,7 @@ var KPP = (() => {
       let project = live(ctx.env.db.list("Projects")).find((p) => p.planDocId === doc.id && Number(p.planNodeSeq) === projectNode.seq && p.workgroupId === wg.id);
       if (!project) {
         const attempt = ctx.env.db.list("Projects").filter((p) => p.planDocId === doc.id && Number(p.planNodeSeq) === projectNode.seq && p.workgroupId === wg.id).length;
-        project = createProject(ctx, withPlanLink({
+        project = createProject(sys, withPlanLink({
           idempotencyKey: `plan:${doc.id}:${projectNode.seq}:${wg.id}:${attempt}`,
           fiscalYear: doc.fiscalYear,
           fundingSourceId: doc.fundingSourceId,
@@ -4452,7 +4451,7 @@ var KPP = (() => {
           published: true
         }, { planDocId: doc.id, planNodeSeq: projectNode.seq }));
       }
-      const activity = createActivity(ctx, withPlanLink({
+      const activity = createActivity(sys, withPlanLink({
         idempotencyKey: `plan:${item.id}:${item.version}`,
         projectId: project.id,
         activityCode: item.code,
@@ -4461,7 +4460,7 @@ var KPP = (() => {
         targetQty: Number(item.quantity) || 0
       }, { planDocId: doc.id, planNodeSeq: projectNode.seq, planItemId: item.id }));
       if (Number(item.amountSatang) > 0) {
-        createAllocation(ctx, {
+        createAllocation(sys, {
           idempotencyKey: `plan:${item.id}:${item.version}:alloc`,
           projectId: project.id,
           activityId: activity.id,
@@ -4490,7 +4489,7 @@ var KPP = (() => {
       const next = { ...item, workgroupId: wg.id, projectId: project.id, activityId: activity.id, assignedAt: nowIso(ctx), assignedBy: u.sub, version: item.version + 1, updatedAt: nowIso(ctx), updatedBy: u.sub };
       ctx.env.db.update("PlanItems", item.id, next);
       Object.assign(item, next);
-      audit(ctx, "plan.assign", "PlanItem", item.id, { projectId: project.id, after: { workgroupId: wg.id, code: item.code, amount: item.amountSatang } });
+      audit(ctx, "plan.assign", "PlanItem", item.id, { projectId: project.id, before: carry ? { moved: true } : void 0, after: { workgroupId: wg.id, code: item.code, amount: item.amountSatang } });
       assigned++;
     }
     if (assigned) bumpDataVersion(ctx);
@@ -4506,10 +4505,6 @@ var KPP = (() => {
       const item = all.find((i) => i.id === id);
       if (!item || !item.workgroupId) {
         skipped.push({ id, reason: "\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E19\u0E35\u0E49\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E21\u0E35\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19\u0E40\u0E25\u0E37\u0E2D\u0E01" });
-        continue;
-      }
-      if (!canAccessWorkgroup(u, item.workgroupId)) {
-        skipped.push({ id, reason: "\u0E40\u0E1B\u0E47\u0E19\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E02\u0E2D\u0E07\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19\u0E2D\u0E37\u0E48\u0E19" });
         continue;
       }
       const used = live(ctx.env.db.list("Disbursements")).some((d) => d.activityId === item.activityId && d.status !== "VOID");
@@ -4538,6 +4533,139 @@ var KPP = (() => {
     }
     if (unassigned) bumpDataVersion(ctx);
     return { unassigned, skipped };
+  }
+  function editableItem(ctx, id) {
+    const u = requireRole(ctx, "admin", "minisuper", "superadmin");
+    const item = findById(ctx, "PlanItems", String(id), "\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E43\u0E19\u0E41\u0E1C\u0E19");
+    if (!item.isLeaf) throw new AppError("VALIDATION_FAILED", "\u0E41\u0E01\u0E49\u0E44\u0E02\u0E44\u0E14\u0E49\u0E40\u0E09\u0E1E\u0E32\u0E30\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E22\u0E48\u0E2D\u0E22\u0E2A\u0E38\u0E14\u0E17\u0E49\u0E32\u0E22");
+    if (item.workgroupId && !canAccessWorkgroup(u, item.workgroupId)) {
+      throw new AppError("FORBIDDEN_SCOPE", "\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E19\u0E35\u0E49\u0E40\u0E1B\u0E47\u0E19\u0E02\u0E2D\u0E07\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19\u0E2D\u0E37\u0E48\u0E19 \u2014 \u0E22\u0E49\u0E32\u0E22\u0E21\u0E32\u0E40\u0E1B\u0E47\u0E19\u0E02\u0E2D\u0E07\u0E01\u0E25\u0E38\u0E48\u0E21\u0E04\u0E38\u0E13\u0E01\u0E48\u0E2D\u0E19 \u0E41\u0E25\u0E49\u0E27\u0E08\u0E36\u0E07\u0E41\u0E01\u0E49\u0E44\u0E02");
+    }
+    const doc = findById(ctx, "PlanDocs", item.planDocId, "\u0E41\u0E1C\u0E19\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13");
+    if (doc.status !== "ACTIVE") throw new AppError("VALIDATION_FAILED", "\u0E41\u0E1C\u0E19\u0E19\u0E35\u0E49\u0E16\u0E39\u0E01\u0E41\u0E17\u0E19\u0E17\u0E35\u0E48\u0E41\u0E25\u0E49\u0E27");
+    return item;
+  }
+  function updatePlanItem(ctx, b) {
+    const item = editableItem(ctx, b.id);
+    if (Number(b.version) !== Number(item.version)) throw new AppError("VERSION_CONFLICT", "\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E19\u0E35\u0E49\u0E16\u0E39\u0E01\u0E41\u0E01\u0E49\u0E44\u0E02\u0E42\u0E14\u0E22\u0E1C\u0E39\u0E49\u0E2D\u0E37\u0E48\u0E19 \u2014 \u0E42\u0E2B\u0E25\u0E14\u0E43\u0E2B\u0E21\u0E48\u0E01\u0E48\u0E2D\u0E19");
+    const patch = {};
+    if (b.name !== void 0) {
+      patch.name = cleanText(b.name, 300);
+      if (patch.name.length < 3) throw new AppError("VALIDATION_FAILED", "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E01\u0E23\u0E2D\u0E01\u0E0A\u0E37\u0E48\u0E2D\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21");
+    }
+    if (b.unit !== void 0) patch.unit = cleanText(b.unit, 40);
+    if (b.note !== void 0) patch.note = cleanText(b.note, 500);
+    if (b.quantity !== void 0) {
+      const q = Number(b.quantity);
+      if (!Number.isFinite(q) || q < 0) throw new AppError("VALIDATION_FAILED", "\u0E40\u0E1B\u0E49\u0E32\u0E2B\u0E21\u0E32\u0E22\u0E15\u0E49\u0E2D\u0E07\u0E40\u0E1B\u0E47\u0E19\u0E15\u0E31\u0E27\u0E40\u0E25\u0E02\u0E44\u0E21\u0E48\u0E15\u0E34\u0E14\u0E25\u0E1A");
+      patch.quantity = q;
+    }
+    const u = ctx.user;
+    const at = nowIso(ctx);
+    if (item.activityId) {
+      const act = findById(ctx, "Activities", item.activityId, "\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21");
+      if (patch.quantity !== void 0) {
+        const shares = activityUnitsOf(ctx, item.activityId);
+        const sum = shares.reduce((a, s) => a + Number(s.targetQty || 0), 0);
+        if (sum > 0 && sum !== patch.quantity) {
+          throw new AppError("VALIDATION_FAILED", `\u0E40\u0E1B\u0E49\u0E32\u0E2B\u0E21\u0E32\u0E22\u0E23\u0E32\u0E22\u0E1E\u0E37\u0E49\u0E19\u0E17\u0E35\u0E48\u0E23\u0E27\u0E21 ${sum.toLocaleString("th-TH")} \u0E44\u0E21\u0E48\u0E40\u0E17\u0E48\u0E32\u0E01\u0E31\u0E1A\u0E40\u0E1B\u0E49\u0E32\u0E2B\u0E21\u0E32\u0E22\u0E43\u0E2B\u0E21\u0E48 \u2014 \u0E1B\u0E23\u0E31\u0E1A\u0E17\u0E35\u0E48 "\u0E01\u0E33\u0E2B\u0E19\u0E14\u0E1E\u0E37\u0E49\u0E19\u0E17\u0E35\u0E48" \u0E01\u0E48\u0E2D\u0E19`);
+        }
+      }
+      ctx.env.db.update("Activities", act.id, {
+        ...act,
+        name: patch.name ?? act.name,
+        unit: patch.unit ?? act.unit,
+        targetQty: patch.quantity ?? act.targetQty,
+        version: act.version + 1,
+        updatedAt: at,
+        updatedBy: u.sub
+      });
+    }
+    const next = { ...item, ...patch, version: item.version + 1, updatedAt: at, updatedBy: u.sub };
+    ctx.env.db.update("PlanItems", item.id, next);
+    audit(ctx, "plan.updateItem", "PlanItem", item.id, { projectId: item.projectId, before: { name: item.name, unit: item.unit, quantity: item.quantity, note: item.note }, after: patch });
+    bumpDataVersion(ctx);
+    return next;
+  }
+  function adjustItemBudget(ctx, b) {
+    const item = editableItem(ctx, b.id);
+    if (!item.activityId) throw new AppError("VALIDATION_FAILED", "\u0E01\u0E33\u0E2B\u0E19\u0E14\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19\u0E43\u0E2B\u0E49\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E19\u0E35\u0E49\u0E01\u0E48\u0E2D\u0E19 \u0E08\u0E36\u0E07\u0E1B\u0E23\u0E31\u0E1A\u0E07\u0E1A\u0E44\u0E14\u0E49");
+    const delta = Math.round(Number(b.deltaSatang) || 0);
+    if (!delta) throw new AppError("VALIDATION_FAILED", "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E23\u0E30\u0E1A\u0E38\u0E08\u0E33\u0E19\u0E27\u0E19\u0E40\u0E07\u0E34\u0E19\u0E17\u0E35\u0E48\u0E1B\u0E23\u0E31\u0E1A");
+    const reason = cleanText(b.reason, 300);
+    if (reason.length < 3) throw new AppError("VALIDATION_FAILED", "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E23\u0E30\u0E1A\u0E38\u0E40\u0E2B\u0E15\u0E38\u0E1C\u0E25\u0E01\u0E32\u0E23\u0E1B\u0E23\u0E31\u0E1A\u0E07\u0E1A");
+    createAllocation(ctx, {
+      idempotencyKey: `adjust:${String(b.idempotencyKey)}`,
+      projectId: item.projectId,
+      activityId: item.activityId,
+      type: delta > 0 ? "TRANSFER_IN" : "TRANSFER_OUT",
+      amountSatang: Math.abs(delta),
+      docNo: cleanText(b.docNo, 80),
+      note: `\u0E1B\u0E23\u0E31\u0E1A\u0E07\u0E1A: ${reason}`,
+      source: `ADJUST:${item.id}`
+    });
+    return { budget: activityState(ctx, findById(ctx, "Activities", item.activityId, "\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21")).budget };
+  }
+  function addPlanItem(ctx, b) {
+    requireRole(ctx, "admin", "minisuper", "superadmin");
+    const parent = findById(ctx, "PlanItems", String(b.parentId), "\u0E2B\u0E31\u0E27\u0E02\u0E49\u0E2D\u0E43\u0E19\u0E41\u0E1C\u0E19");
+    if (parent.isLeaf) throw new AppError("VALIDATION_FAILED", "\u0E40\u0E1E\u0E34\u0E48\u0E21\u0E44\u0E14\u0E49\u0E43\u0E15\u0E49\u0E2B\u0E31\u0E27\u0E02\u0E49\u0E2D\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23\u0E2B\u0E23\u0E37\u0E2D\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19");
+    const doc = findById(ctx, "PlanDocs", parent.planDocId, "\u0E41\u0E1C\u0E19\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13");
+    if (doc.status !== "ACTIVE") throw new AppError("VALIDATION_FAILED", "\u0E41\u0E1C\u0E19\u0E19\u0E35\u0E49\u0E16\u0E39\u0E01\u0E41\u0E17\u0E19\u0E17\u0E35\u0E48\u0E41\u0E25\u0E49\u0E27");
+    const name = cleanText(b.name, 300);
+    if (name.length < 3) throw new AppError("VALIDATION_FAILED", "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E01\u0E23\u0E2D\u0E01\u0E0A\u0E37\u0E48\u0E2D\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21");
+    const amount = Math.round(Number(b.amountSatang) || 0);
+    if (amount <= 0) throw new AppError("VALIDATION_FAILED", "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E23\u0E30\u0E1A\u0E38\u0E07\u0E1A\u0E1B\u0E23\u0E30\u0E21\u0E32\u0E13");
+    const items = live(ctx.env.db.list("PlanItems")).filter((i) => i.planDocId === doc.id);
+    const siblings = items.filter((i) => Number(i.parentSeq) === Number(parent.seq));
+    const seq = Math.max(...ctx.env.db.list("PlanItems").filter((i) => i.planDocId === doc.id).map((i) => Number(i.seq))) + 1;
+    const row = {
+      ...newMeta(ctx),
+      planDocId: doc.id,
+      fiscalYear: doc.fiscalYear,
+      seq,
+      parentSeq: parent.seq,
+      depth: Number(parent.depth) + 1,
+      kind: "ITEM",
+      number: `${parent.number ? `${parent.number}.` : ""}${siblings.length + 1}*`,
+      name,
+      unit: cleanText(b.unit, 40),
+      quantity: Math.max(0, Number(b.quantity) || 0),
+      amountSatang: amount,
+      isLeaf: true,
+      planIndex: parent.planIndex,
+      projectSeq: parent.kind === "PROJECT" ? parent.seq : Number(parent.projectSeq) || parent.seq,
+      activitySeq: parent.kind === "ACTIVITY" ? parent.seq : Number(parent.activitySeq) || 0,
+      code: "",
+      workgroupId: "",
+      projectId: "",
+      activityId: "",
+      assignedAt: "",
+      assignedBy: "",
+      manual: true,
+      note: cleanText(b.note, 500)
+    };
+    ctx.env.db.insert("PlanItems", [row]);
+    audit(ctx, "plan.addItem", "PlanItem", row.id, { after: { name, amount, parent: parent.name } });
+    bumpDataVersion(ctx);
+    if (b.workgroupId) {
+      const r3 = assignPlanItems(ctx, { itemIds: [row.id], workgroupId: String(b.workgroupId) });
+      if (r3.skipped.length) throw new AppError("VALIDATION_FAILED", r3.skipped[0].reason);
+    }
+    return findById(ctx, "PlanItems", row.id, "\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23");
+  }
+  function deletePlanItem(ctx, b) {
+    const item = editableItem(ctx, b.id);
+    if (!item.manual) throw new AppError("VALIDATION_FAILED", '\u0E25\u0E1A\u0E44\u0E14\u0E49\u0E40\u0E09\u0E1E\u0E32\u0E30\u0E01\u0E34\u0E08\u0E01\u0E23\u0E23\u0E21\u0E17\u0E35\u0E48\u0E40\u0E1E\u0E34\u0E48\u0E21\u0E40\u0E2D\u0E07 (\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23\u0E08\u0E32\u0E01\u0E41\u0E1C\u0E19\u0E02\u0E2D\u0E07\u0E01\u0E23\u0E21\u0E43\u0E0A\u0E49 "\u0E22\u0E01\u0E40\u0E25\u0E34\u0E01\u0E01\u0E25\u0E38\u0E48\u0E21" \u0E41\u0E17\u0E19)');
+    if (item.workgroupId) {
+      const r3 = unassignPlanItems(ctx, { itemIds: [item.id] });
+      if (r3.skipped.length) throw new AppError("VALIDATION_FAILED", r3.skipped[0].reason);
+    }
+    const cur = findById(ctx, "PlanItems", item.id, "\u0E23\u0E32\u0E22\u0E01\u0E32\u0E23");
+    ctx.env.db.update("PlanItems", cur.id, { ...cur, isDeleted: true, version: cur.version + 1, updatedAt: nowIso(ctx), updatedBy: ctx.user.sub });
+    audit(ctx, "plan.deleteItem", "PlanItem", cur.id, { before: { name: cur.name, amount: cur.amountSatang }, reason: cleanText(b.reason, 300) });
+    bumpDataVersion(ctx);
+    return { ok: true };
   }
 
   // src/core/services/reports.ts
@@ -4833,6 +4961,37 @@ var KPP = (() => {
     ctx.env.db.update("Activities", cur.id, { ...cur, ...patch, version: cur.version + 1, updatedAt: nowIso(ctx), updatedBy: ctx.user?.sub ?? "" });
     audit(ctx, "activity.codes", "Activity", cur.id, { projectId: cur.projectId, after: patch });
   }
+  function rememberHead(ctx, workgroupId, d) {
+    const g = live(ctx.env.db.list("Workgroups")).find((x) => x.id === workgroupId);
+    if (!g) return;
+    const patch = {};
+    const set = (k, v, onlyIfEmpty = false) => {
+      const val = cleanText(v, 200);
+      if (!val || (g[k] ?? "") === val || onlyIfEmpty && g[k]) return;
+      patch[k] = val;
+    };
+    set("headName", d.head?.name ?? "");
+    set("headPosition", d.head?.position ?? "");
+    if ((d.head?.name ?? "") && (g.headLine2 ?? "") !== cleanText(d.head?.line2 ?? "", 200)) patch.headLine2 = cleanText(d.head?.line2 ?? "", 200);
+    set("memoFax", d.fax, true);
+    set("memoPrefix", d.docPrefix, true);
+    set("memoOrg", d.orgLine, true);
+    if (!Object.keys(patch).length) return;
+    ctx.env.db.update("Workgroups", g.id, { ...g, ...patch, version: g.version + 1, updatedAt: nowIso(ctx), updatedBy: ctx.user?.sub ?? "" });
+    audit(ctx, "workgroup.memoRemember", "Workgroup", g.id, { before: { headName: g.headName, headPosition: g.headPosition, headLine2: g.headLine2 }, after: patch });
+  }
+  function saveMemoHead(ctx, b) {
+    const p = findById(ctx, "Projects", String(b.projectId), "\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23");
+    requireWorkgroup(ctx, p.workgroupId);
+    if (!cleanText(b.head?.name, 120)) throw new AppError("VALIDATION_FAILED", "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E01\u0E23\u0E2D\u0E01\u0E0A\u0E37\u0E48\u0E2D\u0E2B\u0E31\u0E27\u0E2B\u0E19\u0E49\u0E32\u0E01\u0E25\u0E38\u0E48\u0E21/\u0E1C\u0E39\u0E49\u0E23\u0E31\u0E01\u0E29\u0E32\u0E01\u0E32\u0E23");
+    rememberHead(ctx, p.workgroupId, { head: b.head, fax: "", docPrefix: "", orgLine: "" });
+    if (b.fax !== void 0) {
+      const g = findById(ctx, "Workgroups", p.workgroupId, "\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19");
+      const fax = cleanText(b.fax, 40);
+      if ((g.memoFax ?? "") !== fax) ctx.env.db.update("Workgroups", g.id, { ...g, memoFax: fax, version: g.version + 1, updatedAt: nowIso(ctx), updatedBy: ctx.user?.sub ?? "" });
+    }
+    return toSettings(findById(ctx, "Workgroups", p.workgroupId, "\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19"));
+  }
   var docUrl = (id) => id && !id.startsWith("mem-") ? `https://docs.google.com/document/d/${id}/edit` : "";
   var pdfUrl = (id) => id && !id.startsWith("mem-") ? `https://drive.google.com/file/d/${id}/view` : "";
   function toRecord(ctx, m) {
@@ -4906,6 +5065,7 @@ var KPP = (() => {
       source: "MEMO"
     });
     rememberCodes(ctx, f.activity, d);
+    rememberHead(ctx, f.project.workgroupId, d);
     const memo = {
       ...newMeta(ctx),
       projectId: f.project.id,
@@ -4961,6 +5121,7 @@ var KPP = (() => {
       disb = r3.replacement;
     }
     rememberCodes(ctx, f.activity, d);
+    rememberHead(ctx, f.project.workgroupId, d);
     const next = {
       ...cur,
       disbursementId: disb.id,
@@ -5018,6 +5179,7 @@ var KPP = (() => {
     "memos.render": r(rerenderMemo, true, "admin"),
     "memos.groupSettings": r((c) => listGroupSettings(c), false, "admin"),
     "memos.saveGroupSettings": r(saveGroupSettings, true, "admin"),
+    "memos.saveHead": r(saveMemoHead, true, "admin"),
     "budgetCodes.list": r(listBudgetCodes, false, "admin"),
     "admin.setWorkgroupPublic": r(setWorkgroupPublic, true, "admin"),
     "admin.overview": r(overview, false, "admin"),
@@ -5051,6 +5213,10 @@ var KPP = (() => {
     "plans.get": r(getPlan, false, "admin"),
     "plans.assign": r(assignPlanItems, true, "admin"),
     "plans.unassign": r(unassignPlanItems, true, "admin"),
+    "plans.updateItem": r(updatePlanItem, true, "admin"),
+    "plans.adjustBudget": r(adjustItemBudget, true, "admin"),
+    "plans.addItem": r(addPlanItem, true, "admin"),
+    "plans.deleteItem": r(deletePlanItem, true, "admin"),
     "activities.setUnits": r(setActivityUnits, true, "admin"),
     "activities.setUnitsBulk": r(setActivityUnitsBulk, true, "admin"),
     "reports.data": r(reportData, false, "admin"),
@@ -5245,7 +5411,7 @@ var KPP = (() => {
     run(title, "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21", MEMO_FONT_PT.title, true);
     const org = style(body.appendParagraph(""), H.LEFT);
     run(org, "\u0E2A\u0E48\u0E27\u0E19\u0E23\u0E32\u0E0A\u0E01\u0E32\u0E23", LABEL, true);
-    run(org, `  ${tx(d.orgLine)}${d.fax ? `  \u0E42\u0E17\u0E23\u0E2A\u0E32\u0E23 ${tx(d.fax)}` : ""}`, BODY);
+    run(org, `  ${tx(d.orgLine)}${d.fax ? `  \u0E42\u0E17\u0E23\u0E28\u0E31\u0E1E\u0E17\u0E4C ${tx(d.fax)}` : ""}`, BODY);
     const nd = layoutTable(body, 2, [contentW * 0.5, contentW * 0.5]);
     const no = cellPara(nd.getRow(0).getCell(0), true, H.LEFT);
     run(no, "\u0E17\u0E35\u0E48", LABEL, true);

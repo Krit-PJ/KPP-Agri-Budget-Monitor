@@ -86,7 +86,9 @@ function TextSize() {
   );
 }
 
-/** ออกจากระบบ — อยู่ตำแหน่งเดียวกับ "เข้าสู่ระบบเจ้าหน้าที่" บนแถบด้านบน */
+const ROLE_LABEL: Record<SessionUser['role'], string> = { admin: 'เจ้าหน้าที่', minisuper: 'Mini Super Admin', superadmin: 'Super Admin' };
+
+/** ออกจากระบบ — อยู่ตำแหน่งเดียวกับ "เข้าสู่ระบบเจ้าหน้าที่" มุมขวาของแถบหัว */
 function LogoutLink() {
   const nav = useNavigate();
   const out = async () => {
@@ -141,11 +143,24 @@ function Shell() {
             <NavLink to="/" end>ภาพรวม</NavLink>
             <NavLink to="/projects">ติดตามโครงการ</NavLink>
             <NavLink to="/report">พิมพ์รายงาน</NavLink>
-            {user
-              ? <><NavLink to="/admin">งานเจ้าหน้าที่</NavLink><LogoutLink /></>
-              : <NavLink to="/login">เข้าสู่ระบบเจ้าหน้าที่</NavLink>}
+            {user && <NavLink to="/admin">งานเจ้าหน้าที่</NavLink>}
           </nav>
           <TextSize />
+          {/* บัญชีผู้ใช้ — แยกไว้มุมขวาของแถบหัว */}
+          <div className="auth-area">
+            {user ? (
+              <>
+                <Link to="/admin/profile" className="user-chip" title="ข้อมูลของฉัน">
+                  <span className="user-ava" aria-hidden="true">{user.name.replace(/^(นาย|นางสาว|นาง|ดร\.)/, '').trim().slice(0, 1)}</span>
+                  <span className="user-txt">
+                    <span className="user-name">{user.name}</span>
+                    <span className="user-role">{ROLE_LABEL[user.role]}{user.workgroupName ? ` · ${user.workgroupName}` : ''}</span>
+                  </span>
+                </Link>
+                <LogoutLink />
+              </>
+            ) : <NavLink to="/login" className="login-btn">เข้าสู่ระบบเจ้าหน้าที่</NavLink>}
+          </div>
         </div>
       </header>
       <main id="main">

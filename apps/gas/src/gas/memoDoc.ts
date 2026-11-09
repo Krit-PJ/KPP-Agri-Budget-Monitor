@@ -72,7 +72,7 @@ export function buildMemoDoc(name: string, d: MemoData): GoogleAppsScript.Docume
   // ส่วนราชการ
   const org = style(body.appendParagraph(''), H.LEFT);
   run(org, 'ส่วนราชการ', LABEL, true);
-  run(org, `  ${tx(d.orgLine)}${d.fax ? `  โทรสาร ${tx(d.fax)}` : ''}`, BODY);
+  run(org, `  ${tx(d.orgLine)}${d.fax ? `  โทรศัพท์ ${tx(d.fax)}` : ''}`, BODY);
 
   // ที่ / วันที่ (สองคอลัมน์)
   const nd = layoutTable(body, 2, [contentW * 0.5, contentW * 0.5]);
