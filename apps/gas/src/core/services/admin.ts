@@ -10,14 +10,16 @@ import { CELL_LIMIT, SCHEMA_VERSION } from '../schema';
 import { buildSummary } from './public';
 import { listProjects } from './projects';
 
-export function overview(ctx: Ctx, b: { fiscalYear?: number }): OverviewData {
+export function overview(ctx: Ctx, b: { fiscalYear?: number; workgroupId?: string }): OverviewData {
   const u = requireRole(ctx, 'admin', 'minisuper', 'superadmin');
   const fy = Number(b.fiscalYear) || currentFiscalYear(ctx.env.now());
-  const projects = listProjects(ctx, { fiscalYear: fy });
+  // กลุ่มงานที่เลือกในแถบ "กำลังทำงาน" ('' = ทุกกลุ่ม) — ดูได้ทุกกลุ่ม (ADR-010)
+  const wgSel = String(b.workgroupId ?? '');
+  const projects = listProjects(ctx, { fiscalYear: fy }).filter((p) => !wgSel || p.workgroupId === wgSel);
   const since = new Date(ctx.env.now().getTime() - 86400_000).toISOString();
   const attempts = u.role === 'admin' ? [] : ctx.env.db.list<LoginAttempt>('LoginAttempts').filter((a) => a.at >= since);
   const summary = buildSummary(ctx, fy, false);
-  const totals = u.workgroupIds === null ? summary.totals : (() => {
+  const totals = !wgSel ? summary.totals : (() => {
     const s = { ...summary.totals };
     const keys = Object.keys(s) as Array<keyof typeof s>;
     keys.forEach((k) => ((s[k] as number) = 0));

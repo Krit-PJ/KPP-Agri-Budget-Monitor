@@ -2839,7 +2839,7 @@ var KPP = (() => {
   function entryActivities(ctx, b) {
     const u = requireRole(ctx, "admin", "minisuper", "superadmin");
     const fy = Number(b.fiscalYear);
-    const projects = live(ctx.env.db.list("Projects")).filter((p) => Number(p.fiscalYear) === fy && p.status !== "CANCELLED" && canAccessWorkgroup(u, p.workgroupId));
+    const projects = live(ctx.env.db.list("Projects")).filter((p) => Number(p.fiscalYear) === fy && p.status !== "CANCELLED");
     const pids = new Set(projects.map((p) => p.id));
     const acts = live(ctx.env.db.list("Activities")).filter((a) => pids.has(a.projectId) && a.status !== "CANCELLED");
     const allocs = live(ctx.env.db.list("Allocations")).filter((x) => pids.has(x.projectId));
@@ -2856,6 +2856,7 @@ var KPP = (() => {
       const live_ = di.filter((x) => x.status !== "VOID").sort((x, y) => x.date === y.date ? x.createdAt.localeCompare(y.createdAt) : x.date.localeCompare(y.date));
       const unitShares = a ? shares.filter((s) => s.activityId === a.id) : [];
       const usedOf = (unitId) => live_.filter((x) => (x.unitId || pao) === unitId).reduce((s, x) => s + x.amountSatang, 0);
+      const canEdit = canAccessWorkgroup(u, p.workgroupId);
       const units = unitShares.length ? unitShares.map((s) => ({ unitId: s.unitId, budget: s.budgetSatang, used: usedOf(s.unitId) })) : [{ unitId: pao, budget: bud.currentBudget, used: usedOf(pao) }];
       out.push({
         activityId: aid,
@@ -2869,7 +2870,8 @@ var KPP = (() => {
         committed: bud.committed,
         hasAreas: unitShares.length > 0,
         units,
-        history: live_.map((x, i) => ({ id: x.id, no: i + 1, date: x.date, amountSatang: x.amountSatang, docNo: x.docNo, unitId: x.unitId || pao, status: x.status, hasFile: !!x.attachmentId, memoId: memoOf.get(x.id) }))
+        history: live_.map((x, i) => ({ id: x.id, no: i + 1, date: x.date, amountSatang: x.amountSatang, docNo: x.docNo, unitId: x.unitId || pao, status: x.status, hasFile: !!x.attachmentId, memoId: canEdit ? memoOf.get(x.id) : void 0 })),
+        canEdit
       });
     };
     for (const p of projects) {
@@ -2912,14 +2914,14 @@ var KPP = (() => {
     const fy = Number(b.fiscalYear) || 0;
     const budgets = budgetsByProject(ds);
     const t2 = today(ctx);
-    return ds.projects.filter((p) => (!fy || Number(p.fiscalYear) === fy) && canAccessWorkgroup(u, p.workgroupId)).map((p) => {
+    return ds.projects.filter((p) => !fy || Number(p.fiscalYear) === fy).map((p) => {
       const budget = budgets.get(p.id);
-      return { ...p, budget, risks: riskFlags(p, budget, t2, curveFor(ctx, Number(p.fiscalYear))) };
+      return { ...p, budget, risks: riskFlags(p, budget, t2, curveFor(ctx, Number(p.fiscalYear))), canEdit: canAccessWorkgroup(u, p.workgroupId) };
     }).sort((x, y) => y.fiscalYear - x.fiscalYear || x.projectCode.localeCompare(y.projectCode, "th"));
   }
   function getProject(ctx, b) {
     const p = findById(ctx, "Projects", String(b.id), "\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23");
-    requireWorkgroup(ctx, p.workgroupId);
+    const u = requireRole(ctx, "admin", "minisuper", "superadmin");
     const activities = live(ctx.env.db.list("Activities")).filter((a) => a.projectId === p.id);
     const allocations = ctx.env.db.list("Allocations").filter((a) => a.projectId === p.id);
     const disbursements = ctx.env.db.list("Disbursements").filter((d) => d.projectId === p.id);
@@ -2927,6 +2929,7 @@ var KPP = (() => {
     const shares = activityUnitsOf(ctx);
     const curve = curveFor(ctx, Number(p.fiscalYear));
     return {
+      canEdit: canAccessWorkgroup(u, p.workgroupId),
       project: p,
       budget,
       risks: riskFlags(p, budget, today(ctx), curve),
@@ -3548,11 +3551,12 @@ var KPP = (() => {
   function overview(ctx, b) {
     const u = requireRole(ctx, "admin", "minisuper", "superadmin");
     const fy = Number(b.fiscalYear) || currentFiscalYear(ctx.env.now());
-    const projects = listProjects(ctx, { fiscalYear: fy });
+    const wgSel = String(b.workgroupId ?? "");
+    const projects = listProjects(ctx, { fiscalYear: fy }).filter((p) => !wgSel || p.workgroupId === wgSel);
     const since = new Date(ctx.env.now().getTime() - 864e5).toISOString();
     const attempts = u.role === "admin" ? [] : ctx.env.db.list("LoginAttempts").filter((a) => a.at >= since);
     const summary = buildSummary(ctx, fy, false);
-    const totals = u.workgroupIds === null ? summary.totals : (() => {
+    const totals = !wgSel ? summary.totals : (() => {
       const s = { ...summary.totals };
       const keys = Object.keys(s);
       keys.forEach((k) => s[k] = 0);
@@ -4538,10 +4542,10 @@ var KPP = (() => {
 
   // src/core/services/reports.ts
   function reportData(ctx, b) {
-    const u = requireRole(ctx, "admin", "minisuper", "superadmin");
+    requireRole(ctx, "admin", "minisuper", "superadmin");
     const fy = Number(b.fiscalYear) || currentFiscalYear(ctx.env.now());
     const ds = loadDataset(ctx);
-    const projects = ds.projects.filter((p) => Number(p.fiscalYear) === fy && canAccessWorkgroup(u, p.workgroupId));
+    const projects = ds.projects.filter((p) => Number(p.fiscalYear) === fy);
     const fyNow = currentFiscalYear(ctx.env.now());
     const m = fy < fyNow ? 12 : fy > fyNow ? 0 : fiscalMonthIndex(today(ctx));
     return { fiscalYear: fy, generatedAt: nowIso(ctx), monthIndex: m, rows: buildUnitRows(ctx, ds, projects, m) };

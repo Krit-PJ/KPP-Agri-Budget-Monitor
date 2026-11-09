@@ -27,12 +27,13 @@ export default function ProjectDetail({ user }: { user: SessionUser }) {
           <p className="small"><Link to="/admin/projects">กลับไปรายการโครงการ</Link></p>
           <h1>{d.project.name}</h1>
           <p className="muted small">{d.project.projectCode} ปีงบ {d.project.fiscalYear} <StatusBadge s={d.project.status} /> <RiskBadges flags={d.risks} /></p>
+          {!d.canEdit && <p className="notice" role="note">โครงการของกลุ่มงานอื่น — ดูอย่างเดียว (บันทึกหรือแก้ไขได้เฉพาะเจ้าหน้าที่ของกลุ่มนั้น)</p>}
           <div className="tabs" role="tablist" aria-label="ข้อมูลโครงการ">
             {TABS.map((t) => (
               <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>{t}</button>
             ))}
           </div>
-          <div role="tabpanel" aria-label={tab}>
+          <div role="tabpanel" aria-label={tab} className={d.canEdit ? '' : 'is-readonly'}>
             {tab === 'ภาพรวม' && <OverviewTab d={d} reload={s.reload} />}
             {tab === 'กิจกรรม' && <ActivitiesTab d={d} reload={s.reload} />}
             {tab === 'งบประมาณ' && <BudgetTab d={d} reload={s.reload} user={user} />}

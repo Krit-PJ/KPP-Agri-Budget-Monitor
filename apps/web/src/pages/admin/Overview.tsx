@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom';
 import { formatThaiDateTime, RISK_LABEL, type SessionUser } from '@kpp/domain';
 import { Async, auditLabel, Baht, BudgetStrip, useApi, useLookups } from '../../components/ui';
+import { useWork } from '../../components/WorkContext';
 
 export default function Overview({ user }: { user: SessionUser }) {
   const l = useLookups();
-  const s = useApi('admin.overview', { fiscalYear: l.currentFiscalYear });
+  const w = useWork();
+  const s = useApi('admin.overview', { fiscalYear: l.currentFiscalYear, workgroupId: w.g }, [w.g]);
   return (
     <>
       <h1>หน้าหลัก</h1>
@@ -13,7 +15,8 @@ export default function Overview({ user }: { user: SessionUser }) {
           <>
             <div className="panel" style={{ marginBottom: 'var(--s5)' }}>
               <h2 style={{ fontSize: 'var(--fs-lg)' }}>
-                งบปี {l.currentFiscalYear} {user.workgroupIds === null ? 'ทั้งสำนักงาน' : 'ในกลุ่มงานของคุณ'}: <Baht v={d.totals.currentBudget} short /> บาท
+                งบปี {l.currentFiscalYear} {w.g ? w.groupName(w.g) : 'ทั้งสำนักงาน'}: <Baht v={d.totals.currentBudget} short /> บาท
+                {w.g && !w.canEdit(w.g) && <span className="rec-chip st-warn" style={{ marginLeft: 8 }}>ดูอย่างเดียว</span>}
               </h2>
               <BudgetStrip b={d.totals} />
             </div>

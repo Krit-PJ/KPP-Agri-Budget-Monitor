@@ -57,17 +57,18 @@ export function listProjects(ctx: Ctx, b: { fiscalYear?: number }): ProjectListI
   const budgets = budgetsByProject(ds);
   const t = today(ctx);
   return ds.projects
-    .filter((p) => (!fy || Number(p.fiscalYear) === fy) && canAccessWorkgroup(u, p.workgroupId))
+    .filter((p) => !fy || Number(p.fiscalYear) === fy)
     .map((p) => {
       const budget = budgets.get(p.id)!;
-      return { ...p, budget, risks: riskFlags(p, budget, t, curveFor(ctx, Number(p.fiscalYear))) };
+      return { ...p, budget, risks: riskFlags(p, budget, t, curveFor(ctx, Number(p.fiscalYear))), canEdit: canAccessWorkgroup(u, p.workgroupId) };
     })
     .sort((x, y) => y.fiscalYear - x.fiscalYear || x.projectCode.localeCompare(y.projectCode, 'th'));
 }
 
 export function getProject(ctx: Ctx, b: { id: string }): ProjectDetail {
   const p = findById<Project>(ctx, 'Projects', String(b.id), 'โครงการ');
-  requireWorkgroup(ctx, p.workgroupId); // IDOR: ตรวจ scope จากข้อมูลจริงที่ server
+  // อ่านได้ทุกกลุ่ม (ADR-010); การแก้ไขทุกคำสั่งยังตรวจ requireWorkgroup จากข้อมูลจริงที่ server (กัน IDOR)
+  const u = requireRole(ctx, 'admin', 'minisuper', 'superadmin');
   const activities = live(ctx.env.db.list<Activity>('Activities')).filter((a) => a.projectId === p.id);
   const allocations = ctx.env.db.list<Allocation>('Allocations').filter((a) => a.projectId === p.id);
   const disbursements = ctx.env.db.list<Disbursement>('Disbursements').filter((d) => d.projectId === p.id);
@@ -75,6 +76,7 @@ export function getProject(ctx: Ctx, b: { id: string }): ProjectDetail {
   const shares = activityUnitsOf(ctx);
   const curve = curveFor(ctx, Number(p.fiscalYear));
   return {
+    canEdit: canAccessWorkgroup(u, p.workgroupId),
     project: p,
     budget,
     risks: riskFlags(p, budget, today(ctx), curve),

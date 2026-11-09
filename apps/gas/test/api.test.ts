@@ -115,10 +115,12 @@ describe('authentication & RBAC matrix', () => {
     expect(mine.workgroupId).toBe(wg('PROD'));
     expect(code('projects.create', { idempotencyKey: 'k2', fundingSourceId: fs('DOAE'), workgroupId: wg('STRAT'), projectCode: 'A-2', name: 'ข้ามกลุ่มงาน' }, t)).toBe('FORBIDDEN_SCOPE');
     const other = ok<Project>('projects.create', { idempotencyKey: 'k3', fundingSourceId: fs('DOAE'), workgroupId: wg('STRAT'), projectCode: 'S-1', name: 'ของกลุ่มอื่น' }, superToken);
-    expect(code('projects.get', { id: other.id }, t)).toBe('FORBIDDEN_SCOPE');
+    // ADR-010: อ่านข้อมูลกลุ่มอื่นได้ (ดูอย่างเดียว) แต่แก้ไขไม่ได้
+    expect(ok<{ canEdit: boolean }>('projects.get', { id: other.id }, t).canEdit).toBe(false);
     expect(code('projects.update', { id: other.id, version: 1, patch: { name: 'แฮ็ก' } }, t)).toBe('FORBIDDEN_SCOPE');
     expect(code('disbursements.create', { projectId: other.id, status: 'PAID', amountSatang: 100, date: '2026-11-01', idempotencyKey: 'x' }, t)).toBe('FORBIDDEN_SCOPE');
-    expect(ok<Project[]>('projects.list', {}, t).map((p) => p.id)).toEqual([mine.id]);
+    expect(ok<Array<Project & { canEdit: boolean }>>('projects.list', {}, t).map((p) => [p.id, p.canEdit])).toEqual(expect.arrayContaining([[mine.id, true], [other.id, false]]));
+    expect(code('files.upload', { projectId: other.id, fileName: 'a.png', mimeType: 'image/png', base64: 'AA==' }, t)).toBe('FORBIDDEN_SCOPE');
     expect(code('admin.users', {}, t)).toBe('FORBIDDEN_SCOPE');
     expect(code('admin.health', {}, t)).toBe('FORBIDDEN_SCOPE');
     expect(code('admin.saveSettings', { settings: { autoCommitClean: 'true' } }, t)).toBe('FORBIDDEN_SCOPE');

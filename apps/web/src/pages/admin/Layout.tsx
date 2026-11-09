@@ -13,6 +13,7 @@ import Profile from './Profile';
 import BudgetCodes from './BudgetCodes';
 import Publishing from './Publishing';
 import { useApi } from '../../components/ui';
+import { WorkContextBar, WorkContextProvider } from '../../components/WorkContext';
 
 const ROLE_LABEL: Record<SessionUser['role'], string> = { admin: 'Admin', minisuper: 'Mini Super Admin', superadmin: 'Super Admin' };
 
@@ -21,6 +22,7 @@ export default function AdminLayout({ user }: { user: SessionUser }) {
   const isSuper = user.role === 'superadmin';
   const prof = useApi('profile.get', {});
   return (
+    <WorkContextProvider user={user}>
     <div className="admin-shell">
       <nav className="side" aria-label="เมนูเจ้าหน้าที่">
         <div className="who">
@@ -28,6 +30,7 @@ export default function AdminLayout({ user }: { user: SessionUser }) {
           <div className="xs muted">{ROLE_LABEL[user.role]}</div>
           <div className="xs muted">{user.workgroupName}</div>
         </div>
+        <WorkContextBar />
         <p className="side-h">งานประจำ</p>
         <NavLink to="/admin/record">บันทึกผลการเบิกจ่าย</NavLink>
         <NavLink to="/admin/plans">บันทึกแผนงานและผู้รับผิดชอบ</NavLink>
@@ -48,6 +51,7 @@ export default function AdminLayout({ user }: { user: SessionUser }) {
         )}
       </nav>
       <div style={{ minWidth: 0 }}>
+        <div className="work-ctx-mobile"><WorkContextBar /></div>
         {prof.data && !prof.data.complete && (
           <p className="notice notice-warn profile-banner" role="status">
             กรุณากรอกคำนำหน้าชื่อและตำแหน่งแบบเต็ม เพื่อใช้ลงนามในบันทึกข้อความ — <Link to="/admin/profile">ไปที่ข้อมูลของฉัน</Link>
@@ -71,5 +75,6 @@ export default function AdminLayout({ user }: { user: SessionUser }) {
         </Routes>
       </div>
     </div>
+    </WorkContextProvider>
   );
 }

@@ -273,6 +273,10 @@ export function requireRole(ctx: Ctx, ...roles: SessionUser['role'][]): SessionU
   return u;
 }
 
+/**
+ * สิทธิ์ "แก้ไข" ตามกลุ่มงาน — การอ่านข้อมูลงานภายใน (รายการเบิกจ่าย รายโครงการ รายงาน หน้าหลัก)
+ * เจ้าหน้าที่ทุกคนดูได้ทุกกลุ่ม (ตามที่ผู้ใช้กำหนด 9 พ.ย. 2569) แต่บันทึก/แก้ไขได้เฉพาะกลุ่มในสิทธิ์ — ดู ADR-010
+ */
 export function canAccessWorkgroup(user: SessionUser, workgroupId: string): boolean {
   return user.workgroupIds === null || user.workgroupIds.includes(workgroupId);
 }

@@ -7,6 +7,7 @@ import { ApiError, call, newKey } from '../../api/client';
 import { Async, ErrorBox, Sheet, bahtInputToSatang, useApi, useLookups, useSubmit, useToast } from '../../components/ui';
 import { ThaiDatePicker } from '../../components/ThaiDatePicker';
 import { MemoDocument, printMemo } from '../../components/MemoDocument';
+import { useWork } from '../../components/WorkContext';
 import { DocViewer } from '../../components/DocViewer';
 import { Link } from 'react-router-dom';
 
@@ -39,8 +40,10 @@ function Editor({ ctx, e, user, existing, onSaved, onClose }: {
   const ids = useId();
   const unitName = (id: string) => areaName(l.units.find((u) => u.id === id));
   const refNameOf = (unitId: string) => ctx.units.find((u) => u.id === unitId)?.name.replace(/^ระดับจังหวัด.*/, '') ?? '';
-  const [unitId, setUnitId] = useState(existing?.unitId ?? (e.units.length === 1 ? e.units[0].unitId : ''));
-  const [d, setD] = useState<MemoData>(() => existing ? { ...existing.data } : { ...ctx.draft, refFrom: refNameOf(e.units.length === 1 ? e.units[0].unitId : '') });
+  const w = useWork();
+  const initUnit = e.units.length === 1 ? e.units[0].unitId : e.units.some((x) => x.unitId === w.u) ? w.u : '';
+  const [unitId, setUnitId] = useState(existing?.unitId ?? initUnit);
+  const [d, setD] = useState<MemoData>(() => existing ? { ...existing.data } : { ...ctx.draft, refFrom: refNameOf(initUnit) });
   const [amt, setAmtRaw] = useState(existing ? formatMoneyPlain(existing.amountSatang) : '');
   const [editBody, setEditBody] = useState(!!existing?.data.bodyOverride?.length);
   const [confirm, setConfirm] = useState(false);

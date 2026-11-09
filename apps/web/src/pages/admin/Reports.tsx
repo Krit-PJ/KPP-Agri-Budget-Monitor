@@ -1,3 +1,4 @@
+import { useWorkOptional } from '../../components/WorkContext';
 import { PublicScopeLine, PublicScopeNote } from '../../components/PublicScope';
 import { useSearchParams } from 'react-router-dom';
 import { useMemo, useState } from 'react';
@@ -90,11 +91,16 @@ export default function Reports({ user, publicMode = false }: { user: SessionUse
   const [fund, setFund] = useState('');
   const [sp] = useSearchParams();
   // ลิงก์จากหน้าภาพรวม: ?g=<กลุ่มงาน>&p=<โครงการ> → พิมพ์รายงานของที่เลือกไว้
-  const [group, setGroup] = useState(sp.get('g') || (!publicMode && user?.workgroupIds?.length === 1 ? user.workgroupIds[0] : ''));
+  const [groupLocal, setGroupLocal] = useState(sp.get('g') || '');
+  // งานเจ้าหน้าที่: กลุ่มงาน/พื้นที่ มาจากแถบ "กำลังทำงาน" (ใช้ร่วมทุกหน้า) — ดูได้ทุกกลุ่ม (ADR-010)
+  const w = useWorkOptional();
+  const staff = !publicMode && !!w;
+  const group = staff ? w!.g : groupLocal;
+  const setGroup = staff ? w!.setG : setGroupLocal;
+  const unit = staff ? w!.u : '';
   const [project, setProject] = useState(sp.get('p') ?? '');
   const s = useApi((publicMode || !user ? 'public.report' : 'reports.data') as 'reports.data', { fiscalYear: fy }, [fy, publicMode]);
-  const allGroups = publicMode || !user || user.workgroupIds === null;
-  const groups = l.workgroups.filter((g) => !g.noActivities && (!publicMode || !g.hidePublic) && (allGroups || user!.workgroupIds!.includes(g.id)));
+  const groups = l.workgroups.filter((g) => !g.noActivities && (!publicMode || !g.hidePublic));
   const kinds = publicMode ? KINDS.filter((x) => x.k === 'exec') : KINDS;
   const title = KINDS.find((x) => x.k === kind)!.title;
 
@@ -102,7 +108,7 @@ export default function Reports({ user, publicMode = false }: { user: SessionUse
     if (!s.data) return null;
     const unitName = (id: string) => areaName(l.units.find((u) => u.id === id));
     const unitOrder = (id: string) => l.units.findIndex((u) => u.id === id);
-    const rows = s.data.rows.filter((r) => (!fund || r.fundingSourceId === fund) && (!group || r.workgroupId === group) && (!project || r.projectId === project));
+    const rows = s.data.rows.filter((r) => (!fund || r.fundingSourceId === fund) && (!group || r.workgroupId === group) && (!unit || r.unitId === unit) && (!project || r.projectId === project));
     const total = (label: string, extra: Array<string | number> = []): Line => ({ cells: [label, ...extra, ...moneyCells(agg(rows))], bold: true });
     if (kind === 'exec') {
       // รายละเอียด: ลำดับ | โครงการ/กิจกรรม | กลุ่มที่รับผิดชอบ | พื้นที่ดำเนินการ | งบทั้งสิ้น | เบิกจ่ายแล้ว | คงเหลือ | ร้อยละ
@@ -189,10 +195,11 @@ export default function Reports({ user, publicMode = false }: { user: SessionUse
       cols: [{ label: 'โครงการ / กิจกรรม / พื้นที่ดำเนินการ', kind: 'text', width: 55 }, { label: 'ผู้รับผิดชอบ', kind: 'text', width: 22 }, { label: 'เป้าหมาย', kind: 'text', width: 12 }, ...MONEY_COLS],
       lines,
     };
-  }, [s.data, kind, fund, group, project, l, n, showAreas]);
+  }, [s.data, kind, fund, group, unit, project, l, n, showAreas]);
 
   const projectName = project ? s.data?.rows.find((r) => r.projectId === project)?.projectName ?? '' : '';
-  const scope = [fund ? n.fund(fund) : 'ทุกแหล่งงบ', group ? n.group(group) : 'ทุกกลุ่มงาน', ...(projectName ? [projectName] : [])].join(' / ');
+  const unitLabel = unit ? (w?.units.find((x) => x.id === unit)?.name ?? '') : '';
+  const scope = [fund ? n.fund(fund) : 'ทุกแหล่งงบ', group ? n.group(group) : 'ทุกกลุ่มงาน', ...(unitLabel ? [unitLabel] : []), ...(projectName ? [projectName] : [])].join(' / ');
   const projectOptions = [...new Map((s.data?.rows ?? []).filter((r) => !group || r.workgroupId === group).map((r) => [r.projectId, r.projectName])).entries()];
   const execRows = (s.data?.rows ?? []).filter((r) => (!fund || r.fundingSourceId === fund) && (!group || r.workgroupId === group) && (!project || r.projectId === project));
   const execGroups = l.workgroups.filter((g) => !g.noActivities).map((g) => ({ g, a: agg(execRows.filter((r) => r.workgroupId === g.id)) })).filter((x) => x.a.budget > 0);
@@ -280,10 +287,18 @@ export default function Reports({ user, publicMode = false }: { user: SessionUse
           </label>
           <label className="field"><span>กลุ่มงาน</span>
             <select value={group} onChange={(e) => { setGroup(e.target.value); setProject(''); }}>
-              {(allGroups || groups.length > 1) && <option value="">ทั้งหมด</option>}
+              <option value="">ทั้งหมด</option>
               {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
           </label>
+          {staff && (
+            <label className="field"><span>พื้นที่ดำเนินการ</span>
+              <select value={unit} onChange={(e) => w!.setU(e.target.value)}>
+                <option value="">ทุกพื้นที่</option>
+                {w!.units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </label>
+          )}
           <label className="field"><span>โครงการ</span>
             <select value={project} onChange={(e) => setProject(e.target.value)}>
               <option value="">ทุกโครงการ</option>

@@ -1,3 +1,4 @@
+import { useWork } from '../../components/WorkContext';
 import { useEffect, useMemo, useState } from 'react';
 import { computeAreaShares, type AreaMode } from './areaShares';
 import { Link } from 'react-router-dom';
@@ -83,7 +84,9 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
   const allGroups = user.workgroupIds === null;
   const ownerGroups = l.workgroups.filter((g) => !g.noActivities);
   const myGroups = ownerGroups.filter((g) => allGroups || user.workgroupIds!.includes(g.id));
-  const [filter, setFilter] = useState<Filter>(user.role === 'admin' ? 'mine' : 'all');
+  const w = useWork();
+  const [filter, setFilter] = useState<Filter>(w.g ? 'mine' : 'all');
+  useEffect(() => { setFilter((f) => (w.g ? 'mine' : f === 'mine' ? 'all' : f)); }, [w.g]);
   const [q, setQ] = useState('');
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<string | null>(null);
@@ -93,11 +96,13 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
   const bySeq = useMemo(() => new Map(d.items.map((i) => [i.seq, i])), [d.items]);
   const leaves = useMemo(() => d.items.filter((i) => i.isLeaf), [d.items]);
   const stateOf = (i: PlanItem): PlanActivityState | undefined => (i.activityId ? d.activities[i.activityId] : undefined);
-  const mine = (i: PlanItem) => !!i.workgroupId && (allGroups || user.workgroupIds!.includes(i.workgroupId));
+  // "ของกลุ่มที่เลือก" ตามแถบ "กำลังทำงาน"; เลือกพื้นที่ = เฉพาะกิจกรรมที่มีงบในพื้นที่นั้น
+  const mine = (i: PlanItem) => !!i.workgroupId && i.workgroupId === w.g;
+  const inUnit = (i: PlanItem) => !w.u || !!stateOf(i)?.units.some((x) => x.unitId === w.u);
   const confirmed = (i: PlanItem) => !!stateOf(i)?.units.length;
   const key = normalizeKey(q);
   const visible = (i: PlanItem) =>
-    (filter === 'all' || (filter === 'noGroup' && !i.workgroupId) || (filter === 'noArea' && !!i.workgroupId && !confirmed(i)) || (filter === 'mine' && mine(i))) &&
+    (filter === 'all' || (filter === 'noGroup' && !i.workgroupId) || (filter === 'noArea' && !!i.workgroupId && !confirmed(i)) || (filter === 'mine' && mine(i))) && inUnit(i) &&
     (!key || normalizeKey(pathOf(i, bySeq).map((x) => `${x.number} ${x.name}`).join(' ')).includes(key));
   const shown = leaves.filter(visible);
   const projects = d.items.filter((i) => i.kind === 'PROJECT' || (i.kind === 'ACTIVITY' && i.projectSeq === i.seq));
@@ -161,7 +166,7 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
         jump={visibleProjects.map((p) => ({ id: `pj-${p.id}`, label: `${p.number} ${p.name}` }))}
         count={shown.length}
         filters={[
-          ...(user.workgroupIds !== null ? [{ key: 'mine' as Filter, label: 'ของกลุ่มฉัน', count: leaves.filter(mine).length }] : []),
+          ...(w.g ? [{ key: 'mine' as Filter, label: `ของ${w.groupName(w.g)}`, count: leaves.filter((i) => mine(i) && inUnit(i)).length }] : []),
           { key: 'all', label: 'ทั้งหมด', count: leaves.length },
           { key: 'noGroup', label: 'ยังไม่มีกลุ่ม', count: leaves.length - assigned },
           { key: 'noArea', label: 'ยังไม่ยืนยันพื้นที่', count: assigned - leaves.filter((i) => i.workgroupId && confirmed(i)).length },

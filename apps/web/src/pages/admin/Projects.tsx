@@ -1,3 +1,4 @@
+import { useWork } from '../../components/WorkContext';
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { normalizeKey, type SessionUser } from '@kpp/domain';
@@ -14,10 +15,11 @@ export default function ProjectsAdmin({ user }: { user: SessionUser }) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const s = useApi('projects.list', { fiscalYear: fy }, [fy]);
+  const w = useWork();
   const rows = useMemo(() => {
     const k = normalizeKey(q);
-    return (s.data ?? []).filter((p) => !k || normalizeKey(`${p.projectCode}${p.name}`).includes(k));
-  }, [s.data, q]);
+    return (s.data ?? []).filter((p) => (!w.g || p.workgroupId === w.g) && (!k || normalizeKey(`${p.projectCode}${p.name}`).includes(k)));
+  }, [s.data, q, w.g]);
   return (
     <>
       <div className="section-head">
@@ -43,7 +45,7 @@ export default function ProjectsAdmin({ user }: { user: SessionUser }) {
             <tbody>
               {rows.map((p) => (
                 <tr key={p.id}>
-                  <td className="primary"><Link to={`/admin/projects/${p.id}`}>{p.name}</Link><div className="xs muted">{p.projectCode} {n.group(p.workgroupId)}{!p.published && ' (ไม่เผยแพร่)'}</div></td>
+                  <td className="primary"><Link to={`/admin/projects/${p.id}`}>{p.name}</Link><div className="xs muted">{p.projectCode} {n.group(p.workgroupId)}{!p.published && ' (ไม่เผยแพร่)'}{!p.canEdit && ' · ดูอย่างเดียว'}</div></td>
                   <td data-label="แหล่งงบ">{n.fundShort(p.fundingSourceId)}</td>
                   <td data-label="งบประมาณ" className="r"><Baht v={p.budget.currentBudget} /></td>
                   <td data-label="คงเหลือ" className="r" style={{ color: p.budget.remaining < 0 ? 'var(--clay)' : undefined }}><Baht v={p.budget.remaining} /></td>

@@ -1,3 +1,4 @@
+import { useWork } from '../../components/WorkContext';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
@@ -58,12 +59,12 @@ const STATE_TEXT = { none: 'ยังไม่เคยเบิก', partial: '
  * จัดหน้าเหมือน "บันทึกแผนงานและผู้รับผิดชอบ": หัวข้อรายโครงการ → แถวกิจกรรม → ฟอร์มกางใต้แถว (ทีละแถว)
  * แถบค้นหาติดด้านบน (StickyFinder ชิ้นเดียวกับหน้าแผน)
  */
-function Board({ list, user, initial, onChange }: { list: EntryActivity[]; user: SessionUser; initial: string; onChange: () => void }) {
+function Board({ list: all0, user, initial, onChange }: { list: EntryActivity[]; user: SessionUser; initial: string; onChange: () => void }) {
   const l = useLookups();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<RFilter>('all');
   // ?a=<activityId> (มาจากหน้าบันทึกแผนงานฯ) → กางฟอร์มของกิจกรรมนั้นและเลื่อนไปหา
-  const [open, setOpen] = useState(() => { const f = initial ? list.find((e) => e.activityId === initial || keyOf(e) === initial) : undefined; return f ? keyOf(f) : ''; });
+  const [open, setOpen] = useState(() => { const f = initial ? all0.find((e) => e.activityId === initial || keyOf(e) === initial) : undefined; return f ? keyOf(f) : ''; });
   const group = (id: string) => l.workgroups.find((g) => g.id === id)?.name ?? '';
 
   useEffect(() => {
@@ -73,6 +74,10 @@ function Board({ list, user, initial, onChange }: { list: EntryActivity[]; user:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const w = useWork();
+  // ขอบเขตจากแถบ "กำลังทำงาน": กลุ่มงาน + พื้นที่ดำเนินการ
+  const scoped = useMemo(() => all0.filter((e) => (!w.g || e.workgroupId === w.g) && (!w.u || e.units.some((x) => x.unitId === w.u && x.budget > 0))), [all0, w.g, w.u]);
+  const list = scoped;
   const k = normalizeKey(q);
   const shown = list.filter((e) => (filter === 'all' || stateOf(e) === filter)
     && (!k || normalizeKey(`${e.activityName} ${e.projectName} ${e.projectCode}`).includes(k)));
@@ -84,8 +89,28 @@ function Board({ list, user, initial, onChange }: { list: EntryActivity[]; user:
   const shownProjects = [...new Set(shown.map((e) => e.projectId))];
   const count = (f: Exclude<RFilter, 'all'>) => list.filter((e) => stateOf(e) === f).length;
 
+  // สรุปตามขอบเขต: เลือกพื้นที่ = ยอดของพื้นที่นั้น
+  const sum = list.reduce((a, e) => {
+    const un = w.u ? e.units.find((x) => x.unitId === w.u) : null;
+    a.budget += un ? un.budget : e.budget;
+    a.used += un ? un.used : e.disbursed;
+    if (!e.history.length) a.never += 1;
+    return a;
+  }, { budget: 0, used: 0, never: 0 });
+  const roCount = list.filter((e) => !e.canEdit).length;
   return (
     <>
+      <div className="rec-scope">
+        <span className="small">แสดง: <b>{w.label}</b></span>
+        {roCount > 0 && <span className="rec-chip st-warn">{roCount === list.length ? 'กลุ่มงานอื่น — ดูอย่างเดียว' : `ดูอย่างเดียว ${roCount} กิจกรรม (กลุ่มอื่น)`}</span>}
+      </div>
+      <div className="rec-summary" aria-label="สรุปตามขอบเขตที่เลือก">
+        <div><span>งบประมาณ{w.u ? 'ของพื้นที่' : ''}</span><strong>{formatBaht(sum.budget)}</strong></div>
+        <div><span>เบิกจ่ายแล้ว</span><strong>{formatBaht(sum.used)}</strong></div>
+        <div><span>คงเหลือ</span><strong className={sum.budget - sum.used < 0 ? 'neg' : ''}>{formatBaht(sum.budget - sum.used)}</strong></div>
+        <div><span>ร้อยละเบิกจ่าย</span><strong>{sum.budget ? ((sum.used / sum.budget) * 100).toLocaleString('th-TH', { maximumFractionDigits: 1 }) : 0}%</strong></div>
+        <div><span>กิจกรรม / ยังไม่เคยเบิก</span><strong>{list.length} / {sum.never}</strong></div>
+      </div>
       <StickyFinder<RFilter>
         q={q} onQ={setQ} placeholder="ค้นหากิจกรรมหรือโครงการ เช่น อบรม, แปลงเรียนรู้"
         jump={shownProjects.map((pid) => { const e = projects.get(pid)![0]; return { id: `rp-${pid}`, label: `${e.projectCode} ${e.projectName}` }; })}
@@ -98,7 +123,7 @@ function Board({ list, user, initial, onChange }: { list: EntryActivity[]; user:
         ]}
         filter={filter} onFilter={setFilter}
       />
-      {!shown.length && <p className="muted">{list.length ? 'ไม่มีรายการตามตัวกรองนี้ — ลองคำค้นอื่นหรือเลือก "ทั้งหมด"' : 'ไม่มีกิจกรรมในปีงบประมาณนี้ที่คุณมีสิทธิ์บันทึก'}</p>}
+      {!shown.length && <p className="muted">{list.length ? 'ไม่มีรายการตามตัวกรองนี้ — ลองคำค้นอื่นหรือเลือก "ทั้งหมด"' : `ไม่มีกิจกรรมของ ${w.label} ในปีงบประมาณนี้ — เปลี่ยนกลุ่มงานหรือพื้นที่ที่แถบ "กำลังทำงาน"`}</p>}
       {shownProjects.map((pid) => {
         const all = projects.get(pid)!;
         const head = all[0];
@@ -133,7 +158,7 @@ function Board({ list, user, initial, onChange }: { list: EntryActivity[]; user:
                     <span className={`r num ${e.budget - e.disbursed < 0 ? 'neg' : ''}`} data-label="คงเหลือ">{formatBaht(e.budget - e.disbursed)}</span>
                     <span className="rec-act">
                       <button type="button" className={`btn btn-sm ${isOpen ? 'btn-ghost' : ''}`} aria-expanded={isOpen} onClick={() => setOpen(isOpen ? '' : key)}>
-                        {isOpen ? 'ปิด' : 'บันทึกการเบิกจ่าย'}
+                        {isOpen ? 'ปิด' : e.canEdit ? 'บันทึกการเบิกจ่าย' : 'ดูประวัติ'}
                       </button>
                     </span>
                   </div>
@@ -154,6 +179,18 @@ function Board({ list, user, initial, onChange }: { list: EntryActivity[]; user:
 function Entry({ e, user, onChange }: { e: EntryActivity; user: SessionUser; onChange: () => void }) {
   const l = useLookups();
   const unitName = (id: string) => areaName(l.units.find((u) => u.id === id));
+  if (!e.canEdit) {
+    return (
+      <div className="is-readonly">
+        <p className="notice small" role="note">กิจกรรมของกลุ่มงานอื่น — ดูอย่างเดียว (บันทึกได้เฉพาะเจ้าหน้าที่ของกลุ่มนั้น)</p>
+        <History e={e} user={user} unitName={unitName} onChange={onChange} onOpenMemo={() => undefined} />
+      </div>
+    );
+  }
+  return <EntryEditable e={e} user={user} onChange={onChange} unitName={unitName} />;
+}
+
+function EntryEditable({ e, user, onChange, unitName }: { e: EntryActivity; user: SessionUser; onChange: () => void; unitName: (id: string) => string }) {
   const [mode, setMode] = useState<'memo' | 'quick'>(e.activityId ? 'memo' : 'quick');
   const [saved, setSaved] = useState<MemoRecord | null>(null);
   const [editing, setEditing] = useState<MemoRecord | undefined>(undefined);
@@ -206,7 +243,8 @@ function QuickEntry({ e, user, onChange }: { e: EntryActivity; user: SessionUser
   const l = useLookups();
   const toast = useToast();
   const unitName = (id: string) => areaName(l.units.find((u) => u.id === id));
-  const blank = { unitId: e.units.length === 1 ? e.units[0].unitId : '', amount: '', docNo: '', date: todayBangkok(), status: 'APPROVED' as DisbursementStatus, description: '' };
+  const w = useWork();
+  const blank = { unitId: e.units.length === 1 ? e.units[0].unitId : e.units.some((x) => x.unitId === w.u) ? w.u : '', amount: '', docNo: '', date: todayBangkok(), status: 'APPROVED' as DisbursementStatus, description: '' };
   const [f, setF] = useState(blank);
   const [key, setKey] = useState(newKey);
   const [file, setFile] = useState<{ id: string; name: string; preview: string; kb: number } | null>(null);

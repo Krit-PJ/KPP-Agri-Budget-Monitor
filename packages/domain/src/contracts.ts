@@ -60,6 +60,8 @@ export interface EntryActivity {
   hasAreas: boolean;
   units: Array<{ unitId: string; budget: Satang; used: Satang }>;
   history: Array<{ id: string; no: number; date: string; amountSatang: Satang; docNo: string; unitId: string; status: string; hasFile: boolean; memoId?: string }>;
+  /** ผู้ใช้บันทึก/แก้ไขได้ (กลุ่มงานในสิทธิ์) — false = ดูอย่างเดียว */
+  canEdit: boolean;
 }
 
 /** ข้อมูลของฉัน (ใช้เป็นผู้ลงนามในบันทึกข้อความ) */
@@ -182,6 +184,8 @@ export interface PublicSummary {
 }
 
 export interface ProjectDetail {
+  /** false = กลุ่มงานอื่น ดูอย่างเดียว */
+  canEdit: boolean;
   project: Project;
   budget: BudgetSummary;
   risks: RiskFlag[];
@@ -194,7 +198,7 @@ export interface ProjectDetail {
   monthly: { disbursedCumulative: number[]; targetPct: number[] };
 }
 
-export interface ProjectListItem extends Project { budget: BudgetSummary; risks: RiskFlag[] }
+export interface ProjectListItem extends Project { budget: BudgetSummary; risks: RiskFlag[]; canEdit: boolean }
 
 export interface ImportPreview {
   job: ImportJob;
@@ -262,7 +266,7 @@ export interface Actions {
   'budgetCodes.list': [{ fiscalYear: number }, Array<BudgetCodeEntry & { id: string; source: string }>];
   'memos.saveGroupSettings': [WorkgroupMemoSettings, WorkgroupMemoSettings];
   // admin
-  'admin.overview': [{ fiscalYear?: number }, OverviewData];
+  'admin.overview': [{ fiscalYear?: number; workgroupId?: string }, OverviewData];
   'projects.list': [{ fiscalYear?: number }, ProjectListItem[]];
   'projects.get': [{ id: string }, ProjectDetail];
   'projects.create': [Partial<Project> & { idempotencyKey: string; originalBudgetSatang?: number }, Project];

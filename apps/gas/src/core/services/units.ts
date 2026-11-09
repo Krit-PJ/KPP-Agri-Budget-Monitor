@@ -294,7 +294,7 @@ export function entryActivities(ctx: Ctx, b: { fiscalYear: number }): EntryActiv
   const u = requireRole(ctx, 'admin', 'minisuper', 'superadmin');
   const fy = Number(b.fiscalYear);
   const projects = live(ctx.env.db.list<Project>('Projects'))
-    .filter((p) => Number(p.fiscalYear) === fy && p.status !== 'CANCELLED' && canAccessWorkgroup(u, p.workgroupId));
+    .filter((p) => Number(p.fiscalYear) === fy && p.status !== 'CANCELLED');
   const pids = new Set(projects.map((p) => p.id));
   const acts = live(ctx.env.db.list<Activity>('Activities')).filter((a) => pids.has(a.projectId) && a.status !== 'CANCELLED');
   const allocs = live(ctx.env.db.list<Allocation>('Allocations')).filter((x) => pids.has(x.projectId));
@@ -312,13 +312,15 @@ export function entryActivities(ctx: Ctx, b: { fiscalYear: number }): EntryActiv
       .sort((x, y) => (x.date === y.date ? x.createdAt.localeCompare(y.createdAt) : x.date.localeCompare(y.date)));
     const unitShares = a ? shares.filter((s) => s.activityId === a.id) : [];
     const usedOf = (unitId: string) => live_.filter((x) => (x.unitId || pao) === unitId).reduce((s, x) => s + x.amountSatang, 0);
+    const canEdit = canAccessWorkgroup(u, p.workgroupId);
     const units = unitShares.length
       ? unitShares.map((s) => ({ unitId: s.unitId, budget: s.budgetSatang, used: usedOf(s.unitId) }))
       : [{ unitId: pao, budget: bud.currentBudget, used: usedOf(pao) }];
     out.push({
       activityId: aid, projectId: p.id, projectCode: p.projectCode, projectName: p.name, activityName: a?.name ?? 'งบระดับโครงการ',
       workgroupId: p.workgroupId, budget: bud.currentBudget, disbursed: bud.disbursed, committed: bud.committed, hasAreas: unitShares.length > 0, units,
-      history: live_.map((x, i) => ({ id: x.id, no: i + 1, date: x.date, amountSatang: x.amountSatang, docNo: x.docNo, unitId: x.unitId || pao, status: x.status, hasFile: !!x.attachmentId, memoId: memoOf.get(x.id) })),
+      history: live_.map((x, i) => ({ id: x.id, no: i + 1, date: x.date, amountSatang: x.amountSatang, docNo: x.docNo, unitId: x.unitId || pao, status: x.status, hasFile: !!x.attachmentId, memoId: canEdit ? memoOf.get(x.id) : undefined })),
+      canEdit,
     });
   };
   for (const p of projects) {

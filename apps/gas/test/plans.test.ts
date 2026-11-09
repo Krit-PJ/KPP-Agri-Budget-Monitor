@@ -119,8 +119,8 @@ describe('selecting leaf activities per workgroup', () => {
     // กดซ้ำโดยกลุ่มเดิม = ไม่มีผล ไม่สร้างงบซ้ำ
     expect(ok<AssignResult>('plans.assign', { itemIds: [smartGroup[0].id], workgroupId: wg('PROD') }, prod).assigned).toBe(0);
     // แต่ละกลุ่มได้โครงการของตนเอง (ชื่อเดียวกับโครงการในแผน) พร้อมงบตามรายการที่เลือก
-    const prodProjects = ok<ProjectListItem[]>('projects.list', { fiscalYear: 2570 }, prod);
-    const farmerProjects = ok<ProjectListItem[]>('projects.list', { fiscalYear: 2570 }, farmer);
+    const prodProjects = ok<ProjectListItem[]>('projects.list', { fiscalYear: 2570 }, prod).filter((p) => p.canEdit);
+    const farmerProjects = ok<ProjectListItem[]>('projects.list', { fiscalYear: 2570 }, farmer).filter((p) => p.canEdit);
     expect(prodProjects).toHaveLength(1);
     expect(farmerProjects).toHaveLength(1);
     expect(prodProjects[0].name).toBe(farmerProjects[0].name);
@@ -189,7 +189,7 @@ describe('selecting leaf activities per workgroup', () => {
     expect(ok<{ rows: Array<{ workgroupId: string }> }>('public.report', { fiscalYear: 2570 }).rows.every((r) => r.workgroupId === wg('PROTECT'))).toBe(true);
     expect(ok<{ workgroups: Array<{ id: string; hidePublic?: boolean }> }>('public.lookups').workgroups.find((g) => g.id === wg('STRAT'))?.hidePublic).toBe(true);
     // งานเจ้าหน้าที่ของกลุ่มที่ปิดยังเห็นครบ
-    expect(ok<Array<{ workgroupId: string }>>('disbursements.entryList', { fiscalYear: 2570 }, staff).length).toBe(10);
+    expect(ok<Array<{ workgroupId: string; canEdit: boolean }>>('disbursements.entryList', { fiscalYear: 2570 }, staff).filter((x) => x.canEdit).length).toBe(10);
     // เปิดกลับ
     ok('admin.setWorkgroupPublic', { id: wg('STRAT'), visible: true }, superToken);
     expect(ok<{ totals: { currentBudget: number } }>('public.summary', { fiscalYear: 2570 }).totals.currentBudget).toBe(before.totals.currentBudget);
@@ -337,7 +337,7 @@ describe('หน่วยดำเนินการ (ADR-006)', () => {
     const now = d.items.find((i) => i.id === item.id)!;
     expect(now.workgroupId).toBe(wg('FARMER'));
     expect(d.activities[now.activityId].units.map((u) => u.unitId)).toEqual(districts().slice(0, 2));
-    expect(ok<ProjectListItem[]>('projects.list', { fiscalYear: 2570 }, prod)).toHaveLength(0); // โครงการเดิมของ PROD ว่างแล้วจึงถูกลบ
+    expect(ok<ProjectListItem[]>('projects.list', { fiscalYear: 2570 }, prod).filter((p) => p.workgroupId === wg('PROD'))).toHaveLength(0); // โครงการเดิมของ PROD ว่างแล้วจึงถูกลบ
     // มีเบิกจ่ายแล้ว → ย้ายไม่ได้
     ok('disbursements.create', { projectId: now.projectId, activityId: now.activityId, unitId: districts()[0], status: 'COMMITTED', amountSatang: 100_00, date: '2025-11-01', idempotencyKey: 'm1' }, superToken);
     const blocked = ok<AssignResult>('plans.assign', { itemIds: [item.id], workgroupId: wg('PROD'), reassign: true }, superToken);
@@ -424,9 +424,11 @@ describe('เป้าการเบิกจ่าย ตัวนับผู
     ok('disbursements.void', { id: first.id, reason: 'กรอกผิด' }, staff);
     const again = ok<typeof list>('disbursements.entryList', { fiscalYear: 2570 }, staff).find((x) => x.activityId === item.activityId)!;
     expect(again.history.map((h) => h.no)).toEqual([1]);
-    // กลุ่มอื่นไม่เห็นกิจกรรมนี้
+    // กลุ่มอื่นเห็นได้แบบดูอย่างเดียว (ไม่มีลิงก์บันทึกข้อความ) และบันทึกไม่ได้ (ADR-010)
     const other = adminFor('0844444444', 'FARMER');
-    expect(ok<typeof list>('disbursements.entryList', { fiscalYear: 2570 }, other).some((x) => x.activityId === item.activityId)).toBe(false);
+    const seen = ok<Array<typeof list[number] & { canEdit: boolean; projectId: string }>>('disbursements.entryList', { fiscalYear: 2570 }, other).find((x) => x.activityId === item.activityId)!;
+    expect(seen.canEdit).toBe(false);
+    expect(call('disbursements.create', { projectId: seen.projectId, activityId: seen.activityId, status: 'APPROVED', amountSatang: 100, date: '2026-11-01', idempotencyKey: 'xx' }, other).error?.code).toBe('FORBIDDEN_SCOPE');
   });
 
   it('counts visits once per call with count = true and keeps today/total', () => {
