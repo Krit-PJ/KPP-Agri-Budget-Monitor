@@ -225,3 +225,17 @@ export function allowedGroups(ctx: Ctx): Set<string> | null {
   if (u.workgroupIds === null) return null;
   return new Set(live(ctx.env.db.list<Workgroup>('Workgroups')).filter((g) => canAccessWorkgroup(u, g.id)).map((g) => g.id));
 }
+
+/** เปิด/ปิดการเผยแพร่ข้อมูลของกลุ่มงานบนหน้าสาธารณะ — งานเจ้าหน้าที่ของกลุ่มนั้นยังใช้ได้ตามปกติ */
+export function setWorkgroupPublic(ctx: Ctx, b: { id: string; visible: boolean }): { id: string; hidePublic: boolean } {
+  const u = requireRole(ctx, 'minisuper', 'superadmin');
+  const cur = findById<Workgroup>(ctx, 'Workgroups', String(b.id), 'กลุ่มงาน');
+  if (cur.noActivities) throw new AppError('VALIDATION_FAILED', `${cur.name}ไม่มีข้อมูลโครงการให้เผยแพร่`);
+  const hidePublic = !b.visible;
+  if (!!cur.hidePublic !== hidePublic) {
+    ctx.env.db.update('Workgroups', cur.id, { ...cur, hidePublic, version: cur.version + 1, updatedAt: nowIso(ctx), updatedBy: u.sub });
+    audit(ctx, hidePublic ? 'workgroup.hidePublic' : 'workgroup.showPublic', 'Workgroup', cur.id, { before: { hidePublic: !!cur.hidePublic }, after: { hidePublic } });
+    bumpDataVersion(ctx);
+  }
+  return { id: cur.id, hidePublic };
+}

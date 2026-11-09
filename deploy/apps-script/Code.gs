@@ -2268,7 +2268,7 @@ var KPP = (() => {
   }
 
   // src/core/schema.ts
-  var SCHEMA_VERSION = "2026.11.08-2";
+  var SCHEMA_VERSION = "2026.11.09-1";
   var META = [
     ["id", "string"],
     ["createdAt", "string"],
@@ -2329,6 +2329,8 @@ var KPP = (() => {
       ["code", "string"],
       ["name", "string"],
       ["noActivities", "boolean"],
+      // ปิดการแสดงบนหน้าสาธารณะชั่วคราว (ค่าว่าง = แสดง)
+      ["hidePublic", "boolean"],
       // ค่าหัวบันทึกข้อความของกลุ่ม
       ["memoOrg", "string"],
       ["memoFax", "string"],
@@ -3329,6 +3331,10 @@ var KPP = (() => {
     if (json2.length < 95e3) ctx.env.cache.put(full, json2, 600);
     return value;
   }
+  function publicFilter(ctx) {
+    const hidden = new Set(live(ctx.env.db.list("Workgroups")).filter((g) => g.hidePublic).map((g) => g.id));
+    return (p) => !!p.published && !hidden.has(p.workgroupId);
+  }
   function lookups(ctx) {
     return cached(ctx, "lookups", () => {
       const fyNow = currentFiscalYear(ctx.env.now());
@@ -3336,7 +3342,7 @@ var KPP = (() => {
       for (const p of live(ctx.env.db.list("Projects"))) years.add(Number(p.fiscalYear));
       return {
         organizations: live(ctx.env.db.list("Organizations")).map(({ id, code, name }) => ({ id, code, name })),
-        workgroups: live(ctx.env.db.list("Workgroups")).map(({ id, orgId, code, name, noActivities }) => ({ id, orgId, code, name, noActivities: !!noActivities })),
+        workgroups: live(ctx.env.db.list("Workgroups")).map(({ id, orgId, code, name, noActivities, hidePublic }) => ({ id, orgId, code, name, noActivities: !!noActivities, hidePublic: !!hidePublic })),
         fundingSources: live(ctx.env.db.list("FundingSources")).map(({ id, code, name, shortName }) => ({ id, code, name, shortName })),
         units: listUnits(ctx).map(({ id, code, name, shortName, kind }) => ({ id, code, name, shortName, kind })),
         fiscalYears: [...years].sort((a, b) => b - a),
@@ -3371,12 +3377,14 @@ var KPP = (() => {
       const ds = loadDataset(ctx);
       const budgets = budgetsByProject(ds);
       const t2 = today(ctx);
-      return ds.projects.filter((p) => p.published && Number(p.fiscalYear) === fy).map((p) => toPublic(p, budgets.get(p.id), t2, curveFor(ctx, fy))).sort((a, b2) => a.projectCode.localeCompare(b2.projectCode, "th"));
+      const show = publicFilter(ctx);
+      return ds.projects.filter((p) => show(p) && Number(p.fiscalYear) === fy).map((p) => toPublic(p, budgets.get(p.id), t2, curveFor(ctx, fy))).sort((a, b2) => a.projectCode.localeCompare(b2.projectCode, "th"));
     });
   }
   function publicProject(ctx, b) {
     const ds = loadDataset(ctx);
-    const p = ds.projects.find((x) => x.id === String(b.id) && x.published);
+    const show = publicFilter(ctx);
+    const p = ds.projects.find((x) => x.id === String(b.id) && show(x));
     if (!p) throw new AppError("NOT_FOUND", "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23 \u0E2B\u0E23\u0E37\u0E2D\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E40\u0E1C\u0E22\u0E41\u0E1E\u0E23\u0E48");
     const allocs = ds.allocations.filter((a) => a.projectId === p.id);
     const disbs = ds.disbursements.filter((d) => d.projectId === p.id);
@@ -3397,7 +3405,8 @@ var KPP = (() => {
   }
   function buildSummary(ctx, fy, onlyPublished) {
     const ds = loadDataset(ctx);
-    const projects = ds.projects.filter((p) => Number(p.fiscalYear) === fy && (!onlyPublished || p.published));
+    const show = publicFilter(ctx);
+    const projects = ds.projects.filter((p) => Number(p.fiscalYear) === fy && (!onlyPublished || show(p)));
     const ids = new Set(projects.map((p) => p.id));
     const budgets = budgetsByProject({ ...ds, projects });
     const t2 = today(ctx);
@@ -3499,7 +3508,8 @@ var KPP = (() => {
     const fy = fyOf(ctx, b.fiscalYear);
     return cached(ctx, `report:${fy}`, () => {
       const ds = loadDataset(ctx);
-      const projects = ds.projects.filter((p) => p.published && Number(p.fiscalYear) === fy);
+      const show = publicFilter(ctx);
+      const projects = ds.projects.filter((p) => show(p) && Number(p.fiscalYear) === fy);
       const fyNow = currentFiscalYear(ctx.env.now());
       const m = fy < fyNow ? 12 : fy > fyNow ? 0 : fiscalMonthIndex(today(ctx));
       return { fiscalYear: fy, generatedAt: nowIso(ctx), monthIndex: m, rows: buildUnitRows(ctx, ds, projects, m) };
@@ -3744,6 +3754,18 @@ var KPP = (() => {
     const u = requireRole(ctx, "admin", "minisuper", "superadmin");
     if (u.workgroupIds === null) return null;
     return new Set(live(ctx.env.db.list("Workgroups")).filter((g) => canAccessWorkgroup(u, g.id)).map((g) => g.id));
+  }
+  function setWorkgroupPublic(ctx, b) {
+    const u = requireRole(ctx, "minisuper", "superadmin");
+    const cur = findById(ctx, "Workgroups", String(b.id), "\u0E01\u0E25\u0E38\u0E48\u0E21\u0E07\u0E32\u0E19");
+    if (cur.noActivities) throw new AppError("VALIDATION_FAILED", `${cur.name}\u0E44\u0E21\u0E48\u0E21\u0E35\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E42\u0E04\u0E23\u0E07\u0E01\u0E32\u0E23\u0E43\u0E2B\u0E49\u0E40\u0E1C\u0E22\u0E41\u0E1E\u0E23\u0E48`);
+    const hidePublic = !b.visible;
+    if (!!cur.hidePublic !== hidePublic) {
+      ctx.env.db.update("Workgroups", cur.id, { ...cur, hidePublic, version: cur.version + 1, updatedAt: nowIso(ctx), updatedBy: u.sub });
+      audit(ctx, hidePublic ? "workgroup.hidePublic" : "workgroup.showPublic", "Workgroup", cur.id, { before: { hidePublic: !!cur.hidePublic }, after: { hidePublic } });
+      bumpDataVersion(ctx);
+    }
+    return { id: cur.id, hidePublic };
   }
 
   // src/core/services/files.ts
@@ -4993,6 +5015,7 @@ var KPP = (() => {
     "memos.groupSettings": r((c) => listGroupSettings(c), false, "admin"),
     "memos.saveGroupSettings": r(saveGroupSettings, true, "admin"),
     "budgetCodes.list": r(listBudgetCodes, false, "admin"),
+    "admin.setWorkgroupPublic": r(setWorkgroupPublic, true, "admin"),
     "admin.overview": r(overview, false, "admin"),
     "projects.list": r(listProjects, false, "admin"),
     "projects.get": r(getProject, false, "admin"),
@@ -5156,6 +5179,18 @@ var KPP = (() => {
     if (org && !live(ctx.env.db.list("Workgroups")).some((g) => g.orgId === org.id && g.id !== dist.id)) {
       ctx.env.db.update("Organizations", org.id, { ...org, isDeleted: true, version: org.version + 1, updatedAt: nowIso(ctx), updatedBy: "system" });
     }
+  }
+  function initPublicVisibility(ctx, openCodes = ["PROTECT"]) {
+    if (ctx.env.props.get("init:hidePublic")) return 0;
+    let n = 0;
+    for (const g of live(ctx.env.db.list("Workgroups")).filter((x) => !x.noActivities)) {
+      const hide = !openCodes.includes(g.code);
+      if (!!g.hidePublic === hide) continue;
+      ctx.env.db.update("Workgroups", g.id, { ...g, hidePublic: hide, version: g.version + 1, updatedAt: nowIso(ctx), updatedBy: "system" });
+      n++;
+    }
+    ctx.env.props.set("init:hidePublic", nowIso(ctx));
+    return n;
   }
 
   // src/gas/memoDoc.ts
@@ -5704,6 +5739,8 @@ var KPP = (() => {
     const log = provision(files);
     const ctx = systemCtx();
     seedMasterData(ctx);
+    const hidden = initPublicVisibility(ctx);
+    if (hidden) log.push(`public visibility: \u0E40\u0E1B\u0E34\u0E14\u0E40\u0E1C\u0E22\u0E41\u0E1E\u0E23\u0E48\u0E40\u0E09\u0E1E\u0E32\u0E30\u0E01\u0E25\u0E38\u0E48\u0E21\u0E2D\u0E32\u0E23\u0E31\u0E01\u0E02\u0E32\u0E1E\u0E37\u0E0A (\u0E1B\u0E23\u0E31\u0E1A ${hidden} \u0E01\u0E25\u0E38\u0E48\u0E21)`);
     ctx.env.db.flush?.();
     const u = superUser2 || g.INIT_SUPER_USER;
     const pw = superPassword || g.INIT_SUPER_PASSWORD;

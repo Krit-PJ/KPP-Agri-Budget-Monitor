@@ -111,7 +111,7 @@ export interface SessionUser {
 
 export interface Lookups {
   organizations: Pick<Organization, 'id' | 'code' | 'name'>[];
-  workgroups: Pick<Workgroup, 'id' | 'orgId' | 'code' | 'name' | 'noActivities'>[];
+  workgroups: Pick<Workgroup, 'id' | 'orgId' | 'code' | 'name' | 'noActivities' | 'hidePublic'>[];
   fundingSources: Pick<FundingSource, 'id' | 'code' | 'name' | 'shortName'>[];
   /** หน่วยดำเนินการ เรียงตามรหัส (สำนักงานเกษตรจังหวัดก่อน) */
   units: Pick<Unit, 'id' | 'code' | 'name' | 'shortName' | 'kind'>[];
@@ -256,6 +256,8 @@ export interface Actions {
   /** สร้างไฟล์ Doc/PDF ใหม่อีกครั้ง (กรณีครั้งก่อนไม่สำเร็จ) */
   'memos.render': [{ id: string }, MemoRecord];
   'memos.groupSettings': [Record<string, never>, WorkgroupMemoSettings[]];
+  /** เปิด/ปิดการเผยแพร่ข้อมูลของกลุ่มงานบนหน้าสาธารณะ (Mini Super / Super Admin) */
+  'admin.setWorkgroupPublic': [{ id: string; visible: boolean }, { id: string; hidePublic: boolean }];
   /** ฐานข้อมูลรหัสงบประมาณ / รหัสกิจกรรมหลัก ของปีงบประมาณ */
   'budgetCodes.list': [{ fiscalYear: number }, Array<BudgetCodeEntry & { id: string; source: string }>];
   'memos.saveGroupSettings': [WorkgroupMemoSettings, WorkgroupMemoSettings];

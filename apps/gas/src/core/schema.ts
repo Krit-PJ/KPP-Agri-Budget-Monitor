@@ -2,7 +2,7 @@
  * Schema ของตารางใน Google Sheets (versioned) — header แถวที่ 1 ของแต่ละแท็บ
  * เปลี่ยน schema: เพิ่มคอลัมน์ต่อท้ายเท่านั้น แล้วเพิ่ม SCHEMA_VERSION; provisioning เติมหัวคอลัมน์ให้เอง
  */
-export const SCHEMA_VERSION = '2026.11.08-2';
+export const SCHEMA_VERSION = '2026.11.09-1';
 
 export type ColType = 'string' | 'number' | 'boolean' | 'json';
 export type FileKey = 'IDENTITY' | 'CORE' | 'STAGING' | 'REPORTING';
@@ -39,6 +39,8 @@ export const TABLES = {
   Organizations: t('CORE', [['code', 'string'], ['name', 'string']]),
   Workgroups: t('CORE', [
     ['orgId', 'string'], ['code', 'string'], ['name', 'string'], ['noActivities', 'boolean'],
+    // ปิดการแสดงบนหน้าสาธารณะชั่วคราว (ค่าว่าง = แสดง)
+    ['hidePublic', 'boolean'],
     // ค่าหัวบันทึกข้อความของกลุ่ม
     ['memoOrg', 'string'], ['memoFax', 'string'], ['memoPrefix', 'string'], ['headName', 'string'], ['headPosition', 'string'], ['headLine2', 'string'],
   ]),

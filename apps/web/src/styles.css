@@ -739,3 +739,20 @@ input.is-invalid { border-color: var(--clay); background: #fbeeea; }
   .tdp-foot .btn { min-height: 44px; flex: 1 1 auto; }
 }
 .nowrap { white-space: nowrap; }
+
+/* ---------- การเผยแพร่ข้อมูลกลุ่มงาน ---------- */
+.pub-groups { list-style: none; margin: var(--s3) 0; padding: 0; display: grid; gap: var(--s2); }
+.pub-groups li { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--paper); }
+.pub-groups li.is-on { border-left: 4px solid var(--forest); }
+.pub-groups li > div { display: flex; align-items: center; gap: var(--s2); flex-wrap: wrap; }
+.switch { display: inline-flex; align-items: center; gap: var(--s2); cursor: pointer; position: relative; min-height: 44px; }
+.switch input { position: absolute; opacity: 0; width: 52px; height: 30px; margin: 0; cursor: pointer; }
+.switch span { width: 52px; height: 30px; border-radius: 15px; background: #c3c9c5; position: relative; transition: background 0.15s; flex: none; }
+.switch span::after { content: ''; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); transition: transform 0.15s; }
+.switch input:checked + span { background: var(--forest); }
+.switch input:checked + span::after { transform: translateX(22px); }
+.switch input:focus-visible + span { outline: 3px solid var(--focus); outline-offset: 2px; }
+.switch input:disabled + span { opacity: 0.6; }
+.switch em { font-style: normal; font-weight: 600; min-width: 4.5em; }
+.scope-note { border-left-color: var(--straw); }
+@media print { .ov-banner.scope-note { display: block !important; } }

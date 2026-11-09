@@ -1,3 +1,4 @@
+import { PublicScopeNote } from '../../components/PublicScope';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { normalizeKey, PROJECT_STATUSES, PROJECT_STATUS_LABEL, RISK_LABEL, type ProjectStatus, type PublicSummary } from '@kpp/domain';
@@ -82,6 +83,7 @@ export default function Projects() {
     <>
       <div className="section-head">
         <h1>ติดตามโครงการ</h1>
+        <PublicScopeNote />
         <FiscalYearPicker value={fy} onChange={setFy} />
       </div>
       <Async s={sum} lines={6}>{(d) => <Tracking d={d} fy={fy} />}</Async>
@@ -99,7 +101,7 @@ export default function Projects() {
         <label className="field"><span>กลุ่มงาน</span>
           <select value={group} onChange={(e) => setGroup(e.target.value)}>
             <option value="">ทั้งหมด</option>
-            {l.workgroups.filter((g) => !g.noActivities).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+            {l.workgroups.filter((g) => !g.noActivities && !g.hidePublic).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>
         </label>
         <label className="field"><span>สถานะ</span>

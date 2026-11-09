@@ -46,6 +46,8 @@ export interface Organization extends Meta { code: string; name: string }
 /** noActivities = ไม่รับผิดชอบกิจกรรมในแผน (เช่น ฝ่ายบริหารทั่วไป) — คงไว้ให้ผู้ใช้สังกัดได้ */
 export interface Workgroup extends Meta {
   orgId: string; code: string; name: string; noActivities: boolean;
+  /** ปิดการเผยแพร่บนหน้าสาธารณะชั่วคราว (ข้อมูลยังไม่พร้อม) — งานเจ้าหน้าที่ใช้ได้ตามปกติ */
+  hidePublic?: boolean;
   /** หัวบันทึกข้อความ: ส่วนราชการ, โทรสาร, ส่วนหน้าเลขที่ (เช่น "กพ 0009.4") */
   memoOrg?: string; memoFax?: string; memoPrefix?: string;
   /** ผู้ลงนามฝั่งขวา (หัวหน้ากลุ่ม/ผู้รักษาการ) */

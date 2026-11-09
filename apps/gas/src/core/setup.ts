@@ -184,3 +184,20 @@ export function seedDemoPlan(ctx: Ctx, table: unknown[][]): void {
   });
   ctx.user = saved;
 }
+
+/**
+ * ครั้งเดียวหลังเพิ่มคอลัมน์ hidePublic (ตามที่ผู้ใช้กำหนด 9 พ.ย. 2569): เปิดเผยแพร่เฉพาะกลุ่มอารักขาพืช กลุ่มอื่นปิดไว้ก่อน
+ * ทำครั้งเดียว (จำใน Script Properties) — หลังจากนั้นเปิด/ปิดได้จากหน้า "การเผยแพร่ข้อมูลกลุ่มงาน"
+ */
+export function initPublicVisibility(ctx: Ctx, openCodes: string[] = ['PROTECT']): number {
+  if (ctx.env.props.get('init:hidePublic')) return 0;
+  let n = 0;
+  for (const g of live(ctx.env.db.list<Workgroup>('Workgroups')).filter((x) => !x.noActivities)) {
+    const hide = !openCodes.includes(g.code);
+    if (!!g.hidePublic === hide) continue;
+    ctx.env.db.update('Workgroups', g.id, { ...g, hidePublic: hide, version: g.version + 1, updatedAt: nowIso(ctx), updatedBy: 'system' });
+    n++;
+  }
+  ctx.env.props.set('init:hidePublic', nowIso(ctx));
+  return n;
+}

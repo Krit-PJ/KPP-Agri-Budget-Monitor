@@ -6,7 +6,7 @@ import { AppError, MEMO_DEFAULT_TO, MEMO_SUBJECT, todayBangkok, type MemoData } 
 import { SYSTEM_USER, getSettings, setSetting, type Ctx } from '../core/context';
 import { handle, type RpcRequest } from '../core/router';
 import { setSuperAdmin as setSuper } from '../core/auth';
-import { seedMasterData } from '../core/setup';
+import { initPublicVisibility, seedMasterData } from '../core/setup';
 import { processInbox } from '../core/services/imports';
 import { writeSnapshot } from '../core/services/public';
 import { FILE_NAMES, FOLDERS, type FileKey } from '../core/schema';
@@ -59,6 +59,8 @@ export function setup(rootFolderId?: string, superUser?: string, superPassword?:
   const log = provision(files);
   const ctx = systemCtx();
   seedMasterData(ctx);
+  const hidden = initPublicVisibility(ctx);
+  if (hidden) log.push(`public visibility: เปิดเผยแพร่เฉพาะกลุ่มอารักขาพืช (ปรับ ${hidden} กลุ่ม)`);
   ctx.env.db.flush?.();
   const u = superUser || (g.INIT_SUPER_USER as string);
   const pw = superPassword || (g.INIT_SUPER_PASSWORD as string);

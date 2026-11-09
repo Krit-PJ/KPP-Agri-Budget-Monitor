@@ -27,6 +27,12 @@ function cached<T>(ctx: Ctx, key: string, build: () => T): T {
   return value;
 }
 
+/** โครงการที่แสดงบนหน้าสาธารณะ: เผยแพร่แล้ว และกลุ่มงานไม่ได้ปิดการเผยแพร่ */
+export function publicFilter(ctx: Ctx): (p: Project) => boolean {
+  const hidden = new Set(live(ctx.env.db.list<Workgroup>('Workgroups')).filter((g) => g.hidePublic).map((g) => g.id));
+  return (p) => !!p.published && !hidden.has(p.workgroupId);
+}
+
 export function lookups(ctx: Ctx): Lookups {
   return cached(ctx, 'lookups', () => {
     const fyNow = currentFiscalYear(ctx.env.now());
@@ -34,7 +40,7 @@ export function lookups(ctx: Ctx): Lookups {
     for (const p of live(ctx.env.db.list<Project>('Projects'))) years.add(Number(p.fiscalYear));
     return {
       organizations: live(ctx.env.db.list<Organization>('Organizations')).map(({ id, code, name }) => ({ id, code, name })),
-      workgroups: live(ctx.env.db.list<Workgroup>('Workgroups')).map(({ id, orgId, code, name, noActivities }) => ({ id, orgId, code, name, noActivities: !!noActivities })),
+      workgroups: live(ctx.env.db.list<Workgroup>('Workgroups')).map(({ id, orgId, code, name, noActivities, hidePublic }) => ({ id, orgId, code, name, noActivities: !!noActivities, hidePublic: !!hidePublic })),
       fundingSources: live(ctx.env.db.list<FundingSource>('FundingSources')).map(({ id, code, name, shortName }) => ({ id, code, name, shortName })),
       units: listUnits(ctx).map(({ id, code, name, shortName, kind }) => ({ id, code, name, shortName, kind })),
       fiscalYears: [...years].sort((a, b) => b - a),
@@ -62,7 +68,8 @@ export function publicProjects(ctx: Ctx, b: { fiscalYear?: number }): PublicProj
     const ds = loadDataset(ctx);
     const budgets = budgetsByProject(ds);
     const t = today(ctx);
-    return ds.projects.filter((p) => p.published && Number(p.fiscalYear) === fy)
+    const show = publicFilter(ctx);
+    return ds.projects.filter((p) => show(p) && Number(p.fiscalYear) === fy)
       .map((p) => toPublic(p, budgets.get(p.id)!, t, curveFor(ctx, fy)))
       .sort((a, b2) => a.projectCode.localeCompare(b2.projectCode, 'th'));
   });
@@ -70,7 +77,8 @@ export function publicProjects(ctx: Ctx, b: { fiscalYear?: number }): PublicProj
 
 export function publicProject(ctx: Ctx, b: { id: string }): PublicProject {
   const ds = loadDataset(ctx);
-  const p = ds.projects.find((x) => x.id === String(b.id) && x.published);
+  const show = publicFilter(ctx);
+  const p = ds.projects.find((x) => x.id === String(b.id) && show(x));
   if (!p) throw new AppError('NOT_FOUND', 'ไม่พบโครงการ หรือยังไม่เผยแพร่');
   const allocs = ds.allocations.filter((a) => a.projectId === p.id);
   const disbs = ds.disbursements.filter((d) => d.projectId === p.id);
@@ -89,7 +97,8 @@ export function publicProject(ctx: Ctx, b: { id: string }): PublicProject {
 
 export function buildSummary(ctx: Ctx, fy: number, onlyPublished: boolean): PublicSummary {
   const ds = loadDataset(ctx);
-  const projects = ds.projects.filter((p) => Number(p.fiscalYear) === fy && (!onlyPublished || p.published));
+  const show = publicFilter(ctx);
+  const projects = ds.projects.filter((p) => Number(p.fiscalYear) === fy && (!onlyPublished || show(p)));
   const ids = new Set(projects.map((p) => p.id));
   const budgets = budgetsByProject({ ...ds, projects });
   const t = today(ctx);
@@ -203,7 +212,8 @@ export function publicReport(ctx: Ctx, b: { fiscalYear?: number }): ReportData {
   const fy = fyOf(ctx, b.fiscalYear);
   return cached(ctx, `report:${fy}`, () => {
     const ds = loadDataset(ctx);
-    const projects = ds.projects.filter((p) => p.published && Number(p.fiscalYear) === fy);
+    const show = publicFilter(ctx);
+    const projects = ds.projects.filter((p) => show(p) && Number(p.fiscalYear) === fy);
     const fyNow = currentFiscalYear(ctx.env.now());
     const m = fy < fyNow ? 12 : fy > fyNow ? 0 : fiscalMonthIndex(today(ctx));
     return { fiscalYear: fy, generatedAt: nowIso(ctx), monthIndex: m, rows: buildUnitRows(ctx, ds, projects, m) };

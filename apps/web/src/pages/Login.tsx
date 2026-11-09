@@ -35,7 +35,7 @@ function PhoneLogin({ onRequest }: { onRequest: () => void }) {
     void run(async () => {
       const r = await call('auth.login', { phone });
       saveSession(r.token, r.user);
-      nav('/admin');
+      nav('/');
     });
   };
   return (
@@ -64,7 +64,7 @@ function SuperLogin() {
     void run(async () => {
       const r = await call('auth.loginSuper', { username: u, password: p });
       saveSession(r.token, r.user);
-      nav('/admin');
+      nav('/');
     });
   };
   return (

@@ -117,6 +117,13 @@ function SiteFooter() {
 function Shell() {
   const user = useSessionUser();
   const lookups = useApi('public.lookups', {});
+  // หน้าตั้งค่าที่เปลี่ยนข้อมูลอ้างอิง (เช่น เปิด/ปิดการเผยแพร่กลุ่มงาน) ขอโหลด lookups ใหม่
+  const reloadLookups = lookups.reload;
+  useEffect(() => {
+    const on = () => reloadLookups();
+    window.addEventListener('kpp:lookups-changed', on);
+    return () => window.removeEventListener('kpp:lookups-changed', on);
+  }, [reloadLookups]);
   return (
     <>
       <a href="#main" className="skip">ข้ามไปยังเนื้อหา</a>
@@ -151,8 +158,8 @@ function Shell() {
                 <Route path="/projects" element={<PublicProjects />} />
                 <Route path="/projects/:id" element={<PublicProject />} />
                 <Route path="/about" element={<About />} />
-                <Route path="/report" element={<Reports user={user} publicMode={!user} />} />
-                <Route path="/login" element={user ? <Navigate to="/admin" replace /> : <Login />} />
+                <Route path="/report" element={<Reports user={user} publicMode />} />
+                <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
                 <Route path="/admin/*" element={user ? <AdminLayout user={user} /> : <Navigate to="/login" replace />} />
                 <Route path="*" element={<p>ไม่พบหน้าที่ต้องการ <Link to="/">กลับหน้าแรก</Link></p>} />
               </Routes>

@@ -11,6 +11,7 @@ import Plans from './Plans';
 import Targets from './Targets';
 import Profile from './Profile';
 import BudgetCodes from './BudgetCodes';
+import Publishing from './Publishing';
 import { useApi } from '../../components/ui';
 
 const ROLE_LABEL: Record<SessionUser['role'], string> = { admin: 'Admin', minisuper: 'Mini Super Admin', superadmin: 'Super Admin' };
@@ -41,6 +42,7 @@ export default function AdminLayout({ user }: { user: SessionUser }) {
           <>
             <p className="side-h">ผู้ดูแลระบบ</p>
             <NavLink to="/admin/users">ผู้ใช้งาน</NavLink>
+            <NavLink to="/admin/publishing">การเผยแพร่ข้อมูลกลุ่มงาน</NavLink>
             {isSuper && <NavLink to="/admin/system">ตั้งค่าระบบ</NavLink>}
           </>
         )}
@@ -63,6 +65,7 @@ export default function AdminLayout({ user }: { user: SessionUser }) {
           <Route path="codes" element={<BudgetCodes />} />
           <Route path="profile" element={<Profile user={user} onProfileSaved={prof.reload} />} />
           {canManageUsers && <Route path="users" element={<Users user={user} />} />}
+          {canManageUsers && <Route path="publishing" element={<Publishing />} />}
           {isSuper && <Route path="system" element={<System />} />}
           <Route path="*" element={<p>คุณไม่มีสิทธิ์เข้าถึงหน้านี้</p>} />
         </Routes>

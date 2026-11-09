@@ -170,6 +170,30 @@ describe('selecting leaf activities per workgroup', () => {
     expect(s.totals.currentBudget).toBe(242_986_200);
     expect(ok<PlanDocSummary[]>('plans.list', { fiscalYear: 2570 }, superToken)[0]).toMatchObject({ assignedCount: 87, assignedSatang: 242_986_200 });
   });
+
+  it('hides a workgroup from public pages without affecting staff work', () => {
+    const { detail } = importPlan();
+    const leaves = detail.items.filter((i) => i.isLeaf);
+    ok('plans.assign', { itemIds: leaves.slice(0, 10).map((i) => i.id), workgroupId: wg('STRAT') }, superToken);
+    ok('plans.assign', { itemIds: leaves.slice(10, 20).map((i) => i.id), workgroupId: wg('PROTECT') }, superToken);
+    const before = ok<{ totals: { currentBudget: number }; byWorkgroup: Array<{ key: string }> }>('public.summary', { fiscalYear: 2570 });
+    expect(before.byWorkgroup.map((g) => g.key).sort()).toEqual([wg('PROTECT'), wg('STRAT')].sort());
+    // เจ้าหน้าที่ทั่วไปปิดไม่ได้
+    const staff = adminFor('0877777777', 'STRAT');
+    expect(call('admin.setWorkgroupPublic', { id: wg('STRAT'), visible: false }, staff).error?.code).toBe('FORBIDDEN_SCOPE');
+    expect(ok('admin.setWorkgroupPublic', { id: wg('STRAT'), visible: false }, superToken)).toEqual({ id: wg('STRAT'), hidePublic: true });
+    const after = ok<{ totals: { currentBudget: number }; byWorkgroup: Array<{ key: string }> }>('public.summary', { fiscalYear: 2570 });
+    expect(after.byWorkgroup.map((g) => g.key)).toEqual([wg('PROTECT')]);
+    expect(after.totals.currentBudget).toBeLessThan(before.totals.currentBudget);
+    expect(ok<Array<{ workgroupId: string }>>('public.projects', { fiscalYear: 2570 }).every((p) => p.workgroupId === wg('PROTECT'))).toBe(true);
+    expect(ok<{ rows: Array<{ workgroupId: string }> }>('public.report', { fiscalYear: 2570 }).rows.every((r) => r.workgroupId === wg('PROTECT'))).toBe(true);
+    expect(ok<{ workgroups: Array<{ id: string; hidePublic?: boolean }> }>('public.lookups').workgroups.find((g) => g.id === wg('STRAT'))?.hidePublic).toBe(true);
+    // งานเจ้าหน้าที่ของกลุ่มที่ปิดยังเห็นครบ
+    expect(ok<Array<{ workgroupId: string }>>('disbursements.entryList', { fiscalYear: 2570 }, staff).length).toBe(10);
+    // เปิดกลับ
+    ok('admin.setWorkgroupPublic', { id: wg('STRAT'), visible: true }, superToken);
+    expect(ok<{ totals: { currentBudget: number } }>('public.summary', { fiscalYear: 2570 }).totals.currentBudget).toBe(before.totals.currentBudget);
+  });
 });
 
 describe('batch (หลายคำขออ่านในคำขอเดียว)', () => {

@@ -1,3 +1,4 @@
+import { PublicScopeNote, usePublicGroups } from '../../components/PublicScope';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { areaName, fiscalMonthIndex, fiscalYearRange, formatThaiDate, formatThaiDateTime, todayBangkok, type GroupTotal, type PublicSummary } from '@kpp/domain';
@@ -107,7 +108,7 @@ export default function Home() {
   const f = useOverviewFilter();
   const s = useApi('public.summary', { fiscalYear: fy }, [fy]);
   const projects = useApi('public.projects', { fiscalYear: fy }, [fy]);
-  const groups = l.workgroups.filter((g) => !g.noActivities);
+  const { shown: groups } = usePublicGroups();
   const projList = (projects.data ?? []).filter((x) => !f.g || x.workgroupId === f.g).sort((a, b) => (a.projectCode || a.name).localeCompare(b.projectCode || b.name, 'th'));
   const project = (projects.data ?? []).find((x) => x.id === f.p);
   const filtered = !!(f.g || f.p);
@@ -141,7 +142,7 @@ export default function Home() {
     <Async s={s} lines={8}>
       {(d0) => filtered
         ? <FilteredOverview d0={d0} fy={fy} g={f.g} p={f.p} filterBar={filterBar} banner={banner} />
-        : <Overview d={d0} fy={fy} filterBar={filterBar} banner={null} filtered={false} />}
+        : <Overview d={d0} fy={fy} filterBar={filterBar} banner={<PublicScopeNote />} filtered={false} />}
     </Async>
   );
 }
@@ -237,6 +238,7 @@ function Overview({ d, fy, filterBar, banner, filtered, activities, projectId }:
               <h2 id="by-unit">ผลการเบิกจ่ายแยกตามพื้นที่ดำเนินการ</h2>
               <p className="small muted" style={{ marginTop: 0 }}>
                 กดชื่อพื้นที่เพื่อดูว่ากลุ่มงานใดใช้งบในพื้นที่นั้น.{' '}
+                {d.byUnit.length > 0 && <>แสดงเฉพาะพื้นที่ที่มีงบ <b>{d.byUnit.length.toLocaleString('th-TH')}</b> จาก {l.units.length.toLocaleString('th-TH')} พื้นที่.{' '}</>}
                 {!filtered && acts > 0 && <>กำหนดพื้นที่แล้ว <b>{confirmed.toLocaleString('th-TH')}</b> จาก {acts.toLocaleString('th-TH')} กิจกรรม{confirmed < acts ? ' กิจกรรมที่ยังไม่กำหนดนับไว้ที่ระดับจังหวัด' : ''}</>}
               </p>
               {d.byUnit.length

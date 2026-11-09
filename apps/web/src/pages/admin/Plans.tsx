@@ -212,7 +212,7 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
                           <select value={i.workgroupId} disabled={busy || locked} onChange={(e) => setGroup(i, e.target.value)} title={locked ? 'มีรายการเบิกจ่ายแล้ว เปลี่ยนกลุ่มไม่ได้' : undefined} className={i.workgroupId ? '' : 'is-empty'}>
                             <option value="">— เลือกกลุ่มงาน —</option>
                             {(i.workgroupId && !myGroups.some((g) => g.id === i.workgroupId) ? [...myGroups, l.workgroups.find((g) => g.id === i.workgroupId)!] : myGroups)
-                              .map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                              .map((g) => <option key={g.id} value={g.id}>{g.name}{g.hidePublic ? ' (ยังไม่เผยแพร่)' : ''}</option>)}
                           </select>
                         ) : <span className="badge">{n.group(i.workgroupId)}</span>}
                       </label>
@@ -258,7 +258,7 @@ function Board({ d, user, reload }: { d: PlanDetail; user: SessionUser; reload: 
               <span className="bar-group">
                 <select value={bulkGroup} onChange={(e) => setBulkGroup(e.target.value)} aria-label="กลุ่มงาน" style={{ width: 'auto' }}>
                   <option value="">กลุ่มงาน…</option>
-                  {myGroups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  {myGroups.map((g) => <option key={g.id} value={g.id}>{g.name}{g.hidePublic ? ' (ยังไม่เผยแพร่)' : ''}</option>)}
                 </select>
                 <button className="btn btn-sm" disabled={!bulkGroup} onClick={() => setBulkConfirm({ label: `กำหนดเป็น${n.group(bulkGroup)}`, group: bulkGroup })}>กำหนดกลุ่มงาน</button>
               </span>

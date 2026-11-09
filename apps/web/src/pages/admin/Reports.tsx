@@ -1,3 +1,4 @@
+import { PublicScopeLine, PublicScopeNote } from '../../components/PublicScope';
 import { useSearchParams } from 'react-router-dom';
 import { useMemo, useState } from 'react';
 import { areaName, areaSummary, formatBaht, formatThaiDate, formatThaiDateTime, pct, toCsv, writeXlsx, type ReportRow, type SessionUser, type XlsxCell } from '@kpp/domain';
@@ -93,7 +94,7 @@ export default function Reports({ user, publicMode = false }: { user: SessionUse
   const [project, setProject] = useState(sp.get('p') ?? '');
   const s = useApi((publicMode || !user ? 'public.report' : 'reports.data') as 'reports.data', { fiscalYear: fy }, [fy, publicMode]);
   const allGroups = publicMode || !user || user.workgroupIds === null;
-  const groups = l.workgroups.filter((g) => !g.noActivities && (allGroups || user!.workgroupIds!.includes(g.id)));
+  const groups = l.workgroups.filter((g) => !g.noActivities && (!publicMode || !g.hidePublic) && (allGroups || user!.workgroupIds!.includes(g.id)));
   const kinds = publicMode ? KINDS.filter((x) => x.k === 'exec') : KINDS;
   const title = KINDS.find((x) => x.k === kind)!.title;
 
@@ -260,6 +261,7 @@ export default function Reports({ user, publicMode = false }: { user: SessionUse
     <>
       <div className="no-print">
         <h1>{publicMode ? 'พิมพ์รายงานสำหรับผู้บริหาร' : 'รายงาน'}</h1>
+        {publicMode && <PublicScopeNote />}
         {publicMode && <p className="small muted" style={{ marginTop: 0 }}>เลือกปีและเงื่อนไข แล้วกด &ldquo;พิมพ์ / บันทึกเป็น PDF&rdquo; รายงานอื่นของเจ้าหน้าที่ดูได้หลังเข้าสู่ระบบ</p>}
         <div className="toolbar">
           <FiscalYearPicker value={fy} onChange={setFy} />
@@ -314,6 +316,7 @@ export default function Reports({ user, publicMode = false }: { user: SessionUse
                 <h2>{title}</h2>
                 <p>ปีงบประมาณ พ.ศ. {fy} — {scope}</p>
                 <p>{asOf}</p>
+                {publicMode && <PublicScopeLine />}
               </header>
               <div className="exec-kpis">
                 <div><span>งบประมาณทั้งสิ้น</span><strong className="num">{formatBaht(execTotal.budget)}</strong><em>บาท</em></div>
@@ -382,6 +385,7 @@ export default function Reports({ user, publicMode = false }: { user: SessionUse
               <h2>{title}</h2>
               <p>ปีงบประมาณ พ.ศ. {fy} — {scope}</p>
               <p className="small">{asOf}</p>
+              {publicMode && <PublicScopeLine />}
             </header>
             {model.lines.length <= 1 ? <p className="muted">ไม่มีข้อมูลตามเงื่อนไขนี้</p> : (
               <div className="report-scroll">
